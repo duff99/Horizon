@@ -172,7 +172,7 @@ Le plan est découpé en **10 sections** :
 - **I** — Frontend : authentification, layout, admin pages (6 tâches)
 - **J** — Orchestration Docker : docker-compose.yml complet + Caddy + test end-to-end (4 tâches)
 
-**Total : ~46 tâches numérotées**, chacune découpée en 3-5 étapes (TDD cycle). Estimation : 5 à 7 jours de développement effectif.
+**Total : ~46 tâches numérotées**, chacune découpée en 3-7 étapes (TDD cycle). Estimation : **7 à 10 jours** de développement effectif pour un développeur expérimenté (les pages admin I4/I5/I6 représentent à elles seules 1,5 à 2 jours avec les tests et les polish UX).
 
 ---
 
@@ -615,9 +615,9 @@ Créer `backend/scripts/check.sh` :
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ruff check .
-ruff format --check .
-mypy app
+ruff check app tests
+ruff format --check app tests
+mypy app tests
 pytest
 ```
 
@@ -706,6 +706,8 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., alias="BACKEND_SECRET_KEY")
     session_hours: int = Field(8, alias="BACKEND_SESSION_HOURS")
     cors_origins_raw: str = Field(..., alias="BACKEND_CORS_ORIGINS")
+    # True en prod (cookie envoyé uniquement en HTTPS), False en dev local (http://localhost).
+    cookie_secure: bool = Field(True, alias="BACKEND_COOKIE_SECURE")
 
     @field_validator("secret_key")
     @classmethod
@@ -738,7 +740,13 @@ DATABASE_URL=postgresql+psycopg://tresorerie:change_me@localhost:5432/tresorerie
 BACKEND_SECRET_KEY=replace_with_32_plus_random_characters_xxxxxx
 BACKEND_SESSION_HOURS=8
 BACKEND_CORS_ORIGINS=http://localhost:5173
+BACKEND_COOKIE_SECURE=false
 ```
+
+> **Note sur le chargement des variables d'environnement** :
+> - Le **fichier `.env` racine** (cf. §A3) est consommé par Docker Compose lors du `docker compose up` pour peupler les variables des services.
+> - Le **fichier `backend/.env`** (copié depuis `backend/.env.example`) est consommé par pydantic-settings lors du **dev local hors Docker** (`uvicorn app.main:app`). En Docker, ce fichier est absent du conteneur ; les variables proviennent uniquement de docker-compose.
+> - Les deux formats sont cohérents : les clés sont identiques (`DATABASE_URL`, `BACKEND_SECRET_KEY`, …). La racine peut définir des clés supplémentaires propres à Docker (`APP_DOMAIN`, `POSTGRES_*`, `CADDY_EMAIL`) qui ne sont pas lues par le backend directement.
 
 - [ ] **Étape 6 : Commit**
 
@@ -1079,9 +1087,12 @@ def test_database_url() -> str:
 
 @pytest.fixture(scope="session")
 def test_engine(test_database_url: str) -> Iterator[Engine]:
-    """Crée un engine vers la base de test et prépare les tables."""
-    engine = create_engine(test_database_url, future=True)
-    # Crée la base si absente (Postgres ne le fait pas tout seul)
+    """Crée un engine vers la base de test et applique les migrations Alembic.
+
+    IMPORTANT : on applique les migrations Alembic (source de vérité), pas
+    Base.metadata.create_all(). Cela garantit que les tests exercent
+    exactement le schéma qui sera déployé en production.
+    """
     from sqlalchemy import text
     from sqlalchemy.engine.url import make_url
 
@@ -1097,9 +1108,18 @@ def test_engine(test_database_url: str) -> Iterator[Engine]:
             conn.execute(text(f'CREATE DATABASE "{url.database}"'))
     admin_engine.dispose()
 
-    Base.metadata.create_all(engine)
+    # Exécuter alembic upgrade head contre la base de test
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_cfg = Config("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", test_database_url)
+    command.upgrade(alembic_cfg, "head")
+
+    engine = create_engine(test_database_url, future=True)
     yield engine
-    Base.metadata.drop_all(engine)
+    # Ne PAS drop ici : conserver le schéma entre runs pour accélérer.
+    # Pour reset complet : supprimer manuellement la base _test.
     engine.dispose()
 
 
@@ -1316,6 +1336,24 @@ def test_entity_self_reference_forbidden(db_session: Session) -> None:
     e = Entity(name="X", legal_name="X", id=1, parent_entity_id=1)
     with pytest.raises(ValueError, match="ne peut pas être son propre parent"):
         validate_entity_tree(e)
+
+
+def test_entity_cycle_forbidden(db_session: Session) -> None:
+    """Deux entités qui se pointent l'une l'autre forment un cycle."""
+    import pytest
+    from app.models.entity import validate_entity_tree
+
+    a = Entity(name="A", legal_name="A")
+    b = Entity(name="B", legal_name="B")
+    db_session.add_all([a, b])
+    db_session.flush()
+
+    # Mise en place d'un cycle A ← B, puis on essaie B ← A
+    a.parent_entity_id = b.id
+    db_session.flush()
+    b.parent_entity_id = a.id
+    with pytest.raises(ValueError, match="Cycle détecté"):
+        validate_entity_tree(b, session=db_session)
 ```
 
 - [ ] **Étape 2 : Créer le modèle**
@@ -1354,10 +1392,36 @@ class Entity(Base):
     )
 
 
-def validate_entity_tree(entity: Entity) -> None:
-    """Validation applicative : pas de self-reference (complément au schéma)."""
+def validate_entity_tree(entity: Entity, *, session: object | None = None) -> None:
+    """Validation applicative : pas de self-reference ni de cycle.
+
+    Vérifications :
+    1. L'entité ne peut pas être son propre parent.
+    2. Aucun cycle dans la chaîne des parents (A→B→A ou plus long).
+       (Réalisé au niveau applicatif car Postgres ne l'empêche pas.)
+    """
     if entity.id is not None and entity.parent_entity_id == entity.id:
         raise ValueError("Une société ne peut pas être son propre parent")
+    # Si une session est fournie et que l'entité a un parent, remonter la chaîne
+    if session is None or entity.parent_entity_id is None or entity.id is None:
+        return
+    # Cast pour mypy (la session est une sqlalchemy.orm.Session)
+    from sqlalchemy.orm import Session as _S
+
+    db: _S = session  # type: ignore[assignment]
+    seen: set[int] = {entity.id}
+    cursor_id: int | None = entity.parent_entity_id
+    while cursor_id is not None:
+        if cursor_id in seen:
+            raise ValueError(
+                "Cycle détecté dans la hiérarchie des sociétés "
+                f"(via l'identifiant {cursor_id})"
+            )
+        seen.add(cursor_id)
+        parent = db.get(Entity, cursor_id)
+        if parent is None:
+            raise ValueError(f"Société parente introuvable (id={cursor_id})")
+        cursor_id = parent.parent_entity_id
 ```
 
 - [ ] **Étape 3 : Exporter dans `__init__.py`**
@@ -1690,11 +1754,13 @@ git commit -m "feat(backend): argon2 password hashing"
 
 ---
 
-### Tâche E2 : Politique de mot de passe (longueur minimale + HIBP local)
+### Tâche E2 : Politique de mot de passe (longueur minimale)
 
 **Files:**
 - Modify: `backend/app/security.py`
 - Create: `backend/tests/test_password_policy.py`
+
+**⚠️ Portée Plan 0 volontairement réduite** : seule la longueur minimale est implémentée ici. La vérification **HIBP local** (fichier de hashes SHA-1 Pwned Passwords) exigée par la spec §9.1 est **reportée au Plan 6** car elle nécessite le téléchargement/intégration d'un fichier binaire de plusieurs Go et des tests dédiés qui alourdiraient inutilement la fondation. Inscrit explicitement dans le hors-portée du Plan 0 et dans le scope du Plan 6.
 
 - [ ] **Étape 1 : Test**
 
@@ -1703,7 +1769,7 @@ git commit -m "feat(backend): argon2 password hashing"
 ```python
 import pytest
 
-from app.security import validate_password_policy
+from app.security import MIN_PASSWORD_LENGTH, validate_password_policy
 
 
 def test_valid_long_password() -> None:
@@ -1712,14 +1778,13 @@ def test_valid_long_password() -> None:
 
 
 def test_too_short() -> None:
-    with pytest.raises(ValueError, match="12 caractères"):
+    with pytest.raises(ValueError, match=f"{MIN_PASSWORD_LENGTH} caractères"):
         validate_password_policy("trop_court")
 
 
-def test_common_password_rejected() -> None:
-    # "password123" est dans tous les top 100 fuites
-    with pytest.raises(ValueError, match="compromis"):
-        validate_password_policy("password1234")
+def test_exactly_at_minimum_is_accepted() -> None:
+    # 12 caractères pile — passe
+    validate_password_policy("a" * MIN_PASSWORD_LENGTH)
 ```
 
 - [ ] **Étape 2 : Ajouter à `security.py`**
@@ -1728,24 +1793,16 @@ def test_common_password_rejected() -> None:
 # Ajouter en bas de backend/app/security.py
 MIN_PASSWORD_LENGTH = 12
 
-# Top 100 mots de passe les plus compromis (extrait de HIBP / listes publiques)
-# Pour le MVP : liste inline. Évolution v2 : fichier hash SHA-1 complet HIBP.
-_COMPROMISED = {
-    "password1234", "password12345", "123456789012", "qwerty123456",
-    "motdepasse12", "azertyuiop12", "admin1234567", "welcome12345",
-    # + étendue via un fichier texte en prod
-}
-
 
 def validate_password_policy(raw: str) -> None:
+    """Valide un mot de passe en clair selon la politique MVP.
+
+    NOTE (Plan 6) : la vérification contre la base HIBP locale (fichier de
+    hashes Pwned Passwords) est ajoutée au Plan 6, pas ici.
+    """
     if len(raw) < MIN_PASSWORD_LENGTH:
         raise ValueError(
             f"Le mot de passe doit contenir au moins {MIN_PASSWORD_LENGTH} caractères"
-        )
-    if raw.lower() in _COMPROMISED:
-        raise ValueError(
-            "Ce mot de passe est compromis (présent dans des fuites publiques). "
-            "Choisissez-en un autre."
         )
 ```
 
@@ -1756,7 +1813,7 @@ cd backend
 pytest tests/test_password_policy.py -v
 cd ..
 git add backend/app/security.py backend/tests/test_password_policy.py
-git commit -m "feat(backend): password policy validation"
+git commit -m "feat(backend): minimum password length policy (HIBP deferred to plan 6)"
 ```
 
 ---
@@ -1772,6 +1829,8 @@ git commit -m "feat(backend): password policy validation"
 `backend/tests/test_session_cookies.py` :
 
 ```python
+import time
+
 import pytest
 
 from app.security import SessionTokenError, decode_session_token, encode_session_token
@@ -1779,22 +1838,30 @@ from app.security import SessionTokenError, decode_session_token, encode_session
 
 def test_encode_decode_roundtrip() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=42, secret=secret, max_age_seconds=3600)
+    token = encode_session_token(user_id=42, secret=secret)
     assert decode_session_token(token, secret=secret, max_age_seconds=3600) == 42
 
 
 def test_expired_token_rejected() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=7, secret=secret, max_age_seconds=-1)
-    with pytest.raises(SessionTokenError):
-        decode_session_token(token, secret=secret, max_age_seconds=0)
+    token = encode_session_token(user_id=7, secret=secret)
+    # Attente réelle puis validation avec max_age=1 → le token a > 1 s, doit échouer
+    time.sleep(2)
+    with pytest.raises(SessionTokenError, match="expirée"):
+        decode_session_token(token, secret=secret, max_age_seconds=1)
 
 
 def test_tampered_token_rejected() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=7, secret=secret, max_age_seconds=3600)
+    token = encode_session_token(user_id=7, secret=secret)
     with pytest.raises(SessionTokenError):
         decode_session_token(token + "tamper", secret=secret, max_age_seconds=3600)
+
+
+def test_different_secret_rejected() -> None:
+    token = encode_session_token(user_id=7, secret="a" * 32)
+    with pytest.raises(SessionTokenError):
+        decode_session_token(token, secret="b" * 32, max_age_seconds=3600)
 ```
 
 - [ ] **Étape 2 : Ajouter à `security.py`**
@@ -1808,14 +1875,14 @@ class SessionTokenError(Exception):
     """Token de session invalide ou expiré."""
 
 
-def encode_session_token(*, user_id: int, secret: str, max_age_seconds: int) -> str:
-    # Le max_age est vérifié au décodage ; encode_session_token ne porte pas d'horodatage
-    # explicitement — TimestampSigner le fait pour nous.
+def encode_session_token(*, user_id: int, secret: str) -> str:
+    """Encode un token horodaté (l'expiration est vérifiée au décodage)."""
     signer = TimestampSigner(secret)
     return signer.sign(str(user_id)).decode("utf-8")
 
 
 def decode_session_token(token: str, *, secret: str, max_age_seconds: int) -> int:
+    """Décode un token ; lève SessionTokenError s'il est invalide ou trop vieux."""
     signer = TimestampSigner(secret)
     try:
         raw = signer.unsign(token, max_age=max_age_seconds).decode("utf-8")
@@ -1847,38 +1914,49 @@ git commit -m "feat(backend): signed session tokens with itsdangerous"
 - Create: `backend/app/deps.py`
 - Create: `backend/tests/test_deps.py`
 
-- [ ] **Étape 1 : Test**
+- [ ] **Étape 1 : Tests (négatif ET positif)**
 
 `backend/tests/test_deps.py` :
 
 ```python
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.deps import get_current_user
+from app.config import Settings, get_settings
+from app.db import get_db
+from app.deps import COOKIE_NAME, get_current_user, require_admin
 from app.models.user import User, UserRole
 from app.security import encode_session_token
 
-SECRET = "a" * 32
-COOKIE_NAME = "session"
-
 
 def _make_app(db_session: Session) -> FastAPI:
-    app = FastAPI()
+    test_app = FastAPI()
 
-    def override_db():
+    def _override_db():
         yield db_session
 
-    from app.db import get_db
+    def _override_settings() -> Settings:
+        # Settings minimales pour les tests — contourne .env absent
+        return Settings(  # type: ignore[call-arg]
+            database_url="postgresql+psycopg://x/x",
+            secret_key="x" * 32,
+            session_hours=1,
+            cors_origins_raw="http://localhost",
+        )
 
-    app.dependency_overrides[get_db] = override_db
+    test_app.dependency_overrides[get_db] = _override_db
+    test_app.dependency_overrides[get_settings] = _override_settings
 
-    @app.get("/protected")
-    def protected(current=get_current_user):
+    @test_app.get("/protected")
+    def protected(current: User = Depends(get_current_user)) -> dict[str, str]:
         return {"email": current.email}
 
-    return app
+    @test_app.get("/admin-only")
+    def admin_only(current: User = Depends(require_admin)) -> dict[str, str]:
+        return {"email": current.email}
+
+    return test_app
 
 
 def test_requires_cookie(db_session: Session) -> None:
@@ -1886,9 +1964,46 @@ def test_requires_cookie(db_session: Session) -> None:
     client = TestClient(app)
     r = client.get("/protected")
     assert r.status_code == 401
-```
 
-(Note : ce test est volontairement rudimentaire. Il sera complété à la tâche F.)
+
+def test_valid_cookie_admits(db_session: Session) -> None:
+    user = User(
+        email="u@x.com", password_hash="h", role=UserRole.READER, full_name="U"
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    app = _make_app(db_session)
+    client = TestClient(app)
+    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    r = client.get("/protected", cookies={COOKIE_NAME: token})
+    assert r.status_code == 200
+    assert r.json() == {"email": "u@x.com"}
+
+
+def test_reader_cannot_reach_admin_route(db_session: Session) -> None:
+    user = User(email="r@x.com", password_hash="h", role=UserRole.READER)
+    db_session.add(user)
+    db_session.commit()
+
+    app = _make_app(db_session)
+    client = TestClient(app)
+    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    r = client.get("/admin-only", cookies={COOKIE_NAME: token})
+    assert r.status_code == 403
+
+
+def test_deactivated_user_rejected(db_session: Session) -> None:
+    user = User(email="d@x.com", password_hash="h", role=UserRole.ADMIN, is_active=False)
+    db_session.add(user)
+    db_session.commit()
+
+    app = _make_app(db_session)
+    client = TestClient(app)
+    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    r = client.get("/protected", cookies={COOKIE_NAME: token})
+    assert r.status_code == 401
+```
 
 - [ ] **Étape 2 : Implémenter**
 
@@ -1956,18 +2071,28 @@ git commit -m "feat(backend): get_current_user dependency and require_admin"
 ### Tâche E5 : Configurer slowapi pour le rate limiting
 
 **Files:**
+- Create: `backend/app/rate_limiter.py`
 - Modify: `backend/app/main.py`
 
-- [ ] **Étape 1 : Mettre à jour `main.py`**
+- [ ] **Étape 1 : Créer le module `rate_limiter.py`**
+
+```python
+# backend/app/rate_limiter.py
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+- [ ] **Étape 2 : Mettre à jour `main.py` pour consommer le limiter**
 
 ```python
 # backend/app/main.py
 from fastapi import FastAPI
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+from app.rate_limiter import limiter
 
 app = FastAPI(
     title="Outil de trésorerie",
@@ -1983,27 +2108,28 @@ def root() -> dict[str, str]:
     return {"status": "ok", "name": "tresorerie-backend"}
 ```
 
-- [ ] **Étape 2 : Test minimal**
+- [ ] **Étape 3 : Test minimal**
 
 Ajouter un test pour vérifier que l'import et l'instanciation du limiter fonctionnent :
 
 ```python
 # backend/tests/test_limiter_init.py
-from app.main import app, limiter
+from app.main import app
+from app.rate_limiter import limiter
 
 
 def test_limiter_attached() -> None:
     assert app.state.limiter is limiter
 ```
 
-- [ ] **Étape 3 : Commit**
+- [ ] **Étape 4 : Commit**
 
 ```bash
 cd backend
 pytest tests/test_limiter_init.py -v
 cd ..
-git add backend/app/main.py backend/tests/test_limiter_init.py
-git commit -m "feat(backend): attach slowapi limiter to app"
+git add backend/app/rate_limiter.py backend/app/main.py backend/tests/test_limiter_init.py
+git commit -m "feat(backend): slowapi limiter module"
 ```
 
 ---
@@ -2242,13 +2368,23 @@ def test_wrong_password(db_session: Session) -> None:
     app.dependency_overrides.clear()
 ```
 
-- [ ] **Étape 2 : Implémenter `api/auth.py`**
+- [ ] **Étape 2 : Créer `backend/app/rate_limiter.py` (extrait pour éviter un cycle d'import)**
+
+```python
+# backend/app/rate_limiter.py
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+- [ ] **Étape 3 : Implémenter `api/auth.py` (signature canonique finale)**
 
 ```python
 # backend/app/api/auth.py
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -2256,6 +2392,7 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import COOKIE_NAME
 from app.models.user import User
+from app.rate_limiter import limiter
 from app.schemas.auth import LoginRequest, LoginResponse
 from app.security import encode_session_token, verify_password
 
@@ -2263,7 +2400,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
 def login(
+    request: Request,  # requis par slowapi pour extraire l'IP
     payload: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),
@@ -2274,18 +2413,14 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiants invalides"
         )
-    token = encode_session_token(
-        user_id=user.id,
-        secret=settings.secret_key,
-        max_age_seconds=settings.session_hours * 3600,
-    )
+    token = encode_session_token(user_id=user.id, secret=settings.secret_key)
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         max_age=settings.session_hours * 3600,
         httponly=True,
         samesite="lax",
-        secure=False,  # True en prod via config
+        secure=settings.cookie_secure,
     )
     user.last_login_at = datetime.now(UTC)
     db.commit()
@@ -2298,6 +2433,8 @@ def login(
 def logout(response: Response) -> None:
     response.delete_cookie(COOKIE_NAME)
 ```
+
+> **⚠️ Note scope Plan 0 — lockout après 5 échecs** : la spec §9.1 exige un verrouillage temporaire après 5 échecs consécutifs en 10 min. Ce comportement nécessite un compteur persistant (`users.failed_attempts`, `users.locked_until`) et une table `login_attempts` pour la fenêtre glissante. **Reporté au Plan 6** pour ne pas alourdir la fondation. Mentionné explicitement dans le hors-scope ci-dessous. Le rate limit 10/min ci-dessus offre déjà une première couche de protection contre le bruteforce.
 
 - [ ] **Étape 3 : Implémenter `api/me.py`**
 
@@ -2332,23 +2469,27 @@ api_router.include_router(me.router)
 
 - [ ] **Étape 5 : Brancher dans `main.py`**
 
-Mettre à jour `backend/app/main.py` :
+Mettre à jour `backend/app/main.py` (importer le limiter depuis `app.rate_limiter`, pas redéfini ici) :
 
 ```python
+# backend/app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.api.router import api_router
 from app.config import get_settings
+from app.logging_config import configure_logging
+from app.rate_limiter import limiter
 
-limiter = Limiter(key_func=get_remote_address)
+configure_logging()
 
 settings = get_settings()
 app = FastAPI(
-    title="Outil de trésorerie", description="API...", version="0.1.0"
+    title="Outil de trésorerie",
+    description="API de l'outil de gestion de trésorerie auto-hébergé",
+    version="0.1.0",
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -2369,49 +2510,16 @@ def root() -> dict[str, str]:
     return {"status": "ok", "name": "tresorerie-backend"}
 ```
 
-- [ ] **Étape 6 : Appliquer le rate limit sur /login**
+> `app.rate_limiter.limiter` est la source unique. La tâche E5 précédente l'instanciait dans `main.py` ; la refonte ci-dessus la déplace dans `app/rate_limiter.py` pour permettre aux routes de le décorer sans cycle d'import. Penser à mettre à jour `backend/tests/test_limiter_init.py` pour importer le limiter depuis `app.rate_limiter`.
 
-Dans `backend/app/api/auth.py`, ajouter le décorateur :
-
-```python
-from app.main import limiter  # attention : import tardif, voir note
-
-# Sur la fonction login :
-@limiter.limit("10/minute")
-def login(request: ..., ...):
-    ...
-```
-
-**Note pratique** : pour éviter un cycle d'import, déplacer le limiter dans un module à part. Créer `backend/app/rate_limiter.py` :
-
-```python
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
-```
-
-Puis dans `auth.py` : `from app.rate_limiter import limiter` ; et dans `main.py` : `from app.rate_limiter import limiter`.
-
-Et ajouter la `Request` dans la signature de `login` (requis par slowapi) :
-
-```python
-from fastapi import Request
-
-@router.post("/login", response_model=LoginResponse)
-@limiter.limit("10/minute")
-def login(request: Request, payload: LoginRequest, ...):
-    ...
-```
-
-- [ ] **Étape 7 : Tests + commit**
+- [ ] **Étape 6 : Tests + commit**
 
 ```bash
 cd backend
-pytest tests/test_auth_api.py -v
+pytest tests/test_auth_api.py tests/test_limiter_init.py -v
 cd ..
-git add backend/app/api backend/app/rate_limiter.py backend/app/main.py backend/tests/test_auth_api.py
-git commit -m "feat(backend): login/logout/me endpoints with session cookie and rate limiting"
+git add backend/app/api backend/app/rate_limiter.py backend/app/main.py backend/tests/test_auth_api.py backend/tests/test_limiter_init.py
+git commit -m "feat(backend): login/logout/me endpoints with rate-limited login and secure cookie from settings"
 ```
 
 ---
@@ -2474,12 +2582,35 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def _would_leave_no_active_admin(db: Session, *, user: User, next_role: UserRole | None, next_active: bool | None) -> bool:
+    """True si la mise à jour proposée retire le dernier admin actif."""
+    # Résultat effectif après modif
+    effective_role = next_role if next_role is not None else user.role
+    effective_active = next_active if next_active is not None else user.is_active
+    if effective_role == UserRole.ADMIN and effective_active:
+        return False  # l'utilisateur reste admin actif
+    # Compter les autres admins actifs
+    others = db.scalar(
+        select(func.count(User.id))
+        .where(User.role == UserRole.ADMIN, User.is_active.is_(True), User.id != user.id)
+    )
+    return (others or 0) == 0
+
+
 @router.patch("/{user_id}", response_model=UserRead)
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if _would_leave_no_active_admin(
+        db, user=user, next_role=data.get("role"), next_active=data.get("is_active")
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Impossible : cette opération laisserait le système sans administrateur actif",
+        )
+    for field, value in data.items():
         setattr(user, field, value)
     db.commit()
     db.refresh(user)
@@ -2492,8 +2623,26 @@ def deactivate_user(user_id: int, db: Session = Depends(get_db)) -> None:
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if _would_leave_no_active_admin(db, user=user, next_role=None, next_active=False):
+        raise HTTPException(
+            status_code=409,
+            detail="Impossible : cette opération laisserait le système sans administrateur actif",
+        )
     user.is_active = False
     db.commit()
+```
+
+**Tests à ajouter dans `test_users_api.py` :**
+
+- `test_cannot_deactivate_last_admin` : avec un seul admin actif en base, `DELETE /api/users/{id}` renvoie 409.
+- `test_cannot_demote_last_admin` : idem avec `PATCH` role=reader.
+- `test_demote_admin_when_other_admin_exists` : avec 2 admins, la rétrogradation de l'un passe (200).
+
+**Imports additionnels :**
+
+```python
+from sqlalchemy import func
+from app.models.user import UserRole
 ```
 
 - [ ] **Étape 3 : Ajouter au router + test + commit**
@@ -2567,7 +2716,7 @@ def create_entity(payload: EntityCreate, db: Session = Depends(get_db)) -> Entit
     # validate_entity_tree vérifie self-ref mais Entity n'a pas encore d'id à la création
     db.add(e)
     db.flush()
-    validate_entity_tree(e)
+    validate_entity_tree(e, session=db)
     db.commit()
     db.refresh(e)
     return e
@@ -2582,7 +2731,7 @@ def update_entity(
         raise HTTPException(status_code=404, detail="Société introuvable")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(e, field, value)
-    validate_entity_tree(e)
+    validate_entity_tree(e, session=db)
     db.commit()
     db.refresh(e)
     return e
@@ -2701,12 +2850,13 @@ def test_bootstrap_refused_if_user_exists(db_session: Session) -> None:
 
 ```python
 # backend/app/api/bootstrap.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.user import User, UserRole
+from app.rate_limiter import limiter
 from app.schemas.user import UserCreate, UserRead
 from app.security import hash_password, validate_password_policy
 
@@ -2714,7 +2864,10 @@ router = APIRouter(prefix="/api/bootstrap", tags=["bootstrap"])
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def bootstrap_first_admin(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+@limiter.limit("3/hour")
+def bootstrap_first_admin(
+    request: Request, payload: UserCreate, db: Session = Depends(get_db)
+) -> User:
     already = db.scalar(select(User).limit(1))
     if already is not None:
         raise HTTPException(
@@ -2760,7 +2913,9 @@ git commit -m "feat(backend): one-shot bootstrap endpoint for first admin"
 
 ```python
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.db import get_db
 from app.main import app
 
 
@@ -2771,11 +2926,33 @@ def test_healthz() -> None:
     assert r.json() == {"status": "alive"}
 
 
-def test_readyz_when_db_up() -> None:
-    client = TestClient(app)
-    r = client.get("/readyz")
-    # L'état dépend de la DB. En test on a la DB de test disponible via conftest.
-    assert r.status_code in (200, 503)
+def test_readyz_when_db_up(db_session: Session) -> None:
+    app.dependency_overrides[get_db] = lambda: (yield db_session)
+    try:
+        client = TestClient(app)
+        r = client.get("/readyz")
+        assert r.status_code == 200
+        assert r.json() == {"status": "ready"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_readyz_when_db_down() -> None:
+    """Simule une session qui lève à l'exécution de SELECT 1."""
+    from sqlalchemy.exc import OperationalError
+
+    class BrokenSession:
+        def execute(self, _stmt):  # noqa: ANN001
+            raise OperationalError("fake", {}, Exception("DB down"))
+
+    app.dependency_overrides[get_db] = lambda: (yield BrokenSession())
+    try:
+        client = TestClient(app)
+        r = client.get("/readyz")
+        assert r.status_code == 503
+        assert r.json() == {"status": "db_unavailable"}
+    finally:
+        app.dependency_overrides.clear()
 ```
 
 - [ ] **Étape 2 : Implémenter**
@@ -3043,7 +3220,49 @@ export async function apiFetch<T>(
 }
 ```
 
-- [ ] **Étape 3 : Router et structure des pages**
+- [ ] **Étape 3 : Créer les placeholders de pages AVANT de câbler le routeur**
+
+Pour que le projet compile à chaque commit (pas de références à des fichiers qui n'existent pas encore), on crée d'abord tous les placeholders. Les pages seront enrichies aux tâches I1 à I6.
+
+`frontend/src/pages/LoginPage.tsx` :
+```tsx
+export function LoginPage() { return <div>Connexion (placeholder)</div>; }
+```
+
+`frontend/src/pages/DashboardPage.tsx` :
+```tsx
+export function DashboardPage() { return <div>Tableau de bord (placeholder)</div>; }
+```
+
+`frontend/src/pages/AdminUsersPage.tsx` :
+```tsx
+export function AdminUsersPage() { return <div>Utilisateurs (placeholder)</div>; }
+```
+
+`frontend/src/pages/AdminEntitiesPage.tsx` :
+```tsx
+export function AdminEntitiesPage() { return <div>Sociétés (placeholder)</div>; }
+```
+
+`frontend/src/pages/AdminBankAccountsPage.tsx` :
+```tsx
+export function AdminBankAccountsPage() { return <div>Comptes bancaires (placeholder)</div>; }
+```
+
+`frontend/src/components/Layout.tsx`, `Sidebar.tsx`, `ProtectedRoute.tsx` — stubs minimaux :
+```tsx
+// Layout.tsx
+import { Outlet } from 'react-router-dom';
+export function Layout() { return <Outlet />; }
+```
+```tsx
+// ProtectedRoute.tsx
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+```
+
+- [ ] **Étape 4 : Router**
 
 `frontend/src/router.tsx` :
 
@@ -3077,9 +3296,14 @@ export const router = createBrowserRouter([
 ]);
 ```
 
-(Les pages listées seront créées aux tâches suivantes, mais elles peuvent commencer en placeholders très courts.)
+Les pages réelles (formulaires, tables, validations) sont développées dans la section I. À ce point du plan, `npm run build` doit réussir.
 
-- [ ] **Étape 4 : Créer `src/main.tsx`**
+- [ ] **Étape 5 : Créer `src/main.tsx`**
+
+```bash
+cd frontend
+npm install @tanstack/react-query
+```
 
 ```tsx
 import { StrictMode } from 'react';
@@ -3101,11 +3325,14 @@ createRoot(document.getElementById('root')!).render(
 );
 ```
 
-```bash
-npm install @tanstack/react-query
-```
+- [ ] **Étape 6 : Vérifier le build**
 
-- [ ] **Étape 5 : Commit**
+```bash
+npm run build
+```
+Doit produire `dist/` sans erreur TypeScript.
+
+- [ ] **Étape 7 : Commit**
 
 ```bash
 cd ..
@@ -3659,30 +3886,488 @@ export async function createUser(input: CreateUserInput): Promise<User> {
 }
 ```
 
-- [ ] **Étape 2 : Page** (implémenter avec un formulaire shadcn + table — code omis ici pour la taille, inspiré du même pattern que AdminEntitiesPage plus bas)
+- [ ] **Étape 2 : Page `AdminUsersPage`**
 
-- [ ] **Étape 3 : Commit**
+`frontend/src/pages/AdminUsersPage.tsx` :
+
+```tsx
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+
+import { ApiError } from '@/api/client';
+import { createUser, listUsers } from '@/api/users';
+import type { UserRole } from '@/types/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+export function AdminUsersPage() {
+  const qc = useQueryClient();
+  const { data: users, isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: listUsers,
+  });
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState<UserRole>('reader');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: createUser,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      setEmail('');
+      setPassword('');
+      setFullName('');
+      setRole('reader');
+      setFormError(null);
+    },
+    onError: (e) => {
+      setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue');
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Utilisateurs</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Créer un utilisateur</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid grid-cols-2 gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              create.mutate({ email, password, role, fullName: fullName || undefined });
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="u-email">Email</Label>
+              <Input
+                id="u-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="u-name">Nom complet</Label>
+              <Input
+                id="u-name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="u-pwd">Mot de passe (12 caractères min.)</Label>
+              <Input
+                id="u-pwd"
+                type="password"
+                minLength={12}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Rôle</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="reader">Lecture</SelectItem>
+                  <SelectItem value="admin">Administrateur</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {formError && (
+              <p className="col-span-2 text-red-600 text-sm">{formError}</p>
+            )}
+            <div className="col-span-2">
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? 'Création…' : 'Créer'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Liste des utilisateurs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading && <p>Chargement…</p>}
+          {users && (
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="py-2">Email</th>
+                  <th>Nom</th>
+                  <th>Rôle</th>
+                  <th>Statut</th>
+                  <th>Créé le</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id} className="border-t border-slate-200">
+                    <td className="py-2">{u.email}</td>
+                    <td>{u.fullName ?? '—'}</td>
+                    <td>{u.role === 'admin' ? 'Administrateur' : 'Lecture'}</td>
+                    <td>
+                      {u.isActive ? (
+                        <span className="text-green-700">Actif</span>
+                      ) : (
+                        <span className="text-slate-500">Inactif</span>
+                      )}
+                    </td>
+                    <td>{new Date(u.createdAt).toLocaleDateString('fr-FR')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+```
+
+- [ ] **Étape 3 : Test minimal** — vérifier que le formulaire s'affiche et que les champs sont présents.
+
+`frontend/src/test/AdminUsersPage.test.tsx` (squelette) :
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { vi } from 'vitest';
+
+vi.mock('@/api/users', () => ({
+  listUsers: vi.fn(async () => []),
+  createUser: vi.fn(),
+}));
+
+import { AdminUsersPage } from '@/pages/AdminUsersPage';
+
+test('affiche le formulaire de création', () => {
+  const qc = new QueryClient();
+  render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /créer/i })).toBeInTheDocument();
+});
+```
+
+- [ ] **Étape 4 : Commit**
 
 ```bash
-git add frontend/src/api/users.ts frontend/src/pages/AdminUsersPage.tsx
-git commit -m "feat(frontend): admin users page with creation form"
+cd frontend && npm test -- AdminUsersPage.test.tsx && cd ..
+git add frontend/src/api/users.ts frontend/src/pages/AdminUsersPage.tsx frontend/src/test/AdminUsersPage.test.tsx
+git commit -m "feat(frontend): admin users page with creation form and list"
 ```
 
 ---
 
-### Tâche I5 : Page `AdminEntitiesPage` (liste + création + arborescence)
+### Tâche I5 : Page `AdminEntitiesPage` (liste hiérarchique + création)
 
-Structure :
-- Liste plate avec indentation visuelle pour montrer la hiérarchie
-- Formulaire de création avec sélecteur de parent
+**Files:**
+- Create: `frontend/src/api/entities.ts`
+- Create: `frontend/src/pages/AdminEntitiesPage.tsx`
+- Create: `frontend/src/test/AdminEntitiesPage.test.tsx`
 
-Implémentation similaire à AdminUsersPage. Commit après tests manuels.
+- [ ] **Étape 1 : Client API**
+
+`frontend/src/api/entities.ts` :
+
+```ts
+import { apiFetch } from './client';
+import type { Entity } from '@/types/api';
+
+type RawEntity = {
+  id: number;
+  name: string;
+  legal_name: string;
+  siret: string | null;
+  parent_entity_id: number | null;
+  created_at: string;
+};
+
+function mapEntity(r: RawEntity): Entity {
+  return {
+    id: r.id,
+    name: r.name,
+    legalName: r.legal_name,
+    siret: r.siret,
+    parentEntityId: r.parent_entity_id,
+    createdAt: r.created_at,
+  };
+}
+
+export async function listEntities(): Promise<Entity[]> {
+  const raw = await apiFetch<RawEntity[]>('/api/entities');
+  return raw.map(mapEntity);
+}
+
+export type CreateEntityInput = {
+  name: string;
+  legalName: string;
+  siret?: string;
+  parentEntityId?: number | null;
+};
+
+export async function createEntity(input: CreateEntityInput): Promise<Entity> {
+  const r = await apiFetch<RawEntity>('/api/entities', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      legal_name: input.legalName,
+      siret: input.siret ?? null,
+      parent_entity_id: input.parentEntityId ?? null,
+    }),
+  });
+  return mapEntity(r);
+}
+
+export async function deleteEntity(id: number): Promise<void> {
+  await apiFetch<unknown>(`/api/entities/${id}`, { method: 'DELETE' });
+}
+```
+
+- [ ] **Étape 2 : Helper tri hiérarchique**
+
+`frontend/src/pages/AdminEntitiesPage.tsx` inclut un helper pour ordonner les entités en arbre visuel :
+
+```ts
+function toTreeOrder(entities: Entity[]): Array<Entity & { depth: number }> {
+  const byParent = new Map<number | null, Entity[]>();
+  for (const e of entities) {
+    const k = e.parentEntityId;
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k)!.push(e);
+  }
+  const out: Array<Entity & { depth: number }> = [];
+  function walk(parentId: number | null, depth: number) {
+    for (const e of (byParent.get(parentId) ?? []).sort((a, b) =>
+      a.name.localeCompare(b.name, 'fr')
+    )) {
+      out.push({ ...e, depth });
+      walk(e.id, depth + 1);
+    }
+  }
+  walk(null, 0);
+  return out;
+}
+```
+
+- [ ] **Étape 3 : Composant**
+
+```tsx
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+
+import { ApiError } from '@/api/client';
+import { createEntity, deleteEntity, listEntities } from '@/api/entities';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { Entity } from '@/types/api';
+
+export function AdminEntitiesPage() {
+  const qc = useQueryClient();
+  const { data: entities, isLoading } = useQuery({
+    queryKey: ['entities'],
+    queryFn: listEntities,
+  });
+
+  const [name, setName] = useState('');
+  const [legalName, setLegalName] = useState('');
+  const [siret, setSiret] = useState('');
+  const [parentId, setParentId] = useState<string>('none');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: createEntity,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entities'] });
+      setName(''); setLegalName(''); setSiret(''); setParentId('none');
+      setFormError(null);
+    },
+    onError: (e) => setFormError(e instanceof ApiError ? e.detail : 'Erreur'),
+  });
+
+  const del = useMutation({
+    mutationFn: deleteEntity,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['entities'] }),
+    onError: (e) => alert(e instanceof ApiError ? e.detail : 'Erreur'),
+  });
+
+  const ordered = entities ? toTreeOrder(entities) : [];
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Sociétés</h1>
+
+      <Card>
+        <CardHeader><CardTitle>Créer une société</CardTitle></CardHeader>
+        <CardContent>
+          <form
+            className="grid grid-cols-2 gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              create.mutate({
+                name,
+                legalName,
+                siret: siret || undefined,
+                parentEntityId: parentId === 'none' ? null : Number(parentId),
+              });
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="e-name">Nom usuel</Label>
+              <Input id="e-name" required value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="e-legal">Raison sociale</Label>
+              <Input id="e-legal" required value={legalName} onChange={(e) => setLegalName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="e-siret">SIRET</Label>
+              <Input id="e-siret" value={siret} onChange={(e) => setSiret(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Société parente</Label>
+              <Select value={parentId} onValueChange={setParentId}>
+                <SelectTrigger><SelectValue placeholder="Aucune (société racine)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune (société racine)</SelectItem>
+                  {entities?.map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {formError && <p className="col-span-2 text-red-600 text-sm">{formError}</p>}
+            <div className="col-span-2">
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? 'Création…' : 'Créer'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Liste des sociétés</CardTitle></CardHeader>
+        <CardContent>
+          {isLoading && <p>Chargement…</p>}
+          {ordered.length > 0 && (
+            <ul className="space-y-1">
+              {ordered.map((e) => (
+                <li key={e.id} className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <span style={{ paddingLeft: `${e.depth * 24}px` }}>
+                    {e.depth > 0 && '↳ '}
+                    <strong>{e.name}</strong>
+                    <span className="text-slate-500 ml-2">— {e.legalName}</span>
+                    {e.siret && <span className="text-slate-400 ml-2">SIRET {e.siret}</span>}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`Supprimer "${e.name}" ?`)) del.mutate(e.id);
+                    }}
+                  >
+                    Supprimer
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+```
+
+- [ ] **Étape 4 : Test + commit**
+
+Test similaire à I4 (mock `@/api/entities`, vérifier les champs).
+
+```bash
+cd frontend && npm test -- AdminEntitiesPage.test.tsx && cd ..
+git add frontend/src/api/entities.ts frontend/src/pages/AdminEntitiesPage.tsx frontend/src/test/AdminEntitiesPage.test.tsx
+git commit -m "feat(frontend): admin entities page with tree view"
+```
 
 ---
 
 ### Tâche I6 : Page `AdminBankAccountsPage`
 
-Structure similaire : liste + création avec validation IBAN visuelle.
+**Files:**
+- Create: `frontend/src/api/bankAccounts.ts`
+- Create: `frontend/src/pages/AdminBankAccountsPage.tsx`
+- Create: `frontend/src/test/AdminBankAccountsPage.test.tsx`
+
+Même patron que I4/I5. Spécificités :
+- Le formulaire propose un sélecteur d'entité (réutiliser `listEntities()`).
+- Validation IBAN côté client : regex `/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/` avec message "IBAN invalide". La validation complète (checksum mod 97) n'est pas requise au MVP ; on la laisse au backend via l'unicité.
+- Afficher l'IBAN formaté par blocs de 4 : `FR76 1287 9000 0111 1702 0200 105`.
+
+Extrait du composant (points clés) :
+
+```tsx
+function formatIban(raw: string): string {
+  return raw.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+}
+
+// Dans le formulaire, regex HTML5 :
+<Input
+  id="ba-iban"
+  pattern="^[A-Z]{2}\\d{2}[A-Z0-9]{10,30}$"
+  title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
+  required
+  value={iban}
+  onChange={(e) => setIban(e.target.value.toUpperCase().replace(/\s/g, ''))}
+/>
+```
+
+**API client** (`frontend/src/api/bankAccounts.ts`) suit exactement le même patron que `entities.ts` (mapper `snake_case` → `camelCase`, méthodes `listBankAccounts`, `createBankAccount`, `updateBankAccount`).
+
+Après implémentation et test :
+
+```bash
+cd frontend && npm test -- AdminBankAccountsPage.test.tsx && cd ..
+git add frontend/src/api/bankAccounts.ts frontend/src/pages/AdminBankAccountsPage.tsx frontend/src/test/AdminBankAccountsPage.test.tsx
+git commit -m "feat(frontend): admin bank accounts page with IBAN validation"
+```
 
 ---
 
@@ -3714,6 +4399,10 @@ RUN pip install --no-cache-dir -e .
 
 ENV PYTHONUNBUFFERED=1
 
+# NOTE (déploiement multi-replica) : `alembic upgrade head` exécuté au démarrage
+# fait une course si on scale à N replicas. Pour le MVP et le Plan 0 on a
+# 1 seul replica — OK. Si un jour on passe à plusieurs, extraire les migrations
+# dans un job init-container séparé (voir Plan 6).
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 ```
 
@@ -3891,6 +4580,11 @@ volumes:
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
+        # CSP : restrictive, adaptée à une SPA sans ressources externes.
+        # Les scripts viennent uniquement du même domaine ; éventuellement
+        # assouplir pour 'unsafe-inline' sur style-src si shadcn/ui en a besoin.
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
     }
 }
 ```
@@ -3976,14 +4670,24 @@ Le Plan 0 est **complet** quand **tous** ces critères sont vérifiés :
 
 ## Ce qui n'est PAS dans le Plan 0 (pour mémoire)
 
+**Reporté à des plans ultérieurs :**
+
 - Modèles `transactions`, `categories`, `category_rules`, `counterparties`, `tags`, `imports`, `recurring_templates`, `scheduled_transactions`, `scenarios`, `alerts` → Plans 1 à 5
 - Analyseur Delubac et pipeline d'import PDF → Plan 1
 - Règles de catégorisation, inbox, apprentissage → Plan 2
 - Tableau de bord avec graphiques et KPIs → Plan 3
 - Module prévisionnel → Plan 4
 - Alertes + SMTP + emails → Plan 5
-- Sauvegardes automatiques chiffrées, observabilité Prometheus, tests E2E Playwright → Plan 6
 - Déploiement sur Azure (réel) → Plan 6
+
+**Spécifiquement reporté au Plan 6 (production) :**
+
+- **Vérification HIBP locale** (fichier de hashes Pwned Passwords) — la spec §9.1 l'exige ; seule la longueur minimale 12 est dans le Plan 0
+- **Verrouillage de compte après 5 échecs en 10 min** — la spec §9.1 l'exige ; seul le rate limit 10/min sur `/login` est dans le Plan 0 (première couche anti-bruteforce)
+- **Sauvegardes automatiques chiffrées AES-256-GCM** + gestion de clé via Azure Key Vault
+- **Observabilité Prometheus** (`/metrics` endpoint + Sentry hook)
+- **Flux de réinitialisation de mot de passe par email** (dépend du SMTP configuré au Plan 6)
+- **Tests E2E Playwright** + tests de charge k6
 
 ---
 
