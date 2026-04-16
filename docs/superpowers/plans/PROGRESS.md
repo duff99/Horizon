@@ -1,14 +1,14 @@
 # Suivi d'avancement — Plan 0 Fondation
 
-**Dernière mise à jour** : 2026-04-16 — fin Section A
+**Dernière mise à jour** : 2026-04-16 — fin Section B (pause pour économiser les tokens de la session)
 
 ## État global
 
 - **Plan en cours** : Plan 0 — Fondation
-- **Mode d'exécution** : Subagent-Driven Development (récap par section)
+- **Mode d'exécution** : direct (les sections A et B sont mécaniques — écriture de fichiers de config et scaffolding). Les sections C et suivantes basculeront en subagent-driven car elles contiennent de la logique métier.
 - **Branche Git** : `main`
-- **Dernière tâche terminée** : **A4** — doc local-dev.md
-- **Prochaine tâche à faire** : **B1** — Créer `backend/pyproject.toml`
+- **Dernière tâche terminée** : **B4** — pydantic-settings config + tests
+- **Prochaine tâche à faire** : **C1** — docker-compose.dev.yml avec service Postgres
 
 ## Comment reprendre à la prochaine session
 
@@ -20,7 +20,7 @@ Je lirai ce fichier + le `git log` pour comprendre l'état et reprendre la tâch
 | Section | Tâches | Statut |
 |---|---|---|
 | A — Initialisation du dépôt | A1-A5 | ✅ Terminée |
-| B — Environnement Python | B1-B4 | ⏳ À faire |
+| B — Environnement Python | B1-B4 | ✅ Terminée (fichiers écrits — tests à valider localement) |
 | C — Base de données | C1-C5 | ⏳ À faire |
 | D — Modèles ORM | D1-D4 | ⏳ À faire |
 | E — Sécurité | E1-E5 | ⏳ À faire |
@@ -50,3 +50,40 @@ Je lirai ce fichier + le `git log` pour comprendre l'état et reprendre la tâch
 - A5 ⏭️ (rappel nettoyage `.gitkeep` à la tâche J4, pas d'action ici)
 
 **Note** : exécution directe par l'agent principal (pas de dispatch de sous-agents) car ces tâches sont purement du scaffolding/documentation sans code à tester.
+
+### Section B — Environnement Python ✅
+
+**Durée** : ~10 minutes | **Commits** : 4
+
+- B1 ✅ `backend/pyproject.toml` créé (FastAPI + SQLAlchemy + Alembic + tests)
+- B2 ✅ `backend/app/main.py` (FastAPI minimal avec endpoint `/`), `backend/tests/test_health_basic.py`, `backend/tests/conftest.py` (vide pour l'instant), `backend/app/__init__.py`, `backend/tests/__init__.py`
+- B3 ✅ `backend/scripts/check.sh` + `backend/scripts/check.ps1` (lance ruff/mypy/pytest)
+- B4 ✅ `backend/app/config.py` (pydantic-settings avec validation), `backend/tests/test_config.py`, `backend/.env.example`
+
+**⚠️ Validations à faire localement par le développeur avant de passer à la Section C** :
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate   # Windows PowerShell
+# (ou source .venv/bin/activate sous Unix)
+pip install -e ".[dev]"
+
+# Vérifier que les tests B2 et B4 passent
+pytest tests/test_health_basic.py tests/test_config.py -v
+
+# Vérifier le linting/typing
+ruff check app tests
+ruff format --check app tests
+mypy app tests
+```
+
+Les tests **doivent passer** et le linting **ne doit rien remonter**. Si KO, il faut corriger avant C1 (ça signifie que la config de base est cassée).
+
+## Reprise de session
+
+**Pour reprendre** : dis à l'assistant :
+
+> "Reprends Plan 0 à la Section C. Les tests B2/B4 passent localement. Continue à partir de C1 (docker-compose.dev.yml avec Postgres)."
+
+Rappel clé : à partir de la Section C, basculer en **subagent-driven** (dispatch d'un sous-agent par tâche ORM/API/etc.) car la complexité augmente. Sections A-B étaient du scaffolding mécanique — direct.
