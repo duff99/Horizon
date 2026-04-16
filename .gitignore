@@ -39,6 +39,13 @@ frontend/.env
 *.sql.gpg
 *.dump
 
+# Fixtures de relevés bancaires réels — ne JAMAIS commiter.
+# Seules les fixtures anonymisées/synthétiques préfixées par `anon_` ou `synthetic_`
+# peuvent être commises (voir plan 1, section fixtures).
+backend/tests/fixtures/delubac/*.pdf
+!backend/tests/fixtures/delubac/anon_*.pdf
+!backend/tests/fixtures/delubac/synthetic_*.pdf
+
 # Tests
 .tox/
 .nox/
