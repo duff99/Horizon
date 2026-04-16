@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import get_settings
 from app.db import get_db
 from app.main import app
+from app.models import Base
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity
 from app.models.user import User, UserRole
@@ -63,6 +64,10 @@ def test_engine(test_database_url: str) -> Iterator[Engine]:
     command.upgrade(alembic_cfg, "head")
 
     engine = create_engine(test_database_url, future=True)
+    # Crée à la volée les tables des modèles dont la migration Alembic
+    # n'a pas encore été écrite (B5). Une fois la migration en place,
+    # cet appel devient un no-op pour les tables déjà créées.
+    Base.metadata.create_all(bind=engine)
     yield engine
     engine.dispose()
 
