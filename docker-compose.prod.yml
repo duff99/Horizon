@@ -1,0 +1,53 @@
+# docker-compose.prod.yml — déploiement serveur ACREED CONSULTING
+#
+# Contexte : ce serveur héberge déjà ~15 applications derrière un nginx natif
+# qui gère aussi TLS via certbot. On ne peut pas monter Caddy (ports 80/443
+# déjà pris par nginx). Ce compose retire donc le service `caddy` et expose
+# frontend + backend sur la loopback uniquement (127.0.0.1), où le vhost nginx
+# `/etc/nginx/sites-enabled/horizon.acreedconsulting.com` les reverse-proxy.
+#
+# Usage : docker compose -f docker-compose.prod.yml up -d --build
+name: horizon
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: https://${APP_DOMAIN}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:80"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BACKEND_SECRET_KEY: ${BACKEND_SECRET_KEY}
+      BACKEND_SESSION_HOURS: ${BACKEND_SESSION_HOURS:-8}
+      BACKEND_CORS_ORIGINS: https://${APP_DOMAIN}
+      BACKEND_COOKIE_SECURE: "true"
+    ports:
+      - "127.0.0.1:8101:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
