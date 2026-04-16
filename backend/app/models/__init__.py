@@ -1,3 +1,14 @@
 from app.models.base import Base
+from app.models.bank_account import BankAccount
+from app.models.entity import Entity
+from app.models.user import User, UserRole
+from app.models.user_entity_access import UserEntityAccess
 
-__all__ = ["Base"]
+__all__ = [
+    "Base",
+    "BankAccount",
+    "Entity",
+    "User",
+    "UserEntityAccess",
+    "UserRole",
+]
