@@ -1406,17 +1406,17 @@ from app.models.user import User, UserRole
 
 def _seed(db_session):
     u = User(email="a@b.fr", password_hash="x", role=UserRole.ADMIN, full_name="A")
-    e = Entity(name="Acreed", slug="acreed")
+    e = Entity(name="Acreed", legal_name="Acreed SAS")
     db_session.add_all([u, e])
     db_session.commit()
     ba = BankAccount(entity_id=e.id, name="Delubac", iban="FR76",
-                     bank_code="delubac")
+                     bank_name="Delubac", bank_code="delubac")
     db_session.add(ba)
     db_session.commit()
     imp = ImportRecord(bank_account_id=ba.id, uploaded_by_id=u.id,
                        filename="f.pdf", file_size_bytes=1,
                        file_sha256="h" * 64, bank_code="delubac",
-                       transactions_imported=0, transactions_duplicated=0)
+                       imported_count=0, duplicates_skipped=0)
     db_session.add(imp)
     db_session.commit()
     return u, ba, imp
@@ -3916,8 +3916,9 @@ def _make_entity(session: Session) -> Entity:
 
 def test_match_returns_none_when_hint_empty(db_session: Session) -> None:
     e = _make_entity(db_session)
-    result = match_or_create_counterparty(db_session, entity_id=e.id, hint=None)
-    assert result is None
+    cp, created = match_or_create_counterparty(db_session, entity_id=e.id, hint=None)
+    assert cp is None
+    assert created is False
 
 
 def test_match_finds_existing_active_fuzzy(db_session: Session) -> None:
@@ -3928,22 +3929,24 @@ def test_match_finds_existing_active_fuzzy(db_session: Session) -> None:
     )
     db_session.add(existing)
     db_session.flush()
-    result = match_or_create_counterparty(
+    cp, created = match_or_create_counterparty(
         db_session, entity_id=e.id, hint="ACME S.A.S."
     )
-    assert result is not None
-    assert result.id == existing.id
+    assert cp is not None
+    assert cp.id == existing.id
+    assert created is False
 
 
 def test_match_creates_pending_when_no_existing(db_session: Session) -> None:
     e = _make_entity(db_session)
-    result = match_or_create_counterparty(
+    cp, created = match_or_create_counterparty(
         db_session, entity_id=e.id, hint="NEW PARTNER SARL"
     )
-    assert result is not None
-    assert result.status == CounterpartyStatus.PENDING
-    assert result.name == "NEW PARTNER SARL"
-    assert result.normalized_name == "NEW PARTNER SARL"
+    assert cp is not None
+    assert cp.status == CounterpartyStatus.PENDING
+    assert cp.name == "NEW PARTNER SARL"
+    assert cp.normalized_name == "NEW PARTNER SARL"
+    assert created is True
 
 
 def test_match_creates_distinct_pending_when_fuzzy_below_threshold(db_session: Session) -> None:
@@ -3954,12 +3957,30 @@ def test_match_creates_distinct_pending_when_fuzzy_below_threshold(db_session: S
     )
     db_session.add(existing)
     db_session.flush()
-    result = match_or_create_counterparty(
+    cp, created = match_or_create_counterparty(
         db_session, entity_id=e.id, hint="COMPLETELY DIFFERENT GMBH"
     )
-    assert result is not None
-    assert result.id != existing.id
-    assert result.status == CounterpartyStatus.PENDING
+    assert cp is not None
+    assert cp.id != existing.id
+    assert cp.status == CounterpartyStatus.PENDING
+    assert created is True
+
+
+def test_match_returns_existing_pending_not_created_flag(db_session: Session) -> None:
+    """Une pending existante matchée par fuzzy ne doit PAS être comptée comme créée."""
+    e = _make_entity(db_session)
+    existing = Counterparty(
+        entity_id=e.id, name="PRIOR PENDING SARL", normalized_name="PRIOR PENDING SARL",
+        status=CounterpartyStatus.PENDING,
+    )
+    db_session.add(existing)
+    db_session.flush()
+    cp, created = match_or_create_counterparty(
+        db_session, entity_id=e.id, hint="PRIOR PENDING SARL"
+    )
+    assert cp is not None
+    assert cp.id == existing.id
+    assert created is False
 ```
 
 - [ ] **Étape 2 : Vérifier l'échec**
@@ -3993,16 +4014,20 @@ def match_or_create_counterparty(
     *,
     entity_id: int,
     hint: str | None,
-) -> Counterparty | None:
-    """Retourne une Counterparty matchée ou nouvellement créée (pending).
+) -> tuple[Counterparty | None, bool]:
+    """Retourne (Counterparty, was_created).
 
-    - Retourne None si hint est vide.
-    - Match fuzzy ≥ 90 % (token_set_ratio) contre les contreparties existantes
-      de l'entité (statut != ignored), comparé sur `normalized_name`.
-    - Sinon crée une Counterparty en statut `pending`.
+    - (None, False) si hint est vide.
+    - (existing, False) si match fuzzy ≥ 90 % (token_set_ratio) sur
+      `normalized_name` des contreparties de l'entité (statut != ignored).
+    - (new, True) si aucune correspondance : création auto en statut `pending`.
+
+    Le flag `was_created` permet au caller de compter uniquement les vraies
+    créations (pas les pending pré-existantes matchées) dans
+    `ImportRecord.counterparties_pending_created`.
     """
     if not hint or not hint.strip():
-        return None
+        return None, False
 
     clean = _normalize_counterparty_name(hint)
 
@@ -4020,7 +4045,7 @@ def match_or_create_counterparty(
         )
         if best is not None and best[1] >= FUZZY_THRESHOLD:
             cp_id = best[2]
-            return next(cp for cp in existing if cp.id == cp_id)
+            return next(cp for cp in existing if cp.id == cp_id), False
 
     # Création auto-pending
     cp = Counterparty(
@@ -4031,7 +4056,7 @@ def match_or_create_counterparty(
     )
     session.add(cp)
     session.flush()
-    return cp
+    return cp, True
 ```
 
 - [ ] **Étape 4 : Relancer les tests**
@@ -4040,7 +4065,7 @@ def match_or_create_counterparty(
 pytest tests/test_service_imports_counterparty.py -v
 ```
 
-Expected : 4 tests PASS.
+Expected : 5 tests PASS.
 
 - [ ] **Étape 5 : Commit**
 
@@ -4320,18 +4345,13 @@ def ingest_parsed_statement(
                     duplicates_skipped += 1
                     return
 
-            # Match/crée la contrepartie SEULEMENT pour une tx effectivement insérée
-            cp = match_or_create_counterparty(
+            # Match/crée la contrepartie SEULEMENT pour une tx effectivement insérée.
+            # La fonction retourne (cp, was_created) : on ne compte que les vraies
+            # créations, pas les pending pré-existantes matchées par fuzzy.
+            cp, was_created = match_or_create_counterparty(
                 session, entity_id=ba.entity_id, hint=tx.counterparty_hint,
             )
-            if cp is not None and cp.status == CounterpartyStatus.PENDING:
-                # Distingue une création réelle d'un match pending pré-existant :
-                # `session.new` contient les nouveaux objets non encore flush.
-                # Alternative plus simple : la fonction crée avec flush() immédiat,
-                # donc on regarde si l'id vient d'être attribué cette passe.
-                # Ici, on compte toute pending renvoyée : dans le contexte du test,
-                # c'est la valeur attendue. Si le test échoue, ajuster en vérifiant
-                # created_at vs now.
+            if was_created:
                 pending_created += 1
 
             db_tx = Transaction(
@@ -5018,7 +5038,7 @@ def test_get_import_by_id_returns_detail(
 
 
 def test_get_import_404_when_not_found(client: TestClient, auth_user) -> None:
-    resp = client.get("/api/imports/00000000-0000-0000-0000-000000000000")
+    resp = client.get("/api/imports/999999999")
     assert resp.status_code == 404
 ```
 
@@ -5471,10 +5491,10 @@ describe("API clients Plan 1", () => {
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       status: 201,
-      json: async () => ({ id: "1", status: "completed" }),
+      json: async () => ({ id: 1, status: "completed" }),
     });
     const file = new File([new Uint8Array([1, 2])], "x.pdf", { type: "application/pdf" });
-    await uploadImport({ bankAccountId: "abc", file });
+    await uploadImport({ bankAccountId: 42, file });
     const call = (globalThis.fetch as any).mock.calls[0];
     expect(call[0]).toBe("/api/imports");
     expect(call[1].method).toBe("POST");
@@ -5487,9 +5507,9 @@ describe("API clients Plan 1", () => {
       status: 200,
       json: async () => ({ items: [], total: 0, page: 1, per_page: 50 }),
     });
-    await fetchTransactions({ bank_account_id: "abc", page: 2 });
+    await fetchTransactions({ bank_account_id: 42, page: 2 });
     const url = (globalThis.fetch as any).mock.calls[0][0];
-    expect(url).toContain("bank_account_id=abc");
+    expect(url).toContain("bank_account_id=42");
     expect(url).toContain("page=2");
   });
 
@@ -5497,9 +5517,9 @@ describe("API clients Plan 1", () => {
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ id: "1", status: "active", name: "X", entity_id: "e" }),
+      json: async () => ({ id: 1, status: "active", name: "X", entity_id: 7 }),
     });
-    await updateCounterparty("1", { status: "active" });
+    await updateCounterparty(1, { status: "active" });
     const call = (globalThis.fetch as any).mock.calls[0];
     expect(call[1].method).toBe("PATCH");
     expect(call[1].headers["Content-Type"]).toBe("application/json");
@@ -5523,9 +5543,11 @@ Expected : `Cannot find module '../api/imports'`.
 ```typescript
 export type ImportStatus = "pending" | "completed" | "failed";
 
+// NOTE: tous les IDs exposés par l'API FastAPI sont des entiers (int).
+// TypeScript les reçoit donc en `number` après JSON.parse.
 export interface ImportRecord {
-  id: string;
-  bank_account_id: string;
+  id: number;
+  bank_account_id: number;
   bank_code: string;
   status: ImportStatus;
   filename: string | null;
@@ -5540,25 +5562,25 @@ export interface ImportRecord {
 }
 
 export interface CounterpartyNested {
-  id: string;
+  id: number;
   name: string;
   status: "pending" | "active" | "ignored";
 }
 
 export interface CategoryNested {
-  id: string;
+  id: number;
   name: string;
 }
 
 export interface Transaction {
-  id: string;
+  id: number;
   operation_date: string;
   value_date: string;
   label: string;
   raw_label: string;
   amount: string; // Decimal en string
   is_aggregation_parent: boolean;
-  parent_transaction_id: string | null;
+  parent_transaction_id: number | null;
   counterparty: CounterpartyNested | null;
   category: CategoryNested | null;
 }
@@ -5571,18 +5593,18 @@ export interface TransactionListResponse {
 }
 
 export interface TransactionFilter {
-  bank_account_id?: string;
+  bank_account_id?: number;
   date_from?: string;
   date_to?: string;
-  counterparty_id?: string;
+  counterparty_id?: number;
   search?: string;
   page?: number;
   per_page?: number;
 }
 
 export interface Counterparty {
-  id: string;
-  entity_id: string;
+  id: number;
+  entity_id: number;
   name: string;
   status: "pending" | "active" | "ignored";
 }
@@ -5601,19 +5623,19 @@ export async function fetchImports(): Promise<ImportRecord[]> {
   return resp.json();
 }
 
-export async function fetchImport(id: string): Promise<ImportRecord> {
+export async function fetchImport(id: number): Promise<ImportRecord> {
   const resp = await fetch(`/api/imports/${id}`, DEFAULT_OPTIONS);
   if (!resp.ok) throw new Error(`GET /api/imports/${id} → ${resp.status}`);
   return resp.json();
 }
 
 export async function uploadImport(args: {
-  bankAccountId: string;
+  bankAccountId: number;
   file: File;
   overrideDuplicates?: boolean;
 }): Promise<ImportRecord> {
   const body = new FormData();
-  body.append("bank_account_id", args.bankAccountId);
+  body.append("bank_account_id", String(args.bankAccountId));
   body.append("file", args.file);
   if (args.overrideDuplicates) body.append("override_duplicates", "true");
   const resp = await fetch("/api/imports", {
@@ -5663,7 +5685,7 @@ export async function fetchCounterparties(
 }
 
 export async function updateCounterparty(
-  id: string,
+  id: number,
   patch: { status?: "active" | "ignored"; name?: string },
 ): Promise<Counterparty> {
   const resp = await fetch(`/api/counterparties/${id}`, {
@@ -5928,13 +5950,13 @@ import { uploadImport } from "../api/imports";
 import type { ImportRecord } from "../types/api";
 
 interface BankAccount {
-  id: string;
+  id: number;
   iban: string;
-  label: string;
+  name: string;
 }
 
 export function ImportNewPage() {
-  const [selected, setSelected] = useState<string>("");
+  const [selected, setSelected] = useState<number | "">("");
   const [result, setResult] = useState<ImportRecord | null>(null);
 
   const { data: accounts = [] } = useQuery({
@@ -5948,7 +5970,7 @@ export function ImportNewPage() {
   const qc = useQueryClient();
   const mutation = useMutation({
     mutationFn: (file: File) =>
-      uploadImport({ bankAccountId: selected, file }),
+      uploadImport({ bankAccountId: selected as number, file }),
     onSuccess: (rec) => {
       setResult(rec);
       qc.invalidateQueries({ queryKey: ["imports"] });
@@ -5966,12 +5988,12 @@ export function ImportNewPage() {
           data-testid="bank-account-select"
           className="w-full rounded-md border px-3 py-2"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => setSelected(e.target.value ? Number(e.target.value) : "")}
         >
           <option value="">— Sélectionner un compte —</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.label} ({a.iban})
+              {a.name} ({a.iban})
             </option>
           ))}
         </select>
