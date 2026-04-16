@@ -293,7 +293,7 @@ dedup_key = hash(
 
 Le `statement_row_index` garantit que deux lignes identiques dans le même relevé ne s'écrasent pas. Si la banque fournit une référence unique (ex. numéro de créance, référence SEPA), elle est ajoutée au hash pour fiabiliser encore.
 
-Pour gérer les **chevauchements inter-relevés** (réimport d'une période couverte par un relevé précédent), la détection se base sur `(bank_account_id, operation_date, value_date, amount, normalized_label)` sans l'index de ligne. Compromis : les éventuelles lignes identiques répétées sont considérées comme des doublons ; l'utilisateur peut forcer l'insertion via un bouton "importer malgré tout" avec confirmation.
+Pour gérer les **chevauchements inter-relevés** (réimport d'une période couverte par un relevé précédent), la détection se base sur `(bank_account_id, operation_date, value_date, amount, normalized_label)` sans l'index de ligne. Compromis : les éventuelles lignes identiques répétées sont considérées comme des doublons ; l'utilisateur peut forcer l'insertion via un bouton "importer malgré tout" avec confirmation. Tout forçage est inscrit au journal d'activité (§9.3) avec l'identité de l'utilisateur, la date et le nombre de lignes concernées.
 
 ---
 
@@ -368,7 +368,7 @@ Champs :
 - Date de début, date de fin (optionnelle)
 - Actif / inactif
 
-**Détection automatique (fonctionnalité bonus, pousée en fin de MVP ou reportée en v2)** : au premier lancement, l'outil analyse l'historique et propose des templates pour les patterns récurrents détectés (URSSAF mensuel, salaires, etc.). Validation en 1 clic. Cette fonctionnalité est non-bloquante pour la sortie du MVP ; si le planning se tend, elle bascule en v2. La création manuelle de modèles récurrents reste pleinement disponible.
+**Détection automatique (fonctionnalité bonus, poussée en fin de MVP ou reportée en v2)** : au premier lancement, l'outil analyse l'historique et propose des templates pour les patterns récurrents détectés (URSSAF mensuel, salaires, etc.). Validation en 1 clic. Cette fonctionnalité est non-bloquante pour la sortie du MVP ; si le planning se tend, elle bascule en v2. La création manuelle de modèles récurrents reste pleinement disponible.
 
 ### 7.3. Opérations planifiées (`scheduled_transactions`)
 
@@ -540,7 +540,7 @@ Chaque utilisateur configure ses propres alertes.
 ### 9.1. Authentification
 
 - Email + mot de passe, hashage **Argon2id**
-- Cookie de session HttpOnly, SameSite=Lax, expiration glissante **8 heures par défaut** (configurable dans `.env`, le paramétrage par défaut visait initialement 30 minutes mais c'est trop agressif pour un usage professionnel quotidien)
+- Cookie de session HttpOnly, SameSite=Lax, expiration glissante **8 heures par défaut** (configurable dans `.env`)
 - Politique de mot de passe : 12 caractères minimum, vérification contre la base HIBP (locale, fichier de hashes)
 - Verrouillage temporaire après 5 tentatives échouées en 10 minutes
 - Protections : CSRF (token double submit), XSS (React), injection SQL (SQLAlchemy paramétré)
@@ -773,8 +773,10 @@ Le MVP est considéré comme terminé quand :
 - 4 utilisateurs peuvent se connecter avec des rôles et des restrictions d'entités distinctes
 - La sauvegarde automatique quotidienne fonctionne **et une restauration complète a été testée avec succès** (procédure consignée)
 - Le déploiement via `docker compose up -d` réussit sur une VM Azure vierge
-- Les endpoints `/healthz` et `/readyz` répondent correctement
+- Les endpoints `/healthz`, `/readyz` et `/metrics` répondent correctement et au moins une métrique non triviale est exposée (ex. nombre d'imports réalisés)
+- Les logs applicatifs sont produits au format JSON structuré documenté (§9.7) et contiennent un `trace_id` sur les requêtes d'import
 - Les flux email (réinitialisation de mot de passe + alerte seuil) ont été testés de bout en bout
+- Le mode de gestion de la clé de chiffrement des sauvegardes (Azure Key Vault ou passphrase opérateur) est choisi, documenté et vérifié avant la mise en production
 
 ### 13.1. Stratégie de tests
 
