@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets et données locales
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Data / backups (ne JAMAIS commiter)
+/data/
+/backups/
+*.sql
+*.sql.gpg
+*.dump
+
+# Tests
+.tox/
+.nox/
+
+# Docker
+docker-compose.override.yml
