@@ -60,25 +60,24 @@ Je lirai ce fichier + le `git log` pour comprendre l'état et reprendre la tâch
 - B3 ✅ `backend/scripts/check.sh` + `backend/scripts/check.ps1` (lance ruff/mypy/pytest)
 - B4 ✅ `backend/app/config.py` (pydantic-settings avec validation), `backend/tests/test_config.py`, `backend/.env.example`
 
-**⚠️ Validations à faire localement par le développeur avant de passer à la Section C** :
+**✅ Validations exécutées avec succès** :
+
+```
+venv créé dans backend/.venv
+pip install -e ".[dev]"  → OK (FastAPI, SQLAlchemy, pydantic, pytest, ruff, mypy, etc.)
+pytest tests/ -v         → 3/3 PASSED, couverture 96 %
+ruff check + format      → All checks passed (après auto-fix d'un ordering d'imports)
+```
+
+**⚠️ mypy** : le binaire mypy ne charge pas dans l'environnement actuel (DLL `base64` bloquée par "Application Control Policy" Windows — problème local, pas un bug du code). **À valider côté dev par l'utilisateur** dans son environnement de travail normal :
 
 ```bash
 cd backend
-python -m venv .venv
-.venv\Scripts\activate   # Windows PowerShell
-# (ou source .venv/bin/activate sous Unix)
-pip install -e ".[dev]"
-
-# Vérifier que les tests B2 et B4 passent
-pytest tests/test_health_basic.py tests/test_config.py -v
-
-# Vérifier le linting/typing
-ruff check app tests
-ruff format --check app tests
+.venv\Scripts\activate
 mypy app tests
 ```
 
-Les tests **doivent passer** et le linting **ne doit rien remonter**. Si KO, il faut corriger avant C1 (ça signifie que la config de base est cassée).
+Si ça plante aussi côté utilisateur : vérifier Windows Defender / AppLocker / Smart App Control. Sinon, la validation mypy pourra se faire plus tard (la section C1 n'en dépend pas).
 
 ## Reprise de session
 
