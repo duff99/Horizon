@@ -1,11 +1,19 @@
 from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+from app.db import get_db
+from app.main import app
+from app.models.bank_account import BankAccount
+from app.models.entity import Entity
+from app.models.user import User, UserRole
+from app.models.user_entity_access import UserEntityAccess
+from app.security import hash_password
 
 
 @pytest.fixture(scope="session")
@@ -72,3 +80,81 @@ def db_session(test_engine: Engine) -> Iterator[Session]:
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture()
+def client(db_session: Session) -> Iterator[TestClient]:
+    """TestClient FastAPI avec override de la session DB vers db_session."""
+
+    def _override() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def auth_user(client: TestClient, db_session: Session) -> User:
+    """Crée un user ADMIN actif et se connecte via l'endpoint /api/auth/login.
+
+    La session cookie est stockée automatiquement par le TestClient.
+    """
+    user = User(
+        email="test@example.com",
+        password_hash=hash_password("test-password-123"),
+        role=UserRole.ADMIN,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    resp = client.post(
+        "/api/auth/login",
+        json={"email": user.email, "password": "test-password-123"},
+    )
+    assert resp.status_code == 200, f"Login échoué : {resp.text}"
+    return user
+
+
+@pytest.fixture()
+def auth_user_with_bank_account(
+    auth_user: User, db_session: Session,
+) -> dict:
+    """User authentifié + entité accessible + un compte bancaire de cette entité."""
+    e = Entity(name="SAS Horizon Test", legal_name="SAS Horizon Test")
+    db_session.add(e)
+    db_session.flush()
+    access = UserEntityAccess(user_id=auth_user.id, entity_id=e.id)
+    ba = BankAccount(
+        entity_id=e.id,
+        bank_code="delubac",
+        bank_name="Delubac",
+        iban="FR7600000000000000000000123",
+        name="Compte courant Test",
+    )
+    db_session.add_all([access, ba])
+    db_session.commit()
+    db_session.refresh(ba)
+    return {"user": auth_user, "entity": e, "bank_account": ba}
+
+
+@pytest.fixture()
+def other_entity_bank_account(db_session: Session) -> BankAccount:
+    """Compte bancaire d'une entité à laquelle le user authentifié n'a PAS accès."""
+    other = Entity(name="SAS Autre Test", legal_name="SAS Autre Test")
+    db_session.add(other)
+    db_session.flush()
+    ba = BankAccount(
+        entity_id=other.id,
+        bank_code="delubac",
+        bank_name="Delubac",
+        iban="FR7699999999999999999999999",
+        name="Compte autre entité",
+    )
+    db_session.add(ba)
+    db_session.commit()
+    db_session.refresh(ba)
+    return ba
