@@ -2084,6 +2084,8 @@ from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 ```
 
+(C'est la source unique ; les tâches F2 et F6 l'importeront via `from app.rate_limiter import limiter`.)
+
 - [ ] **Étape 2 : Mettre à jour `main.py` pour consommer le limiter**
 
 ```python
@@ -2368,17 +2370,9 @@ def test_wrong_password(db_session: Session) -> None:
     app.dependency_overrides.clear()
 ```
 
-- [ ] **Étape 2 : Créer `backend/app/rate_limiter.py` (extrait pour éviter un cycle d'import)**
+- [ ] **Étape 2 : Implémenter `api/auth.py` (signature canonique finale)**
 
-```python
-# backend/app/rate_limiter.py
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
-```
-
-- [ ] **Étape 3 : Implémenter `api/auth.py` (signature canonique finale)**
+> `app/rate_limiter.py` est déjà créé à la tâche E5. On l'importe simplement ici.
 
 ```python
 # backend/app/api/auth.py
@@ -2547,12 +2541,12 @@ git commit -m "feat(backend): login/logout/me endpoints with rate-limited login 
 ```python
 # backend/app/api/users.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import require_admin
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.security import hash_password, validate_password_policy
 
@@ -2638,12 +2632,7 @@ def deactivate_user(user_id: int, db: Session = Depends(get_db)) -> None:
 - `test_cannot_demote_last_admin` : idem avec `PATCH` role=reader.
 - `test_demote_admin_when_other_admin_exists` : avec 2 admins, la rétrogradation de l'un passe (200).
 
-**Imports additionnels :**
-
-```python
-from sqlalchemy import func
-from app.models.user import UserRole
-```
+(Les imports `func` et `UserRole` sont déjà intégrés dans le bloc d'imports canonique ci-dessus.)
 
 - [ ] **Étape 3 : Ajouter au router + test + commit**
 
@@ -4336,32 +4325,346 @@ git commit -m "feat(frontend): admin entities page with tree view"
 - Create: `frontend/src/pages/AdminBankAccountsPage.tsx`
 - Create: `frontend/src/test/AdminBankAccountsPage.test.tsx`
 
-Même patron que I4/I5. Spécificités :
-- Le formulaire propose un sélecteur d'entité (réutiliser `listEntities()`).
-- Validation IBAN côté client : regex `/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/` avec message "IBAN invalide". La validation complète (checksum mod 97) n'est pas requise au MVP ; on la laisse au backend via l'unicité.
-- Afficher l'IBAN formaté par blocs de 4 : `FR76 1287 9000 0111 1702 0200 105`.
+- [ ] **Étape 1 : Client API**
 
-Extrait du composant (points clés) :
+`frontend/src/api/bankAccounts.ts` :
+
+```ts
+import { apiFetch } from './client';
+import type { BankAccount } from '@/types/api';
+
+type RawBA = {
+  id: number;
+  entity_id: number;
+  name: string;
+  iban: string;
+  bic: string | null;
+  bank_name: string;
+  bank_code: string;
+  account_number: string | null;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+function mapBA(r: RawBA): BankAccount {
+  return {
+    id: r.id,
+    entityId: r.entity_id,
+    name: r.name,
+    iban: r.iban,
+    bic: r.bic,
+    bankName: r.bank_name,
+    bankCode: r.bank_code,
+    currency: r.currency,
+    isActive: r.is_active,
+    createdAt: r.created_at,
+  };
+}
+
+export async function listBankAccounts(): Promise<BankAccount[]> {
+  const raw = await apiFetch<RawBA[]>('/api/bank-accounts');
+  return raw.map(mapBA);
+}
+
+export type CreateBankAccountInput = {
+  entityId: number;
+  name: string;
+  iban: string;
+  bic?: string;
+  bankName: string;
+  bankCode: string;
+  currency?: string;
+};
+
+export async function createBankAccount(i: CreateBankAccountInput): Promise<BankAccount> {
+  const r = await apiFetch<RawBA>('/api/bank-accounts', {
+    method: 'POST',
+    body: JSON.stringify({
+      entity_id: i.entityId,
+      name: i.name,
+      iban: i.iban,
+      bic: i.bic ?? null,
+      bank_name: i.bankName,
+      bank_code: i.bankCode,
+      currency: i.currency ?? 'EUR',
+    }),
+  });
+  return mapBA(r);
+}
+```
+
+- [ ] **Étape 2 : Utilitaire de formatage IBAN**
+
+```ts
+// Au top de AdminBankAccountsPage.tsx
+function formatIban(raw: string): string {
+  return raw.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+}
+```
+
+- [ ] **Étape 3 : Composant complet**
+
+`frontend/src/pages/AdminBankAccountsPage.tsx` :
 
 ```tsx
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+
+import { ApiError } from '@/api/client';
+import { createBankAccount, listBankAccounts } from '@/api/bankAccounts';
+import { listEntities } from '@/api/entities';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
 function formatIban(raw: string): string {
   return raw.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
 }
 
-// Dans le formulaire, regex HTML5 :
-<Input
-  id="ba-iban"
-  pattern="^[A-Z]{2}\\d{2}[A-Z0-9]{10,30}$"
-  title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
-  required
-  value={iban}
-  onChange={(e) => setIban(e.target.value.toUpperCase().replace(/\s/g, ''))}
-/>
+export function AdminBankAccountsPage() {
+  const qc = useQueryClient();
+  const { data: accounts, isLoading } = useQuery({
+    queryKey: ['bank-accounts'],
+    queryFn: listBankAccounts,
+  });
+  const { data: entities } = useQuery({
+    queryKey: ['entities'],
+    queryFn: listEntities,
+  });
+
+  const [entityId, setEntityId] = useState<string>('');
+  const [name, setName] = useState('');
+  const [iban, setIban] = useState('');
+  const [bic, setBic] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankCode, setBankCode] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: createBankAccount,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bank-accounts'] });
+      setName(''); setIban(''); setBic(''); setBankName(''); setBankCode(''); setEntityId('');
+      setFormError(null);
+    },
+    onError: (e) =>
+      setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue'),
+  });
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Comptes bancaires</h1>
+
+      <Card>
+        <CardHeader><CardTitle>Ajouter un compte bancaire</CardTitle></CardHeader>
+        <CardContent>
+          <form
+            className="grid grid-cols-2 gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!entityId) {
+                setFormError('Veuillez sélectionner une société');
+                return;
+              }
+              create.mutate({
+                entityId: Number(entityId),
+                name,
+                iban,
+                bic: bic || undefined,
+                bankName,
+                bankCode,
+              });
+            }}
+          >
+            <div className="space-y-2 col-span-2">
+              <Label>Société</Label>
+              <Select value={entityId} onValueChange={setEntityId}>
+                <SelectTrigger><SelectValue placeholder="Choisir une société" /></SelectTrigger>
+                <SelectContent>
+                  {entities?.map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ba-name">Libellé du compte</Label>
+              <Input
+                id="ba-name"
+                placeholder="Compte courant principal"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ba-iban">IBAN</Label>
+              <Input
+                id="ba-iban"
+                pattern="^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$"
+                title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
+                required
+                value={iban}
+                onChange={(e) =>
+                  setIban(e.target.value.toUpperCase().replace(/\s/g, ''))
+                }
+              />
+              {iban && (
+                <p className="text-xs text-slate-500">{formatIban(iban)}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ba-bic">BIC (optionnel)</Label>
+              <Input
+                id="ba-bic"
+                maxLength={11}
+                value={bic}
+                onChange={(e) => setBic(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ba-bank">Banque</Label>
+              <Input
+                id="ba-bank"
+                placeholder="Delubac"
+                required
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="ba-bankcode">
+                Code analyseur interne (pour le parser d'import)
+              </Label>
+              <Input
+                id="ba-bankcode"
+                placeholder="delubac"
+                required
+                pattern="^[a-z0-9_-]+$"
+                title="Minuscules, chiffres, tirets et underscores uniquement"
+                value={bankCode}
+                onChange={(e) =>
+                  setBankCode(e.target.value.toLowerCase().replace(/\s/g, ''))
+                }
+              />
+              <p className="text-xs text-slate-500">
+                Utilisé par le module d'import (Plan 1) pour sélectionner le bon
+                analyseur. Exemples : <code>delubac</code>, <code>qonto</code>, <code>bnp</code>.
+              </p>
+            </div>
+
+            {formError && (
+              <p className="col-span-2 text-red-600 text-sm">{formError}</p>
+            )}
+
+            <div className="col-span-2">
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? 'Création…' : 'Créer'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Comptes enregistrés</CardTitle></CardHeader>
+        <CardContent>
+          {isLoading && <p>Chargement…</p>}
+          {accounts && accounts.length === 0 && (
+            <p className="text-slate-500">Aucun compte enregistré pour l'instant.</p>
+          )}
+          {accounts && accounts.length > 0 && (
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="py-2">Société</th>
+                  <th>Libellé</th>
+                  <th>Banque</th>
+                  <th>IBAN</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((a) => {
+                  const entity = entities?.find((e) => e.id === a.entityId);
+                  return (
+                    <tr key={a.id} className="border-t border-slate-200">
+                      <td className="py-2">{entity?.name ?? '—'}</td>
+                      <td>{a.name}</td>
+                      <td>{a.bankName}</td>
+                      <td className="font-mono">{formatIban(a.iban)}</td>
+                      <td>
+                        {a.isActive ? (
+                          <span className="text-green-700">Actif</span>
+                        ) : (
+                          <span className="text-slate-500">Inactif</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 ```
 
-**API client** (`frontend/src/api/bankAccounts.ts`) suit exactement le même patron que `entities.ts` (mapper `snake_case` → `camelCase`, méthodes `listBankAccounts`, `createBankAccount`, `updateBankAccount`).
+- [ ] **Étape 4 : Test minimal**
 
-Après implémentation et test :
+`frontend/src/test/AdminBankAccountsPage.test.tsx` :
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { vi } from 'vitest';
+
+vi.mock('@/api/bankAccounts', () => ({
+  listBankAccounts: vi.fn(async () => []),
+  createBankAccount: vi.fn(),
+}));
+vi.mock('@/api/entities', () => ({
+  listEntities: vi.fn(async () => [
+    { id: 1, name: 'Holding', legalName: 'H SARL', siret: null, parentEntityId: null, createdAt: '2026-01-01' },
+  ]),
+}));
+
+import { AdminBankAccountsPage } from '@/pages/AdminBankAccountsPage';
+
+test('affiche le formulaire avec IBAN et sélecteur de société', () => {
+  const qc = new QueryClient();
+  render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <AdminBankAccountsPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  expect(screen.getByLabelText(/iban/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/libellé du compte/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/banque/i)).toBeInTheDocument();
+});
+```
+
+- [ ] **Étape 5 : Commit**
 
 ```bash
 cd frontend && npm test -- AdminBankAccountsPage.test.tsx && cd ..
