@@ -21,7 +21,13 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role"), nullable=False, default=UserRole.READER
+        Enum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=UserRole.READER,
     )
     full_name: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

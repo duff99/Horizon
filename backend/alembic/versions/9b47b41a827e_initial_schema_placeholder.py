@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "9b47b41a827e"
@@ -22,7 +23,7 @@ def upgrade() -> None:
     """Schema initial : utilisateurs, sociétés, liaisons, comptes bancaires."""
 
     # users
-    user_role_enum = sa.Enum("admin", "reader", name="user_role")
+    user_role_enum = postgresql.ENUM("admin", "reader", name="user_role", create_type=False)
     user_role_enum.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "users",
@@ -116,4 +117,4 @@ def downgrade() -> None:
     op.drop_table("entities")
     op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")
-    sa.Enum(name="user_role").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="user_role").drop(op.get_bind(), checkfirst=True)
