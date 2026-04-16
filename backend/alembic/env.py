@@ -13,8 +13,10 @@ from app.models import Base  # noqa: F401 — import side effects
 
 config = context.config
 
-# Surcharger l'URL depuis nos settings (ne pas utiliser alembic.ini)
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Surcharger l'URL depuis nos settings (ne pas utiliser alembic.ini),
+# sauf si un appelant (p.ex. la conftest de test) a déjà défini une URL.
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
