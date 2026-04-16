@@ -1,0 +1,32 @@
+{
+  "bank_code": "delubac",
+  "account_number": "11170202001",
+  "iban": "FR7612879000011117020200105",
+  "period_start": "2026-03-06",
+  "period_end": "2026-03-06",
+  "opening_balance": "5000.00",
+  "closing_balance": "3999.40",
+  "transactions": [
+    {
+      "operation_date": "2026-03-06",
+      "value_date": "2026-03-06",
+      "label": "VIR SEPA JEAN DUPONT Facture Fevrier",
+      "amount": "-1000.60",
+      "is_aggregation_parent": true,
+      "children": [
+        {
+          "label": "VIR SEPA JEAN DUPONT Facture Fevrier",
+          "amount": "-1000.00"
+        },
+        {
+          "label": "COMMISSION VIR SEPA JEAN DUPONT",
+          "amount": "-0.50"
+        },
+        {
+          "label": "TVA VIR SEPA JEAN DUPONT",
+          "amount": "-0.10"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "bank_code": "delubac",
+  "account_number": "11170202001",
+  "iban": "FR7612879000011117020200105",
+  "period_start": "2026-03-02",
+  "period_end": "2026-03-05",
+  "opening_balance": "19.70",
+  "closing_balance": "25052.33",
+  "transactions": [
+    {
+      "operation_date": "2026-03-02",
+      "value_date": "2026-03-01",
+      "label": "ARRETE DE COMPTE AU 28/02/26",
+      "amount": "-92.32"
+    },
+    {
+      "operation_date": "2026-03-05",
+      "value_date": "2026-03-05",
+      "label": "COTIS CARTE BUSI IMM 4350520489680012",
+      "amount": "-80.00"
+    },
+    {
+      "operation_date": "2026-03-05",
+      "value_date": "2026-03-05",
+      "label": "VIR SEPA BNP PARIBAS FACTOR BNPPF Na-6213143",
+      "amount": "25204.95"
+    }
+  ]
+}
