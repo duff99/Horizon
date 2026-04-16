@@ -46,8 +46,9 @@ def test_engine(test_database_url: str) -> Iterator[Engine]:
     admin_engine.dispose()
 
     # Exécuter alembic upgrade head contre la base de test
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", test_database_url)

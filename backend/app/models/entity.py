@@ -47,8 +47,7 @@ def validate_entity_tree(entity: Entity, *, session: Session | None = None) -> N
     while cursor_id is not None:
         if cursor_id in seen:
             raise ValueError(
-                "Cycle détecté dans la hiérarchie des sociétés "
-                f"(via l'identifiant {cursor_id})"
+                f"Cycle détecté dans la hiérarchie des sociétés (via l'identifiant {cursor_id})"
             )
         seen.add(cursor_id)
         parent = session.get(Entity, cursor_id)
