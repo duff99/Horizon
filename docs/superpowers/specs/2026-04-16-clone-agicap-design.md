@@ -170,6 +170,8 @@ User ──< user_entity_access >── Entity (holding/filiale)
 
 **Transactions fidèles au relevé** : chaque ligne du PDF est un record, y compris les commissions et TVA bancaires. Une colonne `parent_transaction_id` (auto-référence) permet de grouper visuellement les commissions SEPA sous leur virement principal. En base, les 3 lignes coexistent → le solde reste mathématiquement juste, le rapprochement bancaire reste possible. En interface, on affiche groupé par défaut avec un toggle "voir les lignes détaillées".
 
+**Règle d'agrégation statistique (anti double-comptage)** : tous les calculs statistiques (totaux du tableau de bord, graphiques donuts par catégorie, top contreparties, prévisionnel) se font **sur les lignes de niveau le plus bas** (feuilles) : toutes les lignes sans `parent_transaction_id` + toutes les lignes enfants. Autrement dit, on somme les enfants mais jamais le parent avec ses enfants. La transaction parent n'est qu'un groupement visuel dans l'interface ; sa valeur `amount` est la somme des enfants pour les virements avec commission. La distinction est garantie par une colonne `is_aggregation_parent` calculée : `TRUE` si la transaction a des enfants, auquel cas elle est exclue des sommations.
+
 **Flux intercompagnies simples** : deux colonnes sur `transactions` :
 - `is_intercompany` (booléen)
 - `counter_entity_id` (FK optionnelle vers `entities`)
@@ -178,7 +180,14 @@ Quand un virement entre deux entités du groupe est repéré, l'utilisateur peut
 
 **Catégories globales au groupe** : partagées entre toutes les entités pour garantir la cohérence de reporting. Un jeu de catégories pré-configuré adapté au business (société de conseil/prestation en RJ) est créé à l'installation. Tout est modifiable.
 
-**Contreparties normalisées** : le parseur extrait le nom de la contrepartie depuis les libellés (ex. "VIR SEPA NIZAR MOUADDEB" → contrepartie "NIZAR MOUADDEB"). Si une contrepartie existe déjà (match exact ou fuzzy ≥ 90 %), elle est liée. Sinon elle est créée.
+**Contreparties normalisées** : le parseur extrait le nom de la contrepartie depuis les libellés (ex. "VIR SEPA NIZAR MOUADDEB" → contrepartie "NIZAR MOUADDEB"). Si une contrepartie existe déjà (match exact, ou match **token-set ratio ≥ 90 %** via la bibliothèque `rapidfuzz`), elle est liée. Sinon elle est créée avec un statut `pending`.
+
+**Statut `pending` des contreparties auto-créées** : pour éviter de polluer les stats avec des milliers de contreparties éphémères issues de libellés à usage unique, toute contrepartie créée automatiquement passe d'abord par un statut `pending`. Une page "Contreparties à valider" permet à l'administrateur de :
+- Valider (statut `active`) une contrepartie pour l'utiliser dans les règles et stats
+- Fusionner avec une contrepartie existante (toutes les transactions sont rebranchées)
+- Ignorer (statut `ignored`, la contrepartie reste associée aux transactions mais n'apparaît plus dans les listes de sélection)
+
+Les statistiques du tableau de bord incluent les contreparties `active` par défaut ; un toggle permet d'inclure les `pending`.
 
 **Audit léger** : colonnes `created_at` / `updated_at` / `created_by` / `updated_by` sur les tables sensibles (transactions, catégories, règles). Pas de versioning complet pour le MVP.
 
@@ -253,6 +262,39 @@ En complément du PDF, un format CSV standard est supporté :
 - Si le parsing échoue complètement, transaction SQL annulée, rien inséré
 - Aperçu de l'import avant validation finale (l'utilisateur peut annuler avant insertion)
 
+### 5.6. Limites de taille et protections
+
+Pour éviter toute surcharge du serveur par un fichier mal formé ou volumineux, les limites suivantes sont appliquées à l'upload :
+
+| Limite | Valeur par défaut | Comportement si dépassée |
+|---|---|---|
+| Taille du fichier | 20 Mo | Réponse HTTP 413, message utilisateur explicite |
+| Nombre de pages PDF | 500 | Même traitement que ci-dessus |
+| Nombre de transactions par import | 10 000 | Import refusé, invitation à découper le fichier |
+| Durée maximale du parsing | 60 secondes | Timeout, rollback SQL, message d'erreur |
+| Taux d'upload par utilisateur | 10 imports / 10 minutes | Rate limiter (HTTP 429) |
+
+Toutes ces valeurs sont configurables dans le fichier `.env`.
+
+### 5.7. Amélioration de la clé de déduplication
+
+La clé de déduplication simple `bank_account_id + operation_date + amount + normalized_label` n'est pas suffisante : deux prélèvements URSSAF identiques le même jour sont légitimes. La clé effective est donc :
+
+```
+dedup_key = hash(
+    bank_account_id,
+    operation_date,
+    value_date,
+    amount,
+    normalized_label,
+    statement_row_index    # position de la ligne dans le relevé source
+)
+```
+
+Le `statement_row_index` garantit que deux lignes identiques dans le même relevé ne s'écrasent pas. Si la banque fournit une référence unique (ex. numéro de créance, référence SEPA), elle est ajoutée au hash pour fiabiliser encore.
+
+Pour gérer les **chevauchements inter-relevés** (réimport d'une période couverte par un relevé précédent), la détection se base sur `(bank_account_id, operation_date, value_date, amount, normalized_label)` sans l'index de ligne. Compromis : les éventuelles lignes identiques répétées sont considérées comme des doublons ; l'utilisateur peut forcer l'insertion via un bouton "importer malgré tout" avec confirmation.
+
 ---
 
 ## 6. Module Catégorisation
@@ -326,7 +368,7 @@ Champs :
 - Date de début, date de fin (optionnelle)
 - Actif / inactif
 
-**Détection automatique** : au premier lancement, l'outil analyse l'historique et propose des templates pour les patterns récurrents détectés (URSSAF mensuel, salaires, etc.). Validation en 1 clic.
+**Détection automatique (fonctionnalité bonus, pousée en fin de MVP ou reportée en v2)** : au premier lancement, l'outil analyse l'historique et propose des templates pour les patterns récurrents détectés (URSSAF mensuel, salaires, etc.). Validation en 1 clic. Cette fonctionnalité est non-bloquante pour la sortie du MVP ; si le planning se tend, elle bascule en v2. La création manuelle de modèles récurrents reste pleinement disponible.
 
 ### 7.3. Opérations planifiées (`scheduled_transactions`)
 
@@ -345,6 +387,64 @@ Pour les événements ponctuels :
 | 🟢 Réaliste | Aucun. Templates et planifiées aux dates prévues |
 | 🔵 Optimiste | Encaissements +10 % et 7 jours plus tôt. Décaissements normaux |
 | 🔴 Pessimiste | Encaissements probables/hypothétiques −20 %, +15 jours de retard. Événement exceptionnel ajoutable |
+
+**Algorithme d'application d'un scénario** (pseudocode) :
+
+```
+projection = []
+pour chaque jour J de aujourd'hui à (aujourd'hui + horizon) :
+    flux_jour = 0
+
+    # 1. Templates récurrents
+    pour chaque template actif T :
+        si T doit se déclencher à J (selon fréquence/jour) :
+            montant = T.montant_effectif()   # fixe ou moyenne glissante
+            si scenario a un ajustement sur la catégorie de T :
+                appliquer le % et/ou le décalage de date
+            flux_jour += montant * T.signe
+
+    # 2. Planifiées ponctuelles
+    pour chaque planifiée P :
+        date_effective = P.date_prevue
+        si scenario.decalage_encaissements et P est un encaissement :
+            date_effective += scenario.decalage_encaissements  # en jours
+        si scenario exclut les planifiées "Hypothétiques" et P.certitude == Hypothétique :
+            continuer
+        montant = P.montant
+        si scenario a un ajustement sur encaissements/décaissements :
+            appliquer le %
+        si date_effective == J :
+            flux_jour += montant * P.signe
+
+    # 3. Estimation historique (pour catégories sans template)
+    pour chaque catégorie C sans template et activée pour l'estimation :
+        moyenne_mensuelle = moyenne(derniers_6_mois, C)
+        part_journaliere = moyenne_mensuelle / 30
+        si scenario a un ajustement sur C :
+            appliquer le %
+        flux_jour += part_journaliere * C.signe
+
+    # 4. Événements exceptionnels du scénario
+    pour chaque événement E du scénario :
+        si E.date == J :
+            flux_jour += E.montant
+
+    solde_J = solde_J_moins_1 + flux_jour
+    projection.append({date: J, solde: solde_J, flux: flux_jour})
+```
+
+**Règles de compounding (non cumul des effets)** :
+
+- Les ajustements de scénario s'appliquent **une seule fois** sur un flux donné : si un flux provient d'une planifiée, le scénario n'applique pas en plus l'ajustement de sa catégorie (sinon double effet).
+- Les ajustements de date (ex. +15 jours) ne repoussent **pas au-delà de l'horizon** : si un encaissement prévu au jour H−10 devient jour H+5 (hors horizon), il est exclu de cette projection.
+- Les événements exceptionnels du scénario sont **additifs** : ils ne déplacent ni ne remplacent rien.
+
+**Exemple chiffré (scénario Pessimiste, horizon 30 jours)** :
+
+- Encaissement planifié Probable : 30 000 € au 15 mai → devient −20 % × 30 000 € = **24 000 € au 30 mai** (+15 jours)
+- Template "URSSAF" mensuel (catégorie Charges sociales) : 10 012 € au 17 mai → inchangé (aucun ajustement pessimiste sur décaissements)
+- Estimation historique "Frais bancaires" : 400 €/mois ≈ 13 €/jour → inchangé
+- Événement exceptionnel ajouté : "Coup dur" 5 000 € au 20 mai → −5 000 € au 20 mai
 
 Paramètres ajustables par l'utilisateur :
 - % de variation encaissements / décaissements
@@ -440,12 +540,44 @@ Chaque utilisateur configure ses propres alertes.
 ### 9.1. Authentification
 
 - Email + mot de passe, hashage **Argon2id**
-- Cookie de session HttpOnly, SameSite=Lax, expiration glissante 30 min
+- Cookie de session HttpOnly, SameSite=Lax, expiration glissante **8 heures par défaut** (configurable dans `.env`, le paramétrage par défaut visait initialement 30 minutes mais c'est trop agressif pour un usage professionnel quotidien)
 - Politique de mot de passe : 12 caractères minimum, vérification contre la base HIBP (locale, fichier de hashes)
 - Verrouillage temporaire après 5 tentatives échouées en 10 minutes
 - Protections : CSRF (token double submit), XSS (React), injection SQL (SQLAlchemy paramétré)
 
+**Flux de réinitialisation de mot de passe** :
+
+1. L'utilisateur saisit son email sur la page "Mot de passe oublié"
+2. Si l'email existe, un token aléatoire cryptographiquement fort (32 octets) est généré, son hash est stocké en base avec une durée de vie de **60 minutes**
+3. Un email est envoyé à l'utilisateur contenant le lien `https://<domaine>/reinit-mot-de-passe?token=<token>`
+4. Le clic ouvre une page de saisie du nouveau mot de passe (contrôles identiques à l'inscription)
+5. À la soumission, le token est invalidé immédiatement, tous les autres tokens actifs de l'utilisateur aussi
+6. Toutes les sessions actives de l'utilisateur sont invalidées pour forcer la reconnexion
+7. Un email de confirmation "Votre mot de passe a été modifié" est envoyé
+
+Pour prévenir l'énumération d'emails, la réponse à la soumission du formulaire est toujours la même (message générique), qu'un compte existe ou non.
+
+**Réinitialisation par un administrateur** : l'admin peut déclencher un reset sans email ; un mot de passe temporaire à usage unique est affiché (copier-coller manuel à l'utilisateur), avec obligation de changement à la première connexion.
+
 Préparé pour la suite (hors MVP) : 2FA TOTP, SSO Microsoft (pertinent sur Azure).
+
+### 9.1.bis Configuration SMTP (requise par l'auth et les alertes)
+
+Les emails (réinitialisation mot de passe + alertes, cf. §8.4) nécessitent une configuration SMTP. Variables dans `.env` :
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+SMTP_FROM_EMAIL=tresorerie@acreed-consulting.fr
+SMTP_FROM_NAME=Outil de trésorerie
+SMTP_USE_TLS=true
+```
+
+Recommandations : utiliser un service transactionnel (Azure Communication Services Email, SendGrid, Mailjet) ou le SMTP interne de l'organisation. Un test d'envoi est disponible dans la page Administration (bouton "Envoyer un email de test").
+
+Si la configuration SMTP est absente ou invalide, les alertes in-app continuent de fonctionner ; seule la réinitialisation de mot de passe en self-service est indisponible (l'admin reste capable de réinitialiser via l'interface).
 
 ### 9.2. Rôles et droits
 
@@ -471,11 +603,20 @@ Accessible aux administrateurs :
 
 ### 9.4. Sauvegardes
 
-- Dump PostgreSQL quotidien automatique à 3h, chiffré, stocké dans un volume dédié
+- Dump PostgreSQL quotidien automatique à 3h, chiffré en **AES-256-GCM**, stocké dans un volume dédié
 - Rétention : 30 jours glissants + 1 par mois sur 12 mois
 - Export manuel à la demande (fichier SQL chiffré téléchargeable)
 - Restauration documentée (procédure CLI, pas d'interface graphique au MVP)
 - Complémentaire : snapshot du disque VM via outils natifs Azure
+
+**Gestion de la clé de chiffrement des sauvegardes** :
+
+La clé de chiffrement ne doit **pas** vivre sur la même VM que les sauvegardes (sinon le chiffrement est cosmétique). Deux modes supportés :
+
+- **Mode recommandé (Azure Key Vault)** : la clé est stockée dans Azure Key Vault de l'organisation. Le conteneur backend y accède via Managed Identity de la VM. La clé n'est jamais persistée sur disque ; elle est chargée en mémoire à chaque opération de chiffrement/déchiffrement.
+- **Mode autonome (passphrase opérateur)** : la passphrase est fournie à chaque restauration par l'opérateur humain (variable d'environnement temporaire au moment de la commande). Les sauvegardes automatiques utilisent une passphrase stockée **hors** de la VM (ex. gestionnaire de mots de passe de l'administrateur) et injectée au boot initial.
+
+La procédure de restauration documentée (dans `docs/operations/restauration.md`, à écrire pendant l'implémentation) inclut : récupération de la clé, déchiffrement, import SQL, vérification d'intégrité, tests de cohérence. Une restauration complète doit être testée lors du déploiement initial et consignée au journal.
 
 ### 9.5. Déploiement
 
@@ -508,6 +649,41 @@ docker compose up -d --build
 - Secrets dans `.env` (non commité)
 - Base de données accessible uniquement sur le réseau Docker interne
 
+### 9.7. Observabilité
+
+Pour qu'un administrateur puisse diagnostiquer un dysfonctionnement à distance sans accès direct à la machine :
+
+**Endpoints de santé** (non authentifiés, exposés uniquement sur le réseau Docker interne sauf `/healthz`) :
+
+| Endpoint | Objectif | Codes HTTP |
+|---|---|---|
+| `GET /healthz` | Preuve de vie basique (l'API répond) | 200 OK |
+| `GET /readyz` | Prêt à servir du trafic (DB accessible, migrations appliquées) | 200 ou 503 |
+| `GET /metrics` | Métriques au format Prometheus (durée requêtes, erreurs, imports) | 200 OK |
+
+**Schéma structuré des logs d'erreur** (JSON, 1 ligne par événement) :
+
+```json
+{
+  "timestamp": "2026-04-16T14:23:01.234Z",
+  "level": "ERROR",
+  "logger": "import.delubac",
+  "trace_id": "c1a2...",
+  "user_id": 42,
+  "entity_id": 3,
+  "event": "parser_failed",
+  "error_type": "InvalidPdfStructureError",
+  "message": "Colonnes attendues introuvables page 2",
+  "context": {...}
+}
+```
+
+Les logs passent par un volume Docker monté, avec rotation quotidienne et rétention 30 jours.
+
+**Suivi des erreurs (optionnel)** : intégration Sentry (ou équivalent auto-hébergé type GlitchTip) désactivée par défaut, activable via `SENTRY_DSN` dans `.env`. Recommandé pour détecter les erreurs non remontées.
+
+**Dashboard de supervision (optionnel)** : le port Prometheus peut être scrapé par un Grafana existant pour visualiser les métriques. Pas de stack monitoring dédiée livrée avec le MVP.
+
 ---
 
 ## 10. Stack technique retenue
@@ -519,7 +695,7 @@ docker compose up -d --build
 | ORM | SQLAlchemy 2.x |
 | Migrations DB | Alembic |
 | Base de données | PostgreSQL 16 |
-| Parsing PDF | pdfplumber |
+| Analyse (parsing) PDF | pdfplumber |
 | Hashage mots de passe | Argon2-cffi |
 | Tests backend | pytest + pytest-asyncio |
 | Langage frontend | TypeScript |
@@ -588,15 +764,33 @@ L'interface et la documentation sont **entièrement en français**. L'anglais es
 Le MVP est considéré comme terminé quand :
 
 - Un utilisateur peut créer un compte admin et se connecter en HTTPS sur la VM Azure
-- L'analyseur Delubac extrait correctement ≥ 95 % des transactions d'un relevé test
+- L'analyseur Delubac extrait correctement **≥ 95 % des lignes d'opération** sur le **jeu de référence** (3 relevés Delubac de test anonymisés fournis, cf. §13.2 ci-dessous). Méthode de comptage : (nombre de transactions correctement extraites avec date, libellé, montant exacts) / (nombre total de lignes d'opérations dans le PDF source, hors en-têtes/totaux intermédiaires/pieds de page)
 - Les 3 mécanismes de catégorisation fonctionnent (règles, suggestions, apprentissage)
 - Le tableau de bord affiche les 4 indicateurs clés + 2 graphiques + répartitions
-- Le prévisionnel projette correctement sur 30 jours avec les 3 scénarios par défaut
+- Le prévisionnel projette correctement sur 30 jours avec les 3 scénarios par défaut (vérifiable via jeu de test)
 - Au moins 3 types d'alertes (seuil, échéance, découvert prévisionnel) sont opérationnels
 - La vue consolidée agrège les données de plusieurs entités
 - 4 utilisateurs peuvent se connecter avec des rôles et des restrictions d'entités distinctes
-- La sauvegarde automatique quotidienne fonctionne et une restauration a été testée
+- La sauvegarde automatique quotidienne fonctionne **et une restauration complète a été testée avec succès** (procédure consignée)
 - Le déploiement via `docker compose up -d` réussit sur une VM Azure vierge
+- Les endpoints `/healthz` et `/readyz` répondent correctement
+- Les flux email (réinitialisation de mot de passe + alerte seuil) ont été testés de bout en bout
+
+### 13.1. Stratégie de tests
+
+| Niveau | Outils | Exigence MVP |
+|---|---|---|
+| Tests unitaires backend | pytest + pytest-asyncio | Couverture **≥ 70 %** des modules critiques (analyseurs, catégorisation, prévisionnel) |
+| Tests d'intégration backend | pytest + base PostgreSQL de test isolée | Scénarios : import complet Delubac, catégorisation appliquée, calcul tableau de bord, projection 30 jours |
+| Tests frontend | Vitest + Testing Library | Couverture **≥ 60 %** des composants critiques (formulaires d'import, tableau de bord, page catégorisation) |
+| Test de bout en bout | Playwright (1 scénario) | Parcours complet : connexion → import PDF → catégorisation → consultation tableau de bord |
+| Tests de charge (informatif) | k6 | Un import de 10 000 transactions, affichage d'un tableau de bord avec 100 000 transactions en base |
+
+### 13.2. Jeu de référence pour la validation Delubac
+
+- 3 relevés Delubac anonymisés (mars 2026 + 2 autres mois fournis par l'utilisateur pendant l'implémentation)
+- Une version "vérité terrain" de chaque relevé au format JSON, annotée manuellement, sert de référence pour le taux d'extraction
+- Stocké dans `backend/tests/fixtures/delubac/`
 
 ---
 
