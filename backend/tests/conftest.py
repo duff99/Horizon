@@ -128,6 +128,26 @@ def auth_user(client: TestClient, db_session: Session) -> User:
 
 
 @pytest.fixture()
+def auth_user_admin(client: TestClient, db_session: Session) -> User:
+    """Crée un user ADMIN distinct (email admin@example.com) et se connecte."""
+    user = User(
+        email="admin@example.com",
+        password_hash=hash_password("test-password-123"),
+        role=UserRole.ADMIN,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    resp = client.post(
+        "/api/auth/login",
+        json={"email": user.email, "password": "test-password-123"},
+    )
+    assert resp.status_code == 200, f"Login échoué : {resp.text}"
+    return user
+
+
+@pytest.fixture()
 def auth_user_reader(client: TestClient, db_session: Session) -> User:
     """Crée un user READER actif et se connecte via /api/auth/login."""
     user = User(

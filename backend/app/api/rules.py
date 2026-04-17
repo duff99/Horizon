@@ -19,6 +19,7 @@ from app.schemas.categorization_rule import (
     RulePreviewResponse,
     RuleRead,
     RuleSampleTransaction,
+    RuleUpdate,
 )
 from app.services.categorization import preview_rule as preview_rule_service
 
@@ -114,6 +115,77 @@ def create_rule(
         )
     session.refresh(rule)
     return RuleRead.model_validate(rule)
+
+
+_STRUCTURAL_FIELDS = {
+    "label_operator", "label_value", "direction",
+    "amount_operator", "amount_value", "amount_value2",
+    "counterparty_id", "bank_account_id", "category_id",
+}
+
+
+@router.patch("/{rule_id}", response_model=RuleRead)
+def update_rule(
+    rule_id: int,
+    payload: RuleUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> RuleRead:
+    _require_editor(user)
+    rule = session.get(CategorizationRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable")
+    if rule.entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=rule.entity_id)
+
+    data = payload.model_dump(exclude_unset=True)
+
+    if rule.is_system:
+        struct_touched = set(data.keys()) & _STRUCTURAL_FIELDS
+        if struct_touched:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "RULE_SYSTEM_MUTATE",
+                        "message": "Règle système : seuls le nom et la priorité sont modifiables"},
+            )
+
+    for field, value in data.items():
+        setattr(rule, field, value)
+
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "RULE_DUPLICATE_PRIORITY",
+                    "message": "Priorité déjà utilisée dans ce scope"},
+        )
+    session.refresh(rule)
+    return RuleRead.model_validate(rule)
+
+
+@router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_rule(
+    rule_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> None:
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Droits administrateur requis")
+    rule = session.get(CategorizationRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable")
+    if rule.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "RULE_SYSTEM_DELETE",
+                    "message": "Une règle système ne peut pas être supprimée"},
+        )
+    if rule.entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=rule.entity_id)
+    session.delete(rule)
+    session.commit()
 
 
 @router.post("/preview", response_model=RulePreviewResponse)
