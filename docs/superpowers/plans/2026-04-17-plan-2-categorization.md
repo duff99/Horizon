@@ -2,6 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## État d'avancement (pause 2026-04-17)
+
+**Backend complet (Phases A→E) — 198 tests passés, 0 régression, 17 commits sur `plan-2-categorization`.**
+
+- ✅ **Phase A** — Modèles & schémas (A1/A2/A3)
+- ✅ **Phase B** — Migrations Alembic (B1 colonnes + backfill, B2 ~50 sous-catégories, B3 30 règles Delubac)
+- ✅ **Phase C** — Moteur de catégorisation (C1 `build_rule_filter`, C2 `fetch_rules` + `categorize_transaction`, C3 `preview_rule` + `apply_rule`, C4 `recategorize_entity`)
+- ✅ **Phase D** — Intégration pipeline d'import (D1 : `normalized_label` à l'insert + appel moteur)
+- ✅ **Phase E** — API endpoints (E1 GET, E2 POST + preview, E3 PATCH + DELETE, E4 apply/reorder/from-transactions, E5 `/transactions` uncategorized + bulk)
+
+**Adaptations documentées par rapport au spec**
+- Rôles : `UserRole.EDITOR` inexistant (codebase n'a que ADMIN/READER) → `_require_editor` rejette READER, tests « editor forbidden » renommés en « reader forbidden ».
+- E4 fix post-review : IDOR sur `/from-transactions` corrigée (join `BankAccount` + `accessible_entity_ids`), IndexError sur labels vides corrigé, `ReorderBody` dead-code retiré, 4 tests supplémentaires ajoutés.
+
+**Reste à faire (Phase F + G)**
+- ⏸️ **Phase F** — Frontend (F1 clients TanStack, F2 `CategoryCombobox`, F3 `RuleForm` + `RulePreviewPanel`, F4 `SortableRulesTable` dnd-kit, F5 page `/rules`, F6 toolbar bulk sur `/transactions`)
+- ⏸️ **Phase G** — E2E, permissions, merge (G1 scénario E2E, G2 permissions cross-rôles, G3 smoke + merge)
+
+**Git** : branche locale `plan-2-categorization`, non pushée. À pousser + reprise Phase F lors de la prochaine session.
+
+
 **Goal:** Ajouter à Horizon un moteur de catégorisation déterministe basé sur des règles ordonnées (30 pré-installées Delubac + règles custom), un seed complet de ~50 sous-catégories, l'intégration dans le pipeline d'import (Plan 1) pour auto-catégoriser à l'insert, une UI de gestion complète (drag-and-drop, preview, bulk), et une inbox « à catégoriser » avec multi-sélection.
 
 **Architecture:** Nouvelle table `categorization_rule` (scope global ou par entité, priorité entière, filtres AND sur libellé normalisé / sens / montant / contrepartie / compte). Service `app/services/categorization.py` qui expose `categorize_transaction`, `preview_rule`, `apply_rule`, `recategorize_entity`. Intégration dans `app/services/imports.py` (ligne juste après l'insert d'une tx). API REST sous `/api/rules` et extension de `/api/transactions` (filtre `uncategorized`, bulk-categorize). Frontend : page `/rules` avec table triable `@dnd-kit/sortable`, drawer de création avec aperçu live, toolbar multi-sélection sur `/transactions`. Trois migrations Alembic : colonnes (incluant `normalized_label` matérialisé sur Transaction avec backfill), seed sous-catégories, seed règles système.
