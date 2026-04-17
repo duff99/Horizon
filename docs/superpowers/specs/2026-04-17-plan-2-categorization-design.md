@@ -32,9 +32,9 @@ Ce plan implémente le **Mécanisme 1** (règles automatiques) décrit dans la s
 
 | Colonne | Type | Contrainte |
 |---|---|---|
-| `id` | UUID | PK |
+| `id` | integer | PK autoincrement |
 | `name` | text | non-null, longueur 1..120 |
-| `entity_id` | UUID | FK `entity.id`, nullable (NULL = globale) |
+| `entity_id` | int | FK `entity.id`, nullable (NULL = globale) |
 | `priority` | int | non-null, unique par `(COALESCE(entity_id,'00000000-0000-0000-0000-000000000000'), priority)` via index partiel |
 | `is_system` | bool | défaut False ; True pour les 30 pré-installées |
 | `label_operator` | enum `rule_label_operator` | nullable (`CONTAINS / STARTS_WITH / ENDS_WITH / EQUALS`) |
@@ -43,11 +43,11 @@ Ce plan implémente le **Mécanisme 1** (règles automatiques) décrit dans la s
 | `amount_operator` | enum `rule_amount_operator` | nullable (`EQ / NE / GT / LT / BETWEEN`) |
 | `amount_value` | numeric(14,2) | nullable ; requis si `amount_operator` non-null |
 | `amount_value2` | numeric(14,2) | nullable ; requis si `amount_operator = BETWEEN` |
-| `counterparty_id` | UUID FK `counterparty.id` | nullable |
-| `bank_account_id` | UUID FK `bank_account.id` | nullable |
-| `category_id` | UUID FK `category.id` | non-null |
+| `counterparty_id` | int FK `counterparty.id` | nullable |
+| `bank_account_id` | int FK `bank_account.id` | nullable |
+| `category_id` | int FK `category.id` | non-null |
 | `created_at / updated_at` | timestamptz | |
-| `created_by_id` | UUID FK `user.id` | nullable pour les règles `is_system` seed |
+| `created_by_id` | int FK `user.id` | nullable pour les règles `is_system` seed |
 
 **Contraintes applicatives** (CHECK ou validation pydantic) :
 
@@ -57,7 +57,7 @@ Ce plan implémente le **Mécanisme 1** (règles automatiques) décrit dans la s
 **Modifications à la table `transaction`** (Plan 1)
 
 - Ajout `categorized_by` enum `transaction_categorization_source` non-null, défaut `NONE` (`NONE / RULE / MANUAL`)
-- Ajout `categorization_rule_id` UUID FK `categorization_rule.id` nullable ON DELETE SET NULL (audit : quelle règle a matché)
+- Ajout `categorization_rule_id` int FK `categorization_rule.id` nullable ON DELETE SET NULL (audit : quelle règle a matché)
 - Ajout `normalized_label` text non-null, indexé (index B-tree sur `normalized_label` pour accélérer les LIKE ancrés ; pas de trigram en Plan 2). Plan 1 normalise déjà le libellé en vol pour calculer `dedup_key` via `app.parsers.normalization.normalize_label` ; on matérialise simplement cette valeur sur la ligne pour que le moteur de règles matche en SQL sans recalcul. Le pipeline d'import de Plan 1 sera modifié pour populer cette colonne à l'insert (une ligne de code).
 - Backfill : la migration qui ajoute `normalized_label` renseigne la colonne pour les transactions existantes via un UPDATE qui réplique la logique de `normalize_label` en SQL pur (`UPPER(TRANSLATE(unaccent(label), '...', '...'))`), ou en Python via une migration data si l'UPDATE SQL pur est trop délicat — à trancher en phase de plan.
 
@@ -71,7 +71,7 @@ Service `app/services/categorization.py` :
 def evaluate_rules(tx: Transaction, rules: Iterable[CategorizationRule]) -> CategorizationRule | None:
     """Retourne la 1re règle qui matche (AND des filtres), dans l'ordre reçu."""
 
-def fetch_rules_for_entity(session, entity_id: UUID) -> list[CategorizationRule]:
+def fetch_rules_for_entity(session, entity_id: int) -> list[CategorizationRule]:
     """Retourne les règles de l'entité + globales, triées par (is_entity_scoped DESC, priority ASC).
     Le tri garantit qu'une règle entité gagne sur une globale de même priorité."""
 
@@ -87,7 +87,7 @@ def apply_rule(session, rule: CategorizationRule) -> ApplyReport:
     """Applique la règle aux transactions de son scope (entité ou global) non-MANUAL.
     Utilisé après création/édition d'une règle quand l'utilisateur confirme le preview."""
 
-def recategorize_entity(session, entity_id: UUID) -> RecategorizationReport:
+def recategorize_entity(session, entity_id: int) -> RecategorizationReport:
     """Réinitialise toutes les tx non-MANUAL de l'entité (categorized_by=NONE, category_id=NULL)
     puis relance categorize_transaction sur chacune. Utilisé après réordonnancement massif."""
 ```
