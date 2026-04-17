@@ -4,6 +4,7 @@ from app.api import (
     auth,
     bank_accounts,
     bootstrap,
+    counterparties,
     entities,
     health,
     imports,
@@ -22,3 +23,4 @@ api_router.include_router(entities.router)
 api_router.include_router(bank_accounts.router)
 api_router.include_router(imports.router)
 api_router.include_router(transactions.router)
+api_router.include_router(counterparties.router)
