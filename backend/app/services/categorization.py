@@ -240,3 +240,44 @@ def apply_rule(session: Session, rule: CategorizationRule) -> ApplyReport:
     result = session.execute(stmt)
     session.flush()
     return ApplyReport(updated_count=result.rowcount or 0)
+
+
+def recategorize_entity(session: Session, entity_id: int) -> ApplyReport:
+    """Reset toutes les tx non-MANUAL des comptes de l'entité à NONE, puis
+    re-évalue toutes les règles. Synchrone (pour Plan 2 ; passe en async
+    Plan 3+ si le volume l'exige). Les MANUAL sont intactes.
+    """
+    from app.models.bank_account import BankAccount
+
+    accessible_accounts = select(BankAccount.id).where(
+        BankAccount.entity_id == entity_id
+    )
+
+    session.execute(
+        update(Transaction)
+        .where(
+            Transaction.bank_account_id.in_(accessible_accounts),
+            Transaction.categorized_by != TransactionCategorizationSource.MANUAL,
+        )
+        .values(
+            category_id=None,
+            categorization_rule_id=None,
+            categorized_by=TransactionCategorizationSource.NONE,
+        )
+    )
+    session.flush()
+
+    rows = session.execute(
+        select(Transaction).where(
+            Transaction.bank_account_id.in_(accessible_accounts),
+            Transaction.categorized_by == TransactionCategorizationSource.NONE,
+        )
+    ).scalars().all()
+
+    updated = 0
+    for tx in rows:
+        result = categorize_transaction(session, tx, entity_id=entity_id)
+        if result is not None:
+            updated += 1
+    session.flush()
+    return ApplyReport(updated_count=updated)
