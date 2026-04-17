@@ -98,3 +98,25 @@ Plan 1 = **Analyseur PDF Delubac + pipeline d'import de transactions**. Nécessi
 - Page frontend : upload PDF + résumé d'import + liste transactions
 
 À écrire en début de prochaine session.
+
+## Plan 1 — Import & Analyseur Delubac ✅
+
+**Branche :** `plan-1-import-delubac`
+**Statut :** Terminé (tag `plan-1-done` à venir après déploiement prod)
+
+**Livré :**
+- Module `app/parsers/` avec `BaseParser`, registre auto-discovery, `DelubacParser`
+- Extraction PDF via `pdfplumber` : dates, libellés, montants signés, trios SEPA
+- Normalisation libellés, extraction hint contrepartie
+- Modèles `Category`, `Counterparty`, `Transaction`, `ImportRecord` + migration Alembic
+- Pipeline `services/imports.py` : limites, dedup SHA-256, matching fuzzy ≥ 90 %, création auto `pending`, insertion atomique
+- API REST : `POST /api/imports`, `GET /api/imports[/id]`, `GET /api/transactions`, `GET/PATCH /api/counterparties`
+- Frontend : pages `ImportNew`, `ImportHistory`, `Transactions`, `Counterparties` + composants `FileDropzone`, `TransactionFilters` + navigation
+- Tests unitaires, d'intégration et E2E (≥ 85 % couverture sur les modules Plan 1)
+- Fixtures synthétiques générables via `build_fixtures.py`
+
+**Décisions importantes :**
+- Seule la banque **Delubac** est supportée ; les autres parsers arriveront au besoin (architecture extensible via `register_parser`)
+- Limites configurables : 20 Mo / 500 pages / 10 000 tx / 60 s timeout
+- Agrégation SEPA : le parent porte `is_aggregation_parent=True` et est exclu des sommations Plan 3+
+- Catégorisation : table `categories` minimale créée, moteur de règles renvoyé au Plan 2
