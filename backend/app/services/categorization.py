@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Iterable
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -101,3 +101,50 @@ def matches_transaction(rule: CategorizationRule, tx: Transaction) -> bool:
         return False
 
     return True
+
+
+def fetch_rules_for_entity(
+    session: Session, entity_id: int | None,
+) -> list[CategorizationRule]:
+    """Retourne les règles applicables à cette entité, déjà triées par
+    priorité d'évaluation : règles entité d'abord (prio ASC), puis globales (prio ASC).
+    Si entity_id=None, retourne uniquement les globales.
+    """
+    if entity_id is not None:
+        entity_rules = session.execute(
+            select(CategorizationRule)
+            .where(CategorizationRule.entity_id == entity_id)
+            .order_by(CategorizationRule.priority.asc())
+        ).scalars().all()
+    else:
+        entity_rules = []
+
+    global_rules = session.execute(
+        select(CategorizationRule)
+        .where(CategorizationRule.entity_id.is_(None))
+        .order_by(CategorizationRule.priority.asc())
+    ).scalars().all()
+
+    return list(entity_rules) + list(global_rules)
+
+
+def categorize_transaction(
+    session: Session,
+    tx: Transaction,
+    *,
+    entity_id: int | None,
+) -> CategorizationRule | None:
+    """Applique le premier match ; mute tx en place. Ne commit pas.
+    Retourne la règle matchée ou None. Ne touche pas les tx MANUAL.
+    """
+    if tx.categorized_by == TransactionCategorizationSource.MANUAL:
+        return None
+
+    rules = fetch_rules_for_entity(session, entity_id)
+    for rule in rules:
+        if matches_transaction(rule, tx):
+            tx.category_id = rule.category_id
+            tx.categorized_by = TransactionCategorizationSource.RULE
+            tx.categorization_rule_id = rule.id
+            return rule
+    return None
