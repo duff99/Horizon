@@ -31,3 +31,71 @@ export type BankAccount = {
   isActive: boolean;
   createdAt: string;
 };
+
+export type ImportStatus = "pending" | "completed" | "failed";
+
+// NOTE: tous les IDs exposés par l'API FastAPI sont des entiers (int).
+// TypeScript les reçoit donc en `number` après JSON.parse.
+export interface ImportRecord {
+  id: number;
+  bank_account_id: number;
+  bank_code: string;
+  status: ImportStatus;
+  filename: string | null;
+  file_sha256: string | null;
+  imported_count: number;
+  duplicates_skipped: number;
+  counterparties_pending_created: number;
+  period_start: string | null;
+  period_end: string | null;
+  error_message: string | null;
+  created_at: string | null;
+}
+
+export interface CounterpartyNested {
+  id: number;
+  name: string;
+  status: "pending" | "active" | "ignored";
+}
+
+export interface CategoryNested {
+  id: number;
+  name: string;
+}
+
+export interface Transaction {
+  id: number;
+  operation_date: string;
+  value_date: string;
+  label: string;
+  raw_label: string;
+  amount: string; // Decimal en string
+  is_aggregation_parent: boolean;
+  parent_transaction_id: number | null;
+  counterparty: CounterpartyNested | null;
+  category: CategoryNested | null;
+}
+
+export interface TransactionListResponse {
+  items: Transaction[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface TransactionFilter {
+  bank_account_id?: number;
+  date_from?: string;
+  date_to?: string;
+  counterparty_id?: number;
+  search?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export interface Counterparty {
+  id: number;
+  entity_id: number;
+  name: string;
+  status: "pending" | "active" | "ignored";
+}
