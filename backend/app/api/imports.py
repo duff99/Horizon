@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import magic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
 from app.models.bank_account import BankAccount
+from app.models.import_record import ImportRecord
 from app.models.user import User
+from app.models.user_entity_access import UserEntityAccess
 from app.parsers.errors import ParserError, UnknownBankError
 from app.schemas.import_record import ImportRecordRead
 from app.services.imports import (
@@ -66,4 +69,37 @@ async def create_import(
 
     session.commit()
     session.refresh(rec)
+    return ImportRecordRead.model_validate(rec)
+
+
+@router.get("", response_model=list[ImportRecordRead])
+def list_imports(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> list[ImportRecordRead]:
+    # Imports accessibles = ceux dont le bank_account appartient à une entity où user a accès
+    accessible_entity_ids = select(UserEntityAccess.entity_id).where(
+        UserEntityAccess.user_id == user.id
+    )
+    rows = session.execute(
+        select(ImportRecord)
+        .join(BankAccount, BankAccount.id == ImportRecord.bank_account_id)
+        .where(BankAccount.entity_id.in_(accessible_entity_ids))
+        .order_by(ImportRecord.created_at.desc())
+    ).scalars().all()
+    return [ImportRecordRead.model_validate(r) for r in rows]
+
+
+@router.get("/{import_id}", response_model=ImportRecordRead)
+def get_import(
+    import_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> ImportRecordRead:
+    rec = session.get(ImportRecord, import_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Import introuvable")
+
+    ba = session.get(BankAccount, rec.bank_account_id)
+    require_entity_access(session=session, user=user, entity_id=ba.entity_id)
     return ImportRecordRead.model_validate(rec)
