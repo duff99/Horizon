@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -11,16 +12,21 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
 from app.models.categorization_rule import CategorizationRule
+from app.models.transaction import Transaction
 from app.models.user import User, UserRole
 from app.models.user_entity_access import UserEntityAccess
 from app.schemas.categorization_rule import (
+    RuleApplyResponse,
     RuleCreate,
     RulePreviewRequest,
     RulePreviewResponse,
     RuleRead,
+    RuleReorderItem,
     RuleSampleTransaction,
+    RuleSuggestion,
     RuleUpdate,
 )
+from app.services.categorization import apply_rule as apply_rule_service
 from app.services.categorization import preview_rule as preview_rule_service
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
@@ -216,4 +222,122 @@ def preview_rule_endpoint(
     return RulePreviewResponse(
         matching_count=result.matching_count,
         sample=[RuleSampleTransaction(**s.__dict__) for s in result.sample],
+    )
+
+
+@router.post("/{rule_id}/apply", response_model=RuleApplyResponse)
+def apply_rule_endpoint(
+    rule_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> RuleApplyResponse:
+    _require_editor(user)
+    rule = session.get(CategorizationRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable")
+    if rule.entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=rule.entity_id)
+
+    report = apply_rule_service(session, rule)
+    session.commit()
+    return RuleApplyResponse(updated_count=report.updated_count)
+
+
+class ReorderBody(BaseModel):
+    items: list[RuleReorderItem]
+
+
+@router.post("/reorder", response_model=list[RuleRead])
+def reorder_rules(
+    items: list[RuleReorderItem],
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> list[RuleRead]:
+    _require_editor(user)
+    if not items:
+        raise HTTPException(status_code=422, detail="Liste vide")
+
+    ids = [i.id for i in items]
+    rules = session.execute(
+        select(CategorizationRule).where(CategorizationRule.id.in_(ids))
+    ).scalars().all()
+    if len(rules) != len(items):
+        raise HTTPException(status_code=404, detail="Une règle au moins est introuvable")
+
+    scopes = {r.entity_id for r in rules}
+    if len(scopes) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail="Le réordonnancement doit porter sur un seul scope",
+        )
+    scope_entity = scopes.pop()
+    if scope_entity is not None:
+        require_entity_access(session=session, user=user, entity_id=scope_entity)
+
+    by_id = {r.id: r for r in rules}
+    try:
+        for item in items:
+            by_id[item.id].priority = item.priority
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "RULE_DUPLICATE_PRIORITY",
+                    "message": "Conflit de priorités pendant le réordonnancement"},
+        )
+
+    refreshed = session.execute(
+        select(CategorizationRule)
+        .where(CategorizationRule.id.in_(ids))
+        .order_by(CategorizationRule.priority.asc())
+    ).scalars().all()
+    return [RuleRead.model_validate(r) for r in refreshed]
+
+
+class FromTxBody(BaseModel):
+    transaction_ids: list[int]
+
+
+@router.post("/from-transactions", response_model=RuleSuggestion)
+def suggest_from_transactions(
+    body: FromTxBody,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> RuleSuggestion:
+    _require_editor(user)
+    if not body.transaction_ids:
+        raise HTTPException(status_code=422, detail="Sélection vide")
+
+    txs = session.execute(
+        select(Transaction).where(Transaction.id.in_(body.transaction_ids))
+    ).scalars().all()
+    if not txs:
+        raise HTTPException(status_code=404, detail="Transactions introuvables")
+
+    labels = [t.normalized_label or "" for t in txs]
+    prefix = labels[0]
+    for lbl in labels[1:]:
+        while prefix and not lbl.startswith(prefix):
+            prefix = prefix[:-1]
+    suggested_value = prefix.strip() or labels[0].split()[0]
+    suggested_op: str = "STARTS_WITH" if prefix.strip() else "CONTAINS"
+
+    signs = {t.amount > 0 for t in txs}
+    if signs == {True}:
+        direction = "CREDIT"
+    elif signs == {False}:
+        direction = "DEBIT"
+    else:
+        direction = "ANY"
+
+    accounts = {t.bank_account_id for t in txs}
+    suggested_bank = accounts.pop() if len(accounts) == 1 else None
+
+    return RuleSuggestion(
+        suggested_label_operator=suggested_op,
+        suggested_label_value=suggested_value,
+        suggested_direction=direction,
+        suggested_bank_account_id=suggested_bank,
+        transaction_count=len(txs),
     )
