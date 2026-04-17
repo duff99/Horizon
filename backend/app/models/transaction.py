@@ -8,9 +8,13 @@ from typing import Optional
 from sqlalchemy import (
     Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, func
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if False:  # TYPE_CHECKING-like guard avoiding runtime import cycles
+    from app.models.category import Category
+    from app.models.counterparty import Counterparty
 
 
 class Transaction(Base):
@@ -62,6 +66,13 @@ class Transaction(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
         onupdate=func.now()
+    )
+
+    counterparty: Mapped[Optional["Counterparty"]] = relationship(
+        "Counterparty", lazy="raise", foreign_keys=[counterparty_id]
+    )
+    category: Mapped[Optional["Category"]] = relationship(
+        "Category", lazy="raise", foreign_keys=[category_id]
     )
 
     def __repr__(self) -> str:
