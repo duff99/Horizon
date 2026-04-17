@@ -164,6 +164,8 @@ from datetime import datetime, timezone
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.parsers.base import ParsedStatement, ParsedTransaction
+from app.parsers.normalization import normalize_label
+from app.services.categorization import categorize_transaction
 
 
 def _to_dedup_input(
@@ -278,6 +280,7 @@ def ingest_parsed_statement(
                 value_date=tx.value_date,
                 label=tx.label,
                 raw_label=tx.raw_label,
+                normalized_label=normalize_label(tx.label),
                 amount=tx.amount,
                 dedup_key=key,
                 statement_row_index=tx.statement_row_index,
@@ -301,14 +304,26 @@ def ingest_parsed_statement(
             else:
                 _insert_tx(root, None, is_aggregation_parent=False)
 
+        # 5. Auto-catégorisation des transactions insérées (Plan 2 — Phase D)
+        session.flush()
+        categorized_count = 0
+        for db_tx in inserted_map.values():
+            matched = categorize_transaction(
+                session, db_tx, entity_id=ba.entity_id,
+            )
+            if matched is not None:
+                categorized_count += 1
+
         import_record.status = ImportStatus.COMPLETED
         import_record.imported_count = imported_count
         import_record.duplicates_skipped = duplicates_skipped
         import_record.counterparties_pending_created = pending_created
         import_record.opening_balance = statement.opening_balance
         import_record.closing_balance = statement.closing_balance
+        audit: dict = {"categorized_count": categorized_count}
         if overridden:
-            import_record.audit = {"overridden": overridden}
+            audit["overridden"] = overridden
+        import_record.audit = audit
         session.flush()
         return import_record
 
