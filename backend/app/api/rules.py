@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
+from app.models.bank_account import BankAccount
 from app.models.categorization_rule import CategorizationRule
 from app.models.transaction import Transaction
 from app.models.user import User, UserRole
@@ -243,10 +244,6 @@ def apply_rule_endpoint(
     return RuleApplyResponse(updated_count=report.updated_count)
 
 
-class ReorderBody(BaseModel):
-    items: list[RuleReorderItem]
-
-
 @router.post("/reorder", response_model=list[RuleRead])
 def reorder_rules(
     items: list[RuleReorderItem],
@@ -309,10 +306,16 @@ def suggest_from_transactions(
     if not body.transaction_ids:
         raise HTTPException(status_code=422, detail="Sélection vide")
 
+    accessible = _accessible_entity_ids(session, user)
     txs = session.execute(
-        select(Transaction).where(Transaction.id.in_(body.transaction_ids))
+        select(Transaction)
+        .join(BankAccount, Transaction.bank_account_id == BankAccount.id)
+        .where(
+            Transaction.id.in_(body.transaction_ids),
+            BankAccount.entity_id.in_(accessible),
+        )
     ).scalars().all()
-    if not txs:
+    if len(txs) != len(body.transaction_ids):
         raise HTTPException(status_code=404, detail="Transactions introuvables")
 
     labels = [t.normalized_label or "" for t in txs]
@@ -320,7 +323,8 @@ def suggest_from_transactions(
     for lbl in labels[1:]:
         while prefix and not lbl.startswith(prefix):
             prefix = prefix[:-1]
-    suggested_value = prefix.strip() or labels[0].split()[0]
+    fallback = (labels[0].split() or [""])[0]
+    suggested_value = prefix.strip() or fallback
     suggested_op: str = "STARTS_WITH" if prefix.strip() else "CONTAINS"
 
     signs = {t.amount > 0 for t in txs}
