@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+.env
+.env.*
+!.env.example
+tests/fixtures/delubac/*.pdf
+!tests/fixtures/delubac/synthetic_*.pdf
