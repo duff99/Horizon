@@ -25,7 +25,7 @@ def test_rule_basic_fields(db_session) -> None:
     rule = CategorizationRule(
         name="URSSAF test",
         entity_id=None,
-        priority=1000,
+        priority=100,
         is_system=False,
         label_operator=RuleLabelOperator.CONTAINS,
         label_value="URSSAF",
