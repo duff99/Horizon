@@ -17,10 +17,10 @@ def _make_app(db_session: Session) -> FastAPI:
 
     def _override_settings() -> Settings:
         return Settings(  # type: ignore[call-arg]
-            database_url="postgresql+psycopg://x/x",
-            secret_key="x" * 32,
-            session_hours=1,
-            cors_origins_raw="http://localhost",
+            DATABASE_URL="postgresql+psycopg://x/x",
+            BACKEND_SECRET_KEY="x" * 32,
+            BACKEND_SESSION_HOURS=1,
+            BACKEND_CORS_ORIGINS="http://localhost",
         )
 
     test_app.dependency_overrides[get_db] = _override_db
@@ -54,7 +54,8 @@ def test_valid_cookie_admits(db_session: Session) -> None:
     app = _make_app(db_session)
     client = TestClient(app)
     token = encode_session_token(user_id=user.id, secret="x" * 32)
-    r = client.get("/protected", cookies={COOKIE_NAME: token})
+    client.cookies.set(COOKIE_NAME, token)
+    r = client.get("/protected")
     assert r.status_code == 200
     assert r.json() == {"email": "u@x.com"}
 
@@ -67,7 +68,8 @@ def test_reader_cannot_reach_admin_route(db_session: Session) -> None:
     app = _make_app(db_session)
     client = TestClient(app)
     token = encode_session_token(user_id=user.id, secret="x" * 32)
-    r = client.get("/admin-only", cookies={COOKIE_NAME: token})
+    client.cookies.set(COOKIE_NAME, token)
+    r = client.get("/admin-only")
     assert r.status_code == 403
 
 
@@ -81,5 +83,6 @@ def test_deactivated_user_rejected(db_session: Session) -> None:
     app = _make_app(db_session)
     client = TestClient(app)
     token = encode_session_token(user_id=user.id, secret="x" * 32)
-    r = client.get("/protected", cookies={COOKIE_NAME: token})
+    client.cookies.set(COOKIE_NAME, token)
+    r = client.get("/protected")
     assert r.status_code == 401
