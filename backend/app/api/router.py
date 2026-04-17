@@ -9,6 +9,7 @@ from app.api import (
     health,
     imports,
     me,
+    rules,
     transactions,
     users,
 )
@@ -24,3 +25,4 @@ api_router.include_router(bank_accounts.router)
 api_router.include_router(imports.router)
 api_router.include_router(transactions.router)
 api_router.include_router(counterparties.router)
+api_router.include_router(rules.router)
