@@ -11,10 +11,10 @@ from app.parsers.errors import (
 _REGISTRY: dict[str, BaseParser] = {}
 
 
-def register_parser(parser: BaseParser) -> None:
+def register_parser(parser: BaseParser, *, replace: bool = False) -> None:
     """Enregistre un parser dans le registre global. Lève ValueError si doublon."""
     code = parser.bank_code
-    if code in _REGISTRY:
+    if code in _REGISTRY and not replace:
         raise ValueError(f"Parser for bank_code={code!r} is already registered")
     _REGISTRY[code] = parser
 
@@ -39,17 +39,21 @@ def get_parser_for(pdf_bytes: bytes) -> BaseParser:
     raise UnknownBankError()
 
 
-def _auto_register() -> None:
-    """Importe les modules parsers connus pour qu'ils s'enregistrent.
-
-    Convention : chaque fichier parser (ex. `delubac.py`) instancie et enregistre
-    son parser via `register_parser(...)` au niveau module.
-    """
-    from app.parsers import delubac  # noqa: F401  (import pour side-effect)
-
-
 __all__ = [
     "BaseParser", "ParsedStatement", "ParsedTransaction",
     "ParserError", "UnknownBankError", "InvalidPdfStructureError",
     "register_parser", "get_parser_for", "get_parser_by_code", "get_registry",
 ]
+
+
+def _auto_register() -> None:
+    """Importe et enregistre tous les parsers connus.
+
+    Idempotent : utilise `register_parser(..., replace=True)` pour tolérer
+    un double-appel (notamment en tests quand le module est re-importé).
+    """
+    from app.parsers.delubac import DelubacParser
+    register_parser(DelubacParser(), replace=True)
+
+
+_auto_register()
