@@ -10,6 +10,9 @@ from app.config import get_settings
 from app.db import get_db
 from app.main import app
 from app.models import Base
+from app.rate_limiter import limiter
+
+limiter.enabled = False
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity
 from app.models.user import User, UserRole
