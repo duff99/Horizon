@@ -150,6 +150,32 @@ def auth_user_with_bank_account(
 
 
 @pytest.fixture()
+def entity(db_session: Session) -> Entity:
+    """Entité simple pour les tests de modèles (Plan 2)."""
+    e = Entity(name="SAS Modele Test", legal_name="SAS Modele Test")
+    db_session.add(e)
+    db_session.commit()
+    db_session.refresh(e)
+    return e
+
+
+@pytest.fixture()
+def bank_account(db_session: Session, entity: Entity) -> BankAccount:
+    """Compte bancaire simple rattaché à `entity` (Plan 2)."""
+    ba = BankAccount(
+        entity_id=entity.id,
+        bank_code="delubac",
+        bank_name="Delubac",
+        iban="FR7600000000000000000000999",
+        name="Compte courant Modele Test",
+    )
+    db_session.add(ba)
+    db_session.commit()
+    db_session.refresh(ba)
+    return ba
+
+
+@pytest.fixture()
 def other_entity_bank_account(db_session: Session) -> BankAccount:
     """Compte bancaire d'une entité à laquelle le user authentifié n'a PAS accès."""
     other = Entity(name="SAS Autre Test", legal_name="SAS Autre Test")
