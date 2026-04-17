@@ -33,3 +33,29 @@ def test_detect_non_delubac(parser: DelubacParser) -> None:
 def test_bank_code_and_name(parser: DelubacParser) -> None:
     assert parser.bank_code == "delubac"
     assert parser.bank_name == "Delubac"
+
+
+from datetime import date
+from decimal import Decimal
+
+
+def test_parse_minimal_account_header(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_minimal.pdf"))
+    assert stmt.bank_code == "delubac"
+    assert stmt.iban == "FR7612879000011117020200105"
+    assert stmt.account_number == "11170202001"
+    assert stmt.opening_balance == Decimal("19.70")
+    assert stmt.closing_balance == Decimal("25052.33")
+
+
+def test_parse_minimal_period(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_minimal.pdf"))
+    assert stmt.period_start == date(2026, 3, 2)
+    assert stmt.period_end == date(2026, 3, 5)
+
+
+def test_parse_full_month_period(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_full_month.pdf"))
+    assert stmt.period_start == date(2026, 3, 2)
+    assert stmt.period_end == date(2026, 3, 31)
+    assert stmt.closing_balance == Decimal("33427.90")
