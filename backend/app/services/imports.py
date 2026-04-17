@@ -317,3 +317,57 @@ def ingest_parsed_statement(
         import_record.error_message = str(exc)[:500]
         session.flush()
         raise
+
+
+from app.parsers import get_parser_for
+from app.parsers.errors import ParserError
+
+
+def import_pdf_bytes(
+    session: Session,
+    *,
+    bank_account_id: int,
+    pdf_bytes: bytes,
+    filename: str,
+    override_duplicates: bool = False,
+    uploaded_by_id: int | None = None,
+) -> ImportRecord:
+    check_size_limit(pdf_bytes)
+
+    file_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+
+    # Pré-crée le record pour pouvoir logger un échec de parsing
+    rec = ImportRecord(
+        bank_account_id=bank_account_id,
+        uploaded_by_id=uploaded_by_id,
+        bank_code="unknown",
+        status=ImportStatus.PENDING,
+        filename=filename,
+        file_sha256=file_sha256,
+        file_size_bytes=len(pdf_bytes),
+        override_duplicates=override_duplicates,
+    )
+    session.add(rec)
+    session.flush()
+
+    try:
+        parser = get_parser_for(pdf_bytes)
+        rec.bank_code = parser.bank_code
+        statement = parser.parse(pdf_bytes)
+        check_pages_limit(pages=statement.page_count)
+        check_transactions_limit(
+            count=sum(1 + len(t.children) for t in statement.transactions)
+        )
+    except ParserError as exc:
+        rec.status = ImportStatus.FAILED
+        rec.error_message = str(exc)[:500]
+        session.flush()
+        raise
+
+    return ingest_parsed_statement(
+        session,
+        bank_account_id=bank_account_id,
+        statement=statement,
+        override_duplicates=override_duplicates,
+        import_record=rec,
+    )
