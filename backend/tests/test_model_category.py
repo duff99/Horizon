@@ -17,11 +17,11 @@ def test_category_basic_fields(db_session) -> None:
 
 
 def test_category_parent_child(db_session) -> None:
-    parent = Category(name="Encaissements", slug="encaissements", is_system=True)
+    parent = Category(name="Test Parent", slug="test-parent-cat", is_system=False)
     db_session.add(parent)
     db_session.commit()
-    child = Category(name="Ventes", slug="ventes", parent_category_id=parent.id,
-                     is_system=True)
+    child = Category(name="Test Child", slug="test-child-cat",
+                     parent_category_id=parent.id, is_system=False)
     db_session.add(child)
     db_session.commit()
     db_session.refresh(child)
