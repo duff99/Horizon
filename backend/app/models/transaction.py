@@ -1,6 +1,7 @@
 """Transaction bancaire : table centrale du système."""
 from __future__ import annotations
 
+import enum
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -8,6 +9,7 @@ from typing import Optional
 from sqlalchemy import (
     Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, func
 )
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -15,6 +17,12 @@ from app.models.base import Base
 if False:  # TYPE_CHECKING-like guard avoiding runtime import cycles
     from app.models.category import Category
     from app.models.counterparty import Counterparty
+
+
+class TransactionCategorizationSource(str, enum.Enum):
+    NONE = "NONE"
+    RULE = "RULE"
+    MANUAL = "MANUAL"
 
 
 class Transaction(Base):
@@ -25,6 +33,8 @@ class Transaction(Base):
         Index("ix_tx_category", "category_id"),
         Index("ix_tx_counterparty", "counterparty_id"),
         Index("uq_tx_dedup_key", "dedup_key", unique=True),
+        Index("ix_tx_normalized_label", "normalized_label"),
+        Index("ix_tx_categorized_by", "categorized_by"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -59,6 +69,18 @@ class Transaction(Base):
     )
     is_intercompany: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    normalized_label: Mapped[str] = mapped_column(
+        String(500), nullable=False, server_default=""
+    )
+    categorized_by: Mapped[TransactionCategorizationSource] = mapped_column(
+        SQLEnum(TransactionCategorizationSource, name="transaction_categorization_source"),
+        nullable=False, default=TransactionCategorizationSource.NONE,
+        server_default="NONE",
+    )
+    categorization_rule_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categorization_rules.id", ondelete="SET NULL"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
