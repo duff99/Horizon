@@ -5,6 +5,9 @@ import { useLogout, useMe } from '@/hooks/useAuth';
 
 const items = [
   { to: '/tableau-de-bord', label: 'Tableau de bord', adminOnly: false },
+  { to: '/imports', label: 'Imports', adminOnly: false },
+  { to: '/transactions', label: 'Transactions', adminOnly: false },
+  { to: '/contreparties', label: 'Contreparties', adminOnly: false },
   { to: '/administration/utilisateurs', label: 'Utilisateurs', adminOnly: true },
   { to: '/administration/societes', label: 'Sociétés', adminOnly: true },
   {
