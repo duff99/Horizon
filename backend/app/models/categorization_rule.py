@@ -10,7 +10,7 @@ from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer,
     Numeric, String, func, text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
