@@ -157,3 +157,163 @@ def match_or_create_counterparty(
     session.add(cp)
     session.flush()
     return cp, True
+
+
+from datetime import datetime, timezone
+
+from app.models.import_record import ImportRecord, ImportStatus
+from app.models.transaction import Transaction
+from app.parsers.base import ParsedStatement, ParsedTransaction
+
+
+def _to_dedup_input(
+    tx: ParsedTransaction,
+    *,
+    bank_account_id: int,
+    label_suffix: str = "",
+) -> DedupKeyInput:
+    return DedupKeyInput(
+        bank_account_id=bank_account_id,
+        operation_date=tx.operation_date,
+        value_date=tx.value_date,
+        amount=tx.amount,
+        normalized_label=tx.label + label_suffix,
+        statement_row_index=tx.statement_row_index,
+    )
+
+
+def _flatten(parent: ParsedTransaction) -> list[ParsedTransaction]:
+    out = [parent]
+    out.extend(parent.children)
+    return out
+
+
+def ingest_parsed_statement(
+    session: Session,
+    *,
+    bank_account_id: int,
+    statement: ParsedStatement,
+    override_duplicates: bool = False,
+    import_record: ImportRecord | None = None,
+) -> ImportRecord:
+    """Insère atomiquement un ParsedStatement. Retourne l'ImportRecord mis à jour."""
+    from app.models.bank_account import BankAccount
+
+    ba = session.get(BankAccount, bank_account_id)
+    if ba is None:
+        raise ValueError(f"BankAccount {bank_account_id} introuvable")
+
+    if import_record is None:
+        import_record = ImportRecord(
+            bank_account_id=bank_account_id,
+            bank_code=statement.bank_code,
+            status=ImportStatus.PENDING,
+            period_start=statement.period_start,
+            period_end=statement.period_end,
+        )
+        session.add(import_record)
+        session.flush()
+
+    overridden: list[str] = []
+    pending_created = 0
+
+    try:
+        # 1. Aplatit tous les ParsedTransaction (parents + enfants)
+        all_parsed: list[tuple[ParsedTransaction, bool]] = []
+        for root in statement.transactions:
+            for tx in _flatten(root):
+                is_parent = tx is root and bool(root.children)
+                all_parsed.append((tx, is_parent))
+
+        # 2. Calcule les dedup_keys
+        keys_to_check = [
+            compute_dedup_key(_to_dedup_input(tx, bank_account_id=bank_account_id))
+            for tx, _ in all_parsed
+        ]
+
+        # 3. Détecte les doublons existants en base
+        existing_keys: set[str] = set(
+            session.execute(
+                select(Transaction.dedup_key).where(
+                    Transaction.dedup_key.in_(keys_to_check)
+                )
+            ).scalars().all()
+        )
+
+        # 4. Insertion
+        inserted_map: dict[int, Transaction] = {}
+        imported_count = 0
+        duplicates_skipped = 0
+
+        def _insert_tx(
+            tx: ParsedTransaction,
+            parent_db: Transaction | None,
+            is_aggregation_parent: bool,
+        ) -> None:
+            nonlocal imported_count, duplicates_skipped, pending_created
+            key = compute_dedup_key(_to_dedup_input(tx, bank_account_id=bank_account_id))
+            if key in existing_keys:
+                if override_duplicates:
+                    suffix = f"|dup:{datetime.now(timezone.utc).timestamp()}"
+                    key = compute_dedup_key(
+                        _to_dedup_input(
+                            tx, bank_account_id=bank_account_id, label_suffix=suffix,
+                        )
+                    )
+                    overridden.append(key)
+                else:
+                    duplicates_skipped += 1
+                    return
+
+            cp, was_created = match_or_create_counterparty(
+                session, entity_id=ba.entity_id, hint=tx.counterparty_hint,
+            )
+            if was_created:
+                pending_created += 1
+
+            db_tx = Transaction(
+                bank_account_id=bank_account_id,
+                import_id=import_record.id,
+                operation_date=tx.operation_date,
+                value_date=tx.value_date,
+                label=tx.label,
+                raw_label=tx.raw_label,
+                amount=tx.amount,
+                dedup_key=key,
+                statement_row_index=tx.statement_row_index,
+                is_aggregation_parent=is_aggregation_parent,
+                parent_transaction_id=parent_db.id if parent_db else None,
+                counterparty_id=cp.id if cp else None,
+            )
+            session.add(db_tx)
+            session.flush()
+            inserted_map[id(tx)] = db_tx
+            imported_count += 1
+            existing_keys.add(key)
+
+        for root in statement.transactions:
+            parent_db: Transaction | None = None
+            if root.children:
+                _insert_tx(root, None, is_aggregation_parent=True)
+                parent_db = inserted_map.get(id(root))
+                for child in root.children:
+                    _insert_tx(child, parent_db, is_aggregation_parent=False)
+            else:
+                _insert_tx(root, None, is_aggregation_parent=False)
+
+        import_record.status = ImportStatus.COMPLETED
+        import_record.imported_count = imported_count
+        import_record.duplicates_skipped = duplicates_skipped
+        import_record.counterparties_pending_created = pending_created
+        import_record.opening_balance = statement.opening_balance
+        import_record.closing_balance = statement.closing_balance
+        if overridden:
+            import_record.audit = {"overridden": overridden}
+        session.flush()
+        return import_record
+
+    except Exception as exc:
+        import_record.status = ImportStatus.FAILED
+        import_record.error_message = str(exc)[:500]
+        session.flush()
+        raise
