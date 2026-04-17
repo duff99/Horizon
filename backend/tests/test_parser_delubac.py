@@ -104,3 +104,44 @@ def test_parse_full_month_transactions_count_within_tolerance(parser: DelubacPar
     actual_blocks = len(stmt.transactions)
     ratio = actual_blocks / expected
     assert ratio >= 0.95, f"Extraction insuffisante: {actual_blocks}/{expected} = {ratio:.1%}"
+
+
+def test_parse_sepa_trio_merged(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_sepa_trio.pdf"))
+    assert len(stmt.transactions) == 1, "Le trio doit être fusionné en 1 parent"
+    parent = stmt.transactions[0]
+    assert parent.is_aggregation_parent is True
+    assert len(parent.children) == 3
+    # Montants : parent = somme enfants (tous en débit → négatifs)
+    assert parent.amount == Decimal("-1000.60")
+    total_children = sum(c.amount for c in parent.children)
+    assert total_children == parent.amount
+
+
+def test_parse_sepa_trio_children_labels(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_sepa_trio.pdf"))
+    parent = stmt.transactions[0]
+    child_labels = [c.label for c in parent.children]
+    assert any("VIR SEPA JEAN DUPONT" in l and "COMMISSION" not in l and "TVA" not in l
+               for l in child_labels)
+    assert any("COMMISSION VIR SEPA" in l for l in child_labels)
+    assert any("TVA VIR SEPA" in l for l in child_labels)
+
+
+def test_parse_full_month_merges_all_trios(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_full_month.pdf"))
+    # Vérifier qu'aucune transaction top-level ne commence par COMMISSION/TVA
+    for t in stmt.transactions:
+        assert not t.label.startswith("COMMISSION VIR SEPA"), \
+            f"Orphelin: {t.label!r}"
+        assert not t.label.startswith("TVA VIR SEPA"), \
+            f"Orphelin: {t.label!r}"
+
+
+def test_parse_vir_sepa_credit_not_merged(parser: DelubacParser) -> None:
+    """Un VIR SEPA reçu (crédit) sans commission associée ne doit pas être fusionné."""
+    stmt = parser.parse(_load("synthetic_minimal.pdf"))
+    # Le VIR SEPA BNP PARIBAS FACTOR est un crédit isolé
+    bnp = [t for t in stmt.transactions if "BNP PARIBAS FACTOR" in t.label]
+    assert len(bnp) == 1
+    assert bnp[0].is_aggregation_parent is False

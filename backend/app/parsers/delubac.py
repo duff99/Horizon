@@ -84,7 +84,7 @@ class DelubacParser(BaseParser):
             raw_lines = self._extract_raw_lines(pdf)
 
         transactions = [self._raw_line_to_parsed(rl) for rl in raw_lines]
-        # D4 branchera la fusion SEPA ici
+        transactions = self._merge_sepa_trios(transactions)
         period_start, period_end = self._period_from_transactions(
             transactions, opening_date, closing_date
         )
@@ -268,6 +268,66 @@ class DelubacParser(BaseParser):
             amount=rl.amount,
             statement_row_index=rl.row_index,
         )
+
+    _COMMISSION_PREFIX = "COMMISSION VIR SEPA"
+    _TVA_PREFIX = "TVA VIR SEPA"
+    _VIR_PREFIX = "VIR SEPA"
+
+    def _merge_sepa_trios(
+        self, transactions: list[ParsedTransaction]
+    ) -> list[ParsedTransaction]:
+        """Fusionne les trios (VIR SEPA parent + COMMISSION + TVA) en transaction parente."""
+        merged: list[ParsedTransaction] = []
+        i = 0
+        n = len(transactions)
+        while i < n:
+            t = transactions[i]
+            # On fusionne uniquement si :
+            # - t commence par "VIR SEPA " (hors COMMISSION/TVA)
+            # - t est un débit
+            # - i+1 commence par "COMMISSION VIR SEPA" sur même date
+            # - i+2 commence par "TVA VIR SEPA" sur même date
+            if (
+                i + 2 < n
+                and t.label.startswith(self._VIR_PREFIX + " ")
+                and not t.label.startswith(self._COMMISSION_PREFIX)
+                and not t.label.startswith(self._TVA_PREFIX)
+                and t.amount < 0
+                and transactions[i + 1].label.startswith(self._COMMISSION_PREFIX)
+                and transactions[i + 1].operation_date == t.operation_date
+                and transactions[i + 2].label.startswith(self._TVA_PREFIX)
+                and transactions[i + 2].operation_date == t.operation_date
+            ):
+                parent_raw = t
+                child_commission = transactions[i + 1]
+                child_tva = transactions[i + 2]
+                # L'ex-parent "VIR SEPA …" devient un enfant ; on crée un nouveau parent agrégé
+                parent = ParsedTransaction(
+                    operation_date=t.operation_date,
+                    value_date=t.value_date,
+                    label=parent_raw.label,
+                    raw_label=parent_raw.raw_label,
+                    amount=parent_raw.amount + child_commission.amount + child_tva.amount,
+                    statement_row_index=parent_raw.statement_row_index,
+                    children=[
+                        ParsedTransaction(
+                            operation_date=parent_raw.operation_date,
+                            value_date=parent_raw.value_date,
+                            label=parent_raw.label,
+                            raw_label=parent_raw.raw_label,
+                            amount=parent_raw.amount,
+                            statement_row_index=parent_raw.statement_row_index,
+                        ),
+                        child_commission,
+                        child_tva,
+                    ],
+                )
+                merged.append(parent)
+                i += 3
+            else:
+                merged.append(t)
+                i += 1
+        return merged
 
     def _period_from_transactions(
         self,
