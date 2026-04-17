@@ -145,3 +145,20 @@ def test_parse_vir_sepa_credit_not_merged(parser: DelubacParser) -> None:
     bnp = [t for t in stmt.transactions if "BNP PARIBAS FACTOR" in t.label]
     assert len(bnp) == 1
     assert bnp[0].is_aggregation_parent is False
+
+
+def test_parse_counterparty_extracted_from_label(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_full_month.pdf"))
+    # Au moins 1 transaction doit avoir counterparty_hint non-None
+    hints = [t.counterparty_hint for t in stmt.transactions]
+    assert any(h is not None for h in hints)
+    # URSSAF reconnu
+    urssaf = next((t for t in stmt.transactions if "URSSAF" in t.label), None)
+    assert urssaf is not None
+    assert urssaf.counterparty_hint == "URSSAF"
+
+
+def test_parse_counterparty_on_sepa_parent(parser: DelubacParser) -> None:
+    stmt = parser.parse(_load("synthetic_sepa_trio.pdf"))
+    parent = stmt.transactions[0]
+    assert parent.counterparty_hint == "JEAN DUPONT"

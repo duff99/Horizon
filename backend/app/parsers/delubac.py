@@ -257,9 +257,11 @@ class DelubacParser(BaseParser):
 
     def _raw_line_to_parsed(self, rl: _RawLine) -> ParsedTransaction:
         """Convertit une ligne brute en ParsedTransaction (sans fusion SEPA)."""
+        from app.parsers.normalization import extract_counterparty
         detail = " ".join(rl.detail_lines).strip()
         full_label = (rl.label + " " + detail).strip() if detail else rl.label
         full_label = re.sub(r"\s+", " ", full_label)
+        hint = extract_counterparty(rl.label)  # extrait depuis la ligne principale
         return ParsedTransaction(
             operation_date=rl.operation_date,
             value_date=rl.value_date,
@@ -267,6 +269,7 @@ class DelubacParser(BaseParser):
             raw_label=full_label,
             amount=rl.amount,
             statement_row_index=rl.row_index,
+            counterparty_hint=hint,
         )
 
     _COMMISSION_PREFIX = "COMMISSION VIR SEPA"
@@ -309,6 +312,7 @@ class DelubacParser(BaseParser):
                     raw_label=parent_raw.raw_label,
                     amount=parent_raw.amount + child_commission.amount + child_tva.amount,
                     statement_row_index=parent_raw.statement_row_index,
+                    counterparty_hint=parent_raw.counterparty_hint,
                     children=[
                         ParsedTransaction(
                             operation_date=parent_raw.operation_date,
