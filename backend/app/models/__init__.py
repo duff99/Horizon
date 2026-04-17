@@ -4,6 +4,7 @@ from app.models.category import Category  # noqa: F401
 from app.models.counterparty import Counterparty, CounterpartyStatus  # noqa: F401
 from app.models.entity import Entity
 from app.models.import_record import ImportRecord  # noqa: F401
+from app.models.transaction import Transaction  # noqa: F401
 from app.models.user import User, UserRole
 from app.models.user_entity_access import UserEntityAccess
 
