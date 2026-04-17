@@ -6,7 +6,9 @@ from app.models.category import Category
 
 
 def test_category_basic_fields(db_session) -> None:
-    cat = Category(name="Ventes clients", slug="ventes-clients",
+    # Slug arbitraire non utilisé par les seeds Plan 1/Plan 2 (cf. B2 :
+    # `ventes-clients` est désormais réservé à la sous-catégorie seedée).
+    cat = Category(name="Ventes clients (test)", slug="test-ventes-clients-fixture",
                    color="#2ecc71", is_system=True)
     db_session.add(cat)
     db_session.commit()
