@@ -56,3 +56,35 @@ def check_transactions_limit(*, count: int, max_count: int = MAX_TRANSACTIONS) -
         raise TooManyTransactionsError(
             f"{count} transactions > limite {max_count}"
         )
+
+
+import hashlib
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+
+
+@dataclass(frozen=True)
+class DedupKeyInput:
+    bank_account_id: int
+    operation_date: date
+    value_date: date
+    amount: Decimal
+    normalized_label: str
+    statement_row_index: int
+
+
+def compute_dedup_key(payload: DedupKeyInput) -> str:
+    """Retourne le SHA-256 hex (64 caractères) déterministe de l'entrée."""
+    # Montant en centimes signé, stable : évite les pièges Decimal("-42.50") vs "-42.5"
+    amount_cents = int((payload.amount * 100).to_integral_value())
+    parts = [
+        str(payload.bank_account_id),
+        payload.operation_date.isoformat(),
+        payload.value_date.isoformat(),
+        str(amount_cents),
+        payload.normalized_label,
+        str(payload.statement_row_index),
+    ]
+    blob = "|".join(parts).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
