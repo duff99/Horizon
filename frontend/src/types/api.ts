@@ -91,6 +91,7 @@ export interface TransactionFilter {
   search?: string;
   page?: number;
   per_page?: number;
+  uncategorized?: boolean;
 }
 
 export interface Counterparty {
