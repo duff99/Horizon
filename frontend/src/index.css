@@ -3,11 +3,85 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-border;
+  :root {
+    /* Canvas & surfaces */
+    --canvas: 44 29% 95%;            /* #f7f5f0 cream */
+    --panel: 0 0% 100%;              /* #ffffff */
+    --panel-2: 44 29% 97%;           /* #fbf9f4 */
+
+    /* Sidebar */
+    --sidebar: 213 31% 9%;           /* #0f1419 */
+    --sidebar-fg: 220 9% 65%;        /* #9ca3af */
+    --sidebar-fg-active: 0 0% 100%;  /* #ffffff */
+    --sidebar-hover: 213 25% 15%;    /* #1f2937 */
+
+    /* Ink / text */
+    --ink: 222 47% 11%;              /* #0f172a */
+    --ink-2: 215 19% 27%;            /* #334155 */
+    --muted: 44 29% 97%;             /* light neutral for bg */
+    --muted-fg: 215 16% 47%;         /* #64748b */
+
+    /* Lines */
+    --line: 39 27% 88%;              /* #e7e2d6 warm */
+    --line-soft: 39 31% 92%;         /* #f0ebe0 */
+
+    /* Accent (teal) */
+    --accent: 173 80% 40%;           /* #14b8a6 */
+    --accent-fg: 0 0% 100%;
+    --accent-soft: 166 76% 90%;      /* #ccfbf1 */
+    --accent-soft-fg: 164 86% 16%;   /* #065f46 */
+
+    /* Semantic */
+    --credit: 160 84% 39%;           /* #10b981 (for positive) */
+    --debit: 0 72% 51%;              /* #dc2626 */
+    --warn: 32 95% 44%;              /* #d97706 */
+    --info: 217 91% 60%;             /* #3b82f6 */
   }
+
+  * {
+    @apply border-line;
+  }
+
+  html {
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Tabular numerics + monospace for numbers */
+  .mono,
+  .tabular {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* Nice defaults */
+  h1, h2, h3, h4 {
+    @apply tracking-tight text-ink;
+  }
+
+  ::selection {
+    @apply bg-accent-soft text-accent-soft-fg;
+  }
+}
+
+@layer components {
+  /* KPI value display */
+  .kpi-value {
+    @apply text-2xl font-bold mono;
+    letter-spacing: -0.02em;
+  }
+
+  /* Pill categories */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-panel-2 text-ink-2 text-xs font-medium border border-line-soft;
+  }
+  .pill-warn {
+    @apply bg-amber-50 text-amber-800 border-amber-200;
   }
 }
