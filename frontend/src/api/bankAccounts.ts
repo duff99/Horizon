@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import type { BankAccount } from '@/types/api';
 
@@ -61,4 +62,8 @@ export async function createBankAccount(
     }),
   });
   return mapBA(r);
+}
+
+export function useBankAccounts() {
+  return useQuery({ queryKey: ['bankAccounts'], queryFn: listBankAccounts });
 }

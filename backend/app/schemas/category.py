@@ -1,6 +1,14 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CategoryListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    slug: str
+    parent_category_id: int | None = None
+
+
 class CategoryRead(BaseModel):
     # populate_by_name permet de construire l'objet en utilisant soit le
     # champ `parent_id` soit l'alias `parent_category_id` tel qu'exposé par

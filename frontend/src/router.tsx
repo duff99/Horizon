@@ -7,6 +7,7 @@ import { AdminEntitiesPage } from '@/pages/AdminEntitiesPage';
 import { AdminUsersPage } from '@/pages/AdminUsersPage';
 import { CounterpartiesPage } from '@/pages/CounterpartiesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { RulesPage } from '@/pages/RulesPage';
 import { ImportHistoryPage } from '@/pages/ImportHistoryPage';
 import { ImportNewPage } from '@/pages/ImportNewPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: '/imports/nouveau', element: <ImportNewPage /> },
       { path: '/transactions', element: <TransactionsPage /> },
       { path: '/contreparties', element: <CounterpartiesPage /> },
+      { path: '/regles', element: <RulesPage /> },
       { path: '/administration/utilisateurs', element: <AdminUsersPage /> },
       { path: '/administration/societes', element: <AdminEntitiesPage /> },
       {

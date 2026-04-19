@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import type { Entity } from '@/types/api';
 
@@ -48,4 +49,8 @@ export async function createEntity(input: CreateEntityInput): Promise<Entity> {
 
 export async function deleteEntity(id: number): Promise<void> {
   await apiFetch<unknown>(`/api/entities/${id}`, { method: 'DELETE' });
+}
+
+export function useEntities() {
+  return useQuery({ queryKey: ['entities'], queryFn: listEntities });
 }

@@ -8,6 +8,7 @@ const items = [
   { to: '/imports', label: 'Imports', adminOnly: false },
   { to: '/transactions', label: 'Transactions', adminOnly: false },
   { to: '/contreparties', label: 'Contreparties', adminOnly: false },
+  { to: '/regles', label: 'Règles', adminOnly: false },
   { to: '/administration/utilisateurs', label: 'Utilisateurs', adminOnly: true },
   { to: '/administration/societes', label: 'Sociétés', adminOnly: true },
   {

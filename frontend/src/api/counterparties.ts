@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import type { Counterparty } from "../types/api";
 
 export async function fetchCounterparties(
@@ -21,4 +22,11 @@ export async function updateCounterparty(
   });
   if (!resp.ok) throw new Error(`PATCH → ${resp.status}`);
   return resp.json();
+}
+
+export function useCounterparties(filters: { status?: "pending" | "active" | "ignored" } = {}) {
+  return useQuery({
+    queryKey: ["counterparties", filters],
+    queryFn: () => fetchCounterparties(filters.status),
+  });
 }
