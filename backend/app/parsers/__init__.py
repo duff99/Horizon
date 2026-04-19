@@ -53,7 +53,9 @@ def _auto_register() -> None:
     un double-appel (notamment en tests quand le module est re-importé).
     """
     from app.parsers.delubac import DelubacParser
+    from app.parsers.credit_agricole import CreditAgricoleParser
     register_parser(DelubacParser(), replace=True)
+    register_parser(CreditAgricoleParser(), replace=True)
 
 
 _auto_register()
