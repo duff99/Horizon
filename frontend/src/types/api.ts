@@ -100,3 +100,28 @@ export interface Counterparty {
   name: string;
   status: "pending" | "active" | "ignored";
 }
+
+export type DashboardPeriod =
+  | "current_month"
+  | "previous_month"
+  | "last_30d"
+  | "last_90d";
+
+export interface DailyCashflow {
+  date: string;
+  inflows: string;
+  outflows: string;
+}
+
+export interface DashboardSummary {
+  period: DashboardPeriod;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  total_balance: string;
+  total_balance_asof: string | null;
+  inflows: string;
+  outflows: string;
+  uncategorized_count: number;
+  daily: DailyCashflow[];
+}
