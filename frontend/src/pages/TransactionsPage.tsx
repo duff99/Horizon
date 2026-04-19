@@ -23,11 +23,17 @@ import {
   type RuleSuggestion,
 } from "@/api/rules";
 import type { TransactionFilter } from "../types/api";
+import { cn } from "@/lib/utils";
 
 const EUR = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "EUR",
   minimumFractionDigits: 2,
+});
+
+const DATE = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "short",
 });
 
 export function TransactionsPage() {
@@ -139,125 +145,222 @@ export function TransactionsPage() {
       }
     : null;
 
+  const uncategorizedCount = items.filter((tx) => !tx.category).length;
+  const totalCount = data?.total ?? 0;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-6">
-      <h1 className="text-2xl font-semibold">Transactions</h1>
-      <TransactionFilters value={filters} onChange={setFilters} />
+    <div className="space-y-6">
+      {/* Page head */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Transactions</h1>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            {totalCount.toLocaleString("fr-FR")} opération{totalCount > 1 ? "s" : ""}
+            {filters.uncategorized
+              ? " · filtre : non catégorisées"
+              : uncategorizedCount > 0
+              ? ` · ${uncategorizedCount} non catégorisée${uncategorizedCount > 1 ? "s" : ""} sur cette page`
+              : ""}
+          </p>
+        </div>
+      </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={!!filters.uncategorized}
-          onChange={(e) => handleUncategorizedChange(e.target.checked)}
-        />
-        Afficher uniquement les non catégorisées
-      </label>
-
-      {selectedIds.size > 0 && (
-        <div className="sticky top-0 z-10 bg-background border-b p-3 flex flex-wrap gap-2 items-center">
-          <span className="text-sm">
-            {selectedIds.size} transaction{selectedIds.size > 1 ? "s" : ""} sélectionnée{selectedIds.size > 1 ? "s" : ""}
-          </span>
-          <div className="w-56">
-            <CategoryCombobox
-              categories={categories}
-              value={bulkCategoryId}
-              onChange={setBulkCategoryId}
-            />
-          </div>
-          <Button
-            disabled={!bulkCategoryId || bulkMut.isPending}
-            onClick={handleBulkCategorize}
+      {/* Card: filters + bulk + table */}
+      <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-line-soft bg-panel-2 px-5 py-3">
+          <TransactionFilters value={filters} onChange={setFilters} />
+          <label
+            className={cn(
+              "ml-auto flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors",
+              filters.uncategorized
+                ? "border-ink bg-ink text-white"
+                : "border-line bg-panel text-ink-2 hover:border-ink-2",
+            )}
           >
-            Catégoriser {selectedIds.size} transaction{selectedIds.size > 1 ? "s" : ""}
-          </Button>
-          <Button variant="outline" onClick={handleSuggestRule}>
-            Créer une règle depuis la sélection
-          </Button>
-          {suggestError && (
-            <span className="text-destructive text-sm">{suggestError}</span>
-          )}
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-accent"
+              checked={!!filters.uncategorized}
+              onChange={(e) => handleUncategorizedChange(e.target.checked)}
+            />
+            Non catégorisées uniquement
+          </label>
         </div>
-      )}
 
-      {isLoading && <p>Chargement…</p>}
-
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left">
-            <th className="py-2 pr-2 w-8">
-              <input
-                type="checkbox"
-                aria-label="Tout sélectionner"
-                checked={allSelected}
-                onChange={toggleSelectAll}
+        {/* Bulk toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-5 py-2.5 text-[13px]">
+            <span className="font-semibold text-emerald-800">
+              {selectedIds.size} sélectionnée{selectedIds.size > 1 ? "s" : ""}
+            </span>
+            <div className="flex-1" />
+            <div className="w-56">
+              <CategoryCombobox
+                categories={categories}
+                value={bulkCategoryId}
+                onChange={setBulkCategoryId}
               />
-            </th>
-            <th className="py-2">Date</th>
-            <th>Libellé</th>
-            <th>Contrepartie</th>
-            <th>Catégorie</th>
-            <th className="text-right">Montant</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((tx) => (
-            <tr
-              key={tx.id}
-              className={`border-b ${tx.is_aggregation_parent ? "bg-muted/30 font-medium" : ""}`}
+            </div>
+            <Button
+              size="sm"
+              disabled={!bulkCategoryId || bulkMut.isPending}
+              onClick={handleBulkCategorize}
             >
-              <td className="py-2 pr-2">
-                <input
-                  type="checkbox"
-                  aria-label={`Sélectionner transaction ${tx.id}`}
-                  checked={selectedIds.has(tx.id)}
-                  onChange={() => toggleRow(tx.id)}
-                />
-              </td>
-              <td className="py-2">
-                {new Date(tx.operation_date).toLocaleDateString("fr-FR")}
-              </td>
-              <td>{tx.label}</td>
-              <td>{tx.counterparty?.name ?? "—"}</td>
-              <td>{tx.category?.name ?? "Non catégorisée"}</td>
-              <td className={`text-right ${parseFloat(tx.amount) < 0 ? "text-destructive" : "text-emerald-700"}`}>
-                {EUR.format(parseFloat(tx.amount))}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {data && (
-        <div className="flex items-center justify-between text-sm">
-          <span>
-            {data.total} transaction(s) — page {data.page}
-          </span>
-          <div className="flex gap-2">
-            <button
-              disabled={data.page <= 1}
-              onClick={() => setFilters({ ...filters, page: data.page - 1 })}
-              className="rounded-md border px-3 py-1 disabled:opacity-40"
-            >
-              Précédent
-            </button>
-            <button
-              disabled={data.page * data.per_page >= data.total}
-              onClick={() => setFilters({ ...filters, page: data.page + 1 })}
-              className="rounded-md border px-3 py-1 disabled:opacity-40"
-            >
-              Suivant
-            </button>
+              Catégoriser
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleSuggestRule}>
+              Suggérer une règle
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+              Désélectionner
+            </Button>
+            {suggestError && (
+              <span className="w-full text-[12.5px] text-debit">{suggestError}</span>
+            )}
           </div>
+        )}
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line-soft bg-panel-2">
+                <th className="w-[38px] px-5 py-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label="Tout sélectionner"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    className="h-3.5 w-3.5 accent-accent"
+                  />
+                </th>
+                <th className="px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Date
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Contrepartie / Libellé
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Catégorie
+                </th>
+                <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Montant
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                    Chargement…
+                  </td>
+                </tr>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                    Aucune transaction.
+                  </td>
+                </tr>
+              ) : (
+                items.map((tx) => {
+                  const amount = parseFloat(tx.amount);
+                  const selected = selectedIds.has(tx.id);
+                  return (
+                    <tr
+                      key={tx.id}
+                      className={cn(
+                        "border-b border-line-soft transition-colors hover:bg-panel-2",
+                        selected && "bg-teal-50/60 hover:bg-teal-50",
+                        tx.is_aggregation_parent && "bg-panel-2 font-medium",
+                      )}
+                    >
+                      <td className="w-[38px] px-5 py-2.5">
+                        <input
+                          type="checkbox"
+                          aria-label={`Sélectionner transaction ${tx.id}`}
+                          checked={selected}
+                          onChange={() => toggleRow(tx.id)}
+                          className="h-3.5 w-3.5 accent-accent"
+                        />
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 text-[12.5px] text-muted-foreground mono">
+                        {DATE.format(new Date(tx.operation_date))}
+                      </td>
+                      <td className="px-4 py-2.5 text-[13.5px]">
+                        <div className="font-medium text-ink">
+                          {tx.counterparty?.name ?? tx.label}
+                        </div>
+                        {tx.counterparty?.name && (
+                          <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                            {tx.label}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-[13px]">
+                        {tx.category ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-panel-2 px-2 py-0.5 text-[12px] font-medium text-ink-2">
+                            <span className="h-2 w-2 rounded-sm bg-slate-400" />
+                            {tx.category.name}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-800">
+                            ⚠ Non catégorisée
+                          </span>
+                        )}
+                      </td>
+                      <td
+                        className={cn(
+                          "whitespace-nowrap px-5 py-2.5 text-right font-semibold mono",
+                          amount < 0 ? "text-debit" : "text-credit",
+                        )}
+                      >
+                        {amount >= 0 ? "+" : ""}
+                        {EUR.format(amount)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+
+        {/* Footer / pagination */}
+        {data && data.total > 0 && (
+          <div className="flex items-center justify-between border-t border-line-soft bg-panel-2 px-5 py-3 text-[12.5px] text-muted-foreground">
+            <span>
+              {data.total.toLocaleString("fr-FR")} résultat
+              {data.total > 1 ? "s" : ""} — page {data.page}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={data.page <= 1}
+                onClick={() => setFilters({ ...filters, page: data.page - 1 })}
+              >
+                Précédent
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={data.page * data.per_page >= data.total}
+                onClick={() => setFilters({ ...filters, page: data.page + 1 })}
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <Drawer open={ruleDrawerOpen} onOpenChange={setRuleDrawerOpen}>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>Nouvelle règle depuis la sélection</DrawerTitle>
           </DrawerHeader>
-          <div className="p-6 max-w-2xl">
+          <div className="max-w-2xl p-6">
             <RuleForm
               categories={categories}
               entities={entities}

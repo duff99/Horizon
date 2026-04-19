@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { ApiError } from '@/api/client';
 import { createUser, listUsers } from '@/api/users';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -45,120 +44,158 @@ export function AdminUsersPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Utilisateurs</h1>
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          Utilisateurs
+        </h1>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          {users?.length ?? 0} utilisateur{(users?.length ?? 0) > 1 ? 's' : ''}
+        </p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Créer un utilisateur</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid grid-cols-2 gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              create.mutate({
-                email,
-                password,
-                role,
-                fullName: fullName || undefined,
-              });
-            }}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="u-email">Email</Label>
-              <Input
-                id="u-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+      <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
+        <h2 className="text-[14px] font-semibold text-ink">Créer un utilisateur</h2>
+        <form
+          className="mt-4 grid grid-cols-2 gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate({
+              email,
+              password,
+              role,
+              fullName: fullName || undefined,
+            });
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="u-email" className="text-[12.5px] font-medium text-ink-2">
+              Email
+            </Label>
+            <Input
+              id="u-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-name" className="text-[12.5px] font-medium text-ink-2">
+              Nom complet
+            </Label>
+            <Input
+              id="u-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-pwd" className="text-[12.5px] font-medium text-ink-2">
+              Mot de passe (12 caractères min.)
+            </Label>
+            <Input
+              id="u-pwd"
+              type="password"
+              minLength={12}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[12.5px] font-medium text-ink-2">Rôle</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="reader">Lecture</SelectItem>
+                <SelectItem value="admin">Administrateur</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {formError && (
+            <div
+              role="alert"
+              className="col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800"
+            >
+              {formError}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="u-name">Nom complet</Label>
-              <Input
-                id="u-name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="u-pwd">Mot de passe (12 caractères min.)</Label>
-              <Input
-                id="u-pwd"
-                type="password"
-                minLength={12}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Rôle</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="reader">Lecture</SelectItem>
-                  <SelectItem value="admin">Administrateur</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {formError && (
-              <p className="col-span-2 text-red-600 text-sm">{formError}</p>
-            )}
-            <div className="col-span-2">
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Liste des utilisateurs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading && <p>Chargement…</p>}
-          {users && users.length === 0 && (
-            <p className="text-slate-500">Aucun utilisateur enregistré.</p>
           )}
-          {users && users.length > 0 && (
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-600">
-                <tr>
-                  <th className="py-2">Email</th>
-                  <th>Nom</th>
-                  <th>Rôle</th>
-                  <th>Statut</th>
-                  <th>Créé le</th>
+          <div className="col-span-2">
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? 'Création…' : 'Créer'}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Chargement…
+        </div>
+      ) : !users || users.length === 0 ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Aucun utilisateur enregistré.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line-soft bg-panel-2">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Email
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Nom
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Rôle
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Statut
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Créé le
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr
+                  key={u.id}
+                  className="border-b border-line-soft transition-colors hover:bg-panel-2"
+                >
+                  <td className="px-4 py-3 text-[13px] font-medium text-ink">
+                    {u.email}
+                  </td>
+                  <td className="px-3 py-3 text-[13px] text-ink-2">
+                    {u.fullName ?? '—'}
+                  </td>
+                  <td className="px-3 py-3 text-[13px] text-ink-2">
+                    {u.role === 'admin' ? 'Administrateur' : 'Lecture'}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] font-medium ${
+                        u.isActive
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-line-soft bg-panel-2 text-muted-foreground'
+                      }`}
+                    >
+                      {u.isActive ? 'Actif' : 'Inactif'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                    {new Date(u.createdAt).toLocaleDateString('fr-FR')}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-t border-slate-200">
-                    <td className="py-2">{u.email}</td>
-                    <td>{u.fullName ?? '—'}</td>
-                    <td>{u.role === 'admin' ? 'Administrateur' : 'Lecture'}</td>
-                    <td>
-                      {u.isActive ? (
-                        <span className="text-green-700">Actif</span>
-                      ) : (
-                        <span className="text-slate-500">Inactif</span>
-                      )}
-                    </td>
-                    <td>{new Date(u.createdAt).toLocaleDateString('fr-FR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

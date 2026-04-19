@@ -46,6 +46,12 @@ backend/tests/fixtures/delubac/*.pdf
 !backend/tests/fixtures/delubac/anon_*.pdf
 !backend/tests/fixtures/delubac/synthetic_*.pdf
 
+# Documents bancaires réels déposés localement — NE JAMAIS commiter
+documents-test/
+
+# TypeScript incremental build cache
+frontend/tsconfig.tsbuildinfo
+
 # Tests
 .tox/
 .nox/
