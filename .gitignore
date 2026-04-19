@@ -52,3 +52,4 @@ backend/tests/fixtures/delubac/*.pdf
 
 # Docker
 docker-compose.override.yml
+.superpowers/
