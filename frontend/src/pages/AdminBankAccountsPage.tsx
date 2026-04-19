@@ -5,7 +5,6 @@ import { ApiError } from '@/api/client';
 import { createBankAccount, listBankAccounts } from '@/api/bankAccounts';
 import { listEntities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -58,174 +57,221 @@ export function AdminBankAccountsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Comptes bancaires</h1>
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          Comptes bancaires
+        </h1>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          {accounts?.length ?? 0} compte{(accounts?.length ?? 0) > 1 ? 's' : ''} enregistré
+          {(accounts?.length ?? 0) > 1 ? 's' : ''}
+        </p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Ajouter un compte bancaire</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid grid-cols-2 gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!entityId) {
-                setFormError('Veuillez sélectionner une société');
-                return;
+      <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
+        <h2 className="text-[14px] font-semibold text-ink">Ajouter un compte bancaire</h2>
+        <form
+          className="mt-4 grid grid-cols-2 gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!entityId) {
+              setFormError('Veuillez sélectionner une société');
+              return;
+            }
+            create.mutate({
+              entityId: Number(entityId),
+              name,
+              iban,
+              bic: bic || undefined,
+              bankName,
+              bankCode,
+            });
+          }}
+        >
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-[12.5px] font-medium text-ink-2">Société</Label>
+            <Select value={entityId} onValueChange={setEntityId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir une société" />
+              </SelectTrigger>
+              <SelectContent>
+                {entities?.map((e) => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ba-name" className="text-[12.5px] font-medium text-ink-2">
+              Libellé du compte
+            </Label>
+            <Input
+              id="ba-name"
+              placeholder="Compte courant principal"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ba-iban" className="text-[12.5px] font-medium text-ink-2">
+              IBAN
+            </Label>
+            <Input
+              id="ba-iban"
+              pattern="^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$"
+              title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
+              required
+              value={iban}
+              onChange={(e) =>
+                setIban(e.target.value.toUpperCase().replace(/\s/g, ''))
               }
-              create.mutate({
-                entityId: Number(entityId),
-                name,
-                iban,
-                bic: bic || undefined,
-                bankName,
-                bankCode,
-              });
-            }}
-          >
-            <div className="space-y-2 col-span-2">
-              <Label>Société</Label>
-              <Select value={entityId} onValueChange={setEntityId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir une société" />
-                </SelectTrigger>
-                <SelectContent>
-                  {entities?.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ba-name">Libellé du compte</Label>
-              <Input
-                id="ba-name"
-                placeholder="Compte courant principal"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ba-iban">IBAN</Label>
-              <Input
-                id="ba-iban"
-                pattern="^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$"
-                title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
-                required
-                value={iban}
-                onChange={(e) =>
-                  setIban(e.target.value.toUpperCase().replace(/\s/g, ''))
-                }
-              />
-              {iban && <p className="text-xs text-slate-500">{formatIban(iban)}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ba-bic">BIC (optionnel)</Label>
-              <Input
-                id="ba-bic"
-                maxLength={11}
-                value={bic}
-                onChange={(e) => setBic(e.target.value.toUpperCase())}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ba-bank">Banque</Label>
-              <Input
-                id="ba-bank"
-                placeholder="Delubac"
-                required
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="ba-bankcode">
-                Code analyseur interne (pour le parser d'import)
-              </Label>
-              <Input
-                id="ba-bankcode"
-                placeholder="delubac"
-                required
-                pattern="^[a-z0-9_-]+$"
-                title="Minuscules, chiffres, tirets et underscores uniquement"
-                value={bankCode}
-                onChange={(e) =>
-                  setBankCode(e.target.value.toLowerCase().replace(/\s/g, ''))
-                }
-              />
-              <p className="text-xs text-slate-500">
-                Utilisé par le module d'import (Plan 1) pour sélectionner le bon
-                analyseur. Exemples : <code>delubac</code>, <code>qonto</code>,{' '}
-                <code>bnp</code>.
+            />
+            {iban && (
+              <p className="font-mono text-[11.5px] tabular-nums text-muted-foreground">
+                {formatIban(iban)}
               </p>
-            </div>
-
-            {formError && (
-              <p className="col-span-2 text-red-600 text-sm">{formError}</p>
             )}
+          </div>
 
-            <div className="col-span-2">
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
+          <div className="space-y-1.5">
+            <Label htmlFor="ba-bic" className="text-[12.5px] font-medium text-ink-2">
+              BIC (optionnel)
+            </Label>
+            <Input
+              id="ba-bic"
+              maxLength={11}
+              value={bic}
+              onChange={(e) => setBic(e.target.value.toUpperCase())}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ba-bank" className="text-[12.5px] font-medium text-ink-2">
+              Banque
+            </Label>
+            <Input
+              id="ba-bank"
+              placeholder="Delubac"
+              required
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+            />
+          </div>
+
+          <div className="col-span-2 space-y-1.5">
+            <Label htmlFor="ba-bankcode" className="text-[12.5px] font-medium text-ink-2">
+              Code analyseur interne (pour le parser d'import)
+            </Label>
+            <Input
+              id="ba-bankcode"
+              placeholder="delubac"
+              required
+              pattern="^[a-z0-9_-]+$"
+              title="Minuscules, chiffres, tirets et underscores uniquement"
+              value={bankCode}
+              onChange={(e) =>
+                setBankCode(e.target.value.toLowerCase().replace(/\s/g, ''))
+              }
+            />
+            <p className="text-[11.5px] text-muted-foreground">
+              Utilisé par le module d'import (Plan 1) pour sélectionner le bon
+              analyseur. Exemples :{' '}
+              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">delubac</code>,{' '}
+              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">qonto</code>,{' '}
+              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">bnp</code>.
+            </p>
+          </div>
+
+          {formError && (
+            <div
+              role="alert"
+              className="col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800"
+            >
+              {formError}
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Comptes enregistrés</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading && <p>Chargement…</p>}
-          {accounts && accounts.length === 0 && (
-            <p className="text-slate-500">Aucun compte enregistré pour l'instant.</p>
-          )}
-          {accounts && accounts.length > 0 && (
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-600">
-                <tr>
-                  <th className="py-2">Société</th>
-                  <th>Libellé</th>
-                  <th>Banque</th>
-                  <th>IBAN</th>
-                  <th>Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((a) => {
-                  const entity = entities?.find((e) => e.id === a.entityId);
-                  return (
-                    <tr key={a.id} className="border-t border-slate-200">
-                      <td className="py-2">{entity?.name ?? '—'}</td>
-                      <td>{a.name}</td>
-                      <td>{a.bankName}</td>
-                      <td className="font-mono">{formatIban(a.iban)}</td>
-                      <td>
-                        {a.isActive ? (
-                          <span className="text-green-700">Actif</span>
-                        ) : (
-                          <span className="text-slate-500">Inactif</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          <div className="col-span-2">
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? 'Création…' : 'Créer'}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Chargement…
+        </div>
+      ) : !accounts || accounts.length === 0 ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Aucun compte enregistré pour l'instant.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line-soft bg-panel-2">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Société
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Libellé
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Banque
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  IBAN
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Statut
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => {
+                const entity = entities?.find((e) => e.id === a.entityId);
+                return (
+                  <tr
+                    key={a.id}
+                    className="border-b border-line-soft transition-colors hover:bg-panel-2"
+                  >
+                    <td className="px-4 py-3 text-[13px] text-ink-2">
+                      {entity?.name ?? '—'}
+                    </td>
+                    <td className="px-3 py-3 text-[13px] font-medium text-ink">
+                      {a.name}
+                    </td>
+                    <td className="px-3 py-3 text-[13px] text-ink-2">
+                      {a.bankName}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[12.5px] tabular-nums text-ink-2">
+                      {formatIban(a.iban)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] font-medium ${
+                          a.isActive
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : 'border-line-soft bg-panel-2 text-muted-foreground'
+                        }`}
+                      >
+                        {a.isActive ? 'Actif' : 'Inactif'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

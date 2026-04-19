@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { ApiError } from '@/api/client';
 import { createEntity, deleteEntity, listEntities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -71,119 +70,143 @@ export function AdminEntitiesPage() {
   const ordered = entities ? toTreeOrder(entities) : [];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Sociétés</h1>
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          Sociétés
+        </h1>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          {ordered.length} société{ordered.length > 1 ? 's' : ''} enregistrée
+          {ordered.length > 1 ? 's' : ''}
+        </p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Créer une société</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid grid-cols-2 gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              create.mutate({
-                name,
-                legalName,
-                siret: siret || undefined,
-                parentEntityId: parentId === 'none' ? null : Number(parentId),
-              });
-            }}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="e-name">Nom usuel</Label>
-              <Input
-                id="e-name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+      <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
+        <h2 className="text-[14px] font-semibold text-ink">Créer une société</h2>
+        <form
+          className="mt-4 grid grid-cols-2 gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate({
+              name,
+              legalName,
+              siret: siret || undefined,
+              parentEntityId: parentId === 'none' ? null : Number(parentId),
+            });
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="e-name" className="text-[12.5px] font-medium text-ink-2">
+              Nom usuel
+            </Label>
+            <Input
+              id="e-name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="e-legal" className="text-[12.5px] font-medium text-ink-2">
+              Raison sociale
+            </Label>
+            <Input
+              id="e-legal"
+              required
+              value={legalName}
+              onChange={(e) => setLegalName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="e-siret" className="text-[12.5px] font-medium text-ink-2">
+              SIRET
+            </Label>
+            <Input
+              id="e-siret"
+              value={siret}
+              onChange={(e) => setSiret(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[12.5px] font-medium text-ink-2">
+              Société parente
+            </Label>
+            <Select value={parentId} onValueChange={setParentId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Aucune (société racine)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucune (société racine)</SelectItem>
+                {entities?.map((e) => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {formError && (
+            <div
+              role="alert"
+              className="col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800"
+            >
+              {formError}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="e-legal">Raison sociale</Label>
-              <Input
-                id="e-legal"
-                required
-                value={legalName}
-                onChange={(e) => setLegalName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="e-siret">SIRET</Label>
-              <Input
-                id="e-siret"
-                value={siret}
-                onChange={(e) => setSiret(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Société parente</Label>
-              <Select value={parentId} onValueChange={setParentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Aucune (société racine)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucune (société racine)</SelectItem>
-                  {entities?.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {formError && (
-              <p className="col-span-2 text-red-600 text-sm">{formError}</p>
-            )}
-            <div className="col-span-2">
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Liste des sociétés</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading && <p>Chargement…</p>}
-          {ordered.length === 0 && !isLoading && (
-            <p className="text-slate-500">Aucune société enregistrée.</p>
           )}
-          {ordered.length > 0 && (
-            <ul className="space-y-1">
-              {ordered.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex items-center justify-between py-1 border-b border-slate-100"
+          <div className="col-span-2">
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? 'Création…' : 'Créer'}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Chargement…
+        </div>
+      ) : ordered.length === 0 ? (
+        <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+          Aucune société enregistrée.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">
+          <ul>
+            {ordered.map((e) => (
+              <li
+                key={e.id}
+                className="flex items-center justify-between border-b border-line-soft px-5 py-3 transition-colors last:border-b-0 hover:bg-panel-2"
+              >
+                <div
+                  className="flex items-center gap-2 text-[13px]"
+                  style={{ paddingLeft: `${e.depth * 20}px` }}
                 >
-                  <span style={{ paddingLeft: `${e.depth * 24}px` }}>
-                    {e.depth > 0 && '↳ '}
-                    <strong>{e.name}</strong>
-                    <span className="text-slate-500 ml-2">— {e.legalName}</span>
-                    {e.siret && (
-                      <span className="text-slate-400 ml-2">SIRET {e.siret}</span>
-                    )}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (confirm(`Supprimer "${e.name}" ?`)) del.mutate(e.id);
-                    }}
-                  >
-                    Supprimer
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                  {e.depth > 0 && (
+                    <span className="text-muted-foreground">↳</span>
+                  )}
+                  <span className="font-medium text-ink">{e.name}</span>
+                  <span className="text-ink-2">— {e.legalName}</span>
+                  {e.siret && (
+                    <span className="ml-1 font-mono text-[11.5px] tabular-nums text-muted-foreground">
+                      SIRET {e.siret}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-debit hover:text-debit"
+                  onClick={() => {
+                    if (confirm(`Supprimer "${e.name}" ?`)) del.mutate(e.id);
+                  }}
+                >
+                  Supprimer
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
