@@ -30,6 +30,53 @@ class DailyBalance(BaseModel):
     balance: Decimal
 
 
+class BankAccountBalance(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    bank_account_id: int
+    entity_id: int
+    entity_name: str
+    bank_name: str
+    account_name: str
+    balance: Decimal
+    asof: date | None
+    delta_vs_prev_month: Decimal | None
+    last_import_at: date | None
+
+
+class CategoryBreakdownItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: int | None
+    name: str
+    color: str | None
+    amount: Decimal
+    pct: float
+
+
+class CategoryBreakdown(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    income: list[CategoryBreakdownItem]
+    expense: list[CategoryBreakdownItem]
+
+
+class TopCounterpartyItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    counterparty_id: int | None
+    name: str
+    amount: Decimal
+    transactions_count: int
+
+
+class TopCounterparties(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    top_inflows: list[TopCounterpartyItem]
+    top_outflows: list[TopCounterpartyItem]
+
+
 class DashboardSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

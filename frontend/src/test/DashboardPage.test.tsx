@@ -48,6 +48,14 @@ describe("DashboardPage", () => {
       return Promise.resolve({
         ok: true,
         json: async () => {
+          if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/categories")) {
+            return { income: [], expense: [] };
+          }
+          if (s.includes("/api/dashboard/top-counterparties")) {
+            return { top_inflows: [], top_outflows: [] };
+          }
+          if (s.includes("/api/entities")) return [];
           if (s.includes("period=previous_month")) {
             return mockSummary({
               period: "previous_month",
@@ -82,9 +90,22 @@ describe("DashboardPage", () => {
   });
 
   it("shows an empty state when no daily data", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockSummary({ daily: [] }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const s = String(url);
+      return Promise.resolve({
+        ok: true,
+        json: async () => {
+          if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/categories")) {
+            return { income: [], expense: [] };
+          }
+          if (s.includes("/api/dashboard/top-counterparties")) {
+            return { top_inflows: [], top_outflows: [] };
+          }
+          if (s.includes("/api/entities")) return [];
+          return mockSummary({ daily: [] });
+        },
+      });
     });
     renderPage();
     expect(
@@ -93,7 +114,25 @@ describe("DashboardPage", () => {
   });
 
   it("surfaces a fetch error", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const s = String(url);
+      if (s.includes("/api/dashboard/summary")) {
+        return Promise.resolve({ ok: false, status: 500 });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => {
+          if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/categories")) {
+            return { income: [], expense: [] };
+          }
+          if (s.includes("/api/dashboard/top-counterparties")) {
+            return { top_inflows: [], top_outflows: [] };
+          }
+          return [];
+        },
+      });
+    });
     renderPage();
     expect(await screen.findByRole("alert")).toHaveTextContent(/Erreur/i);
   });

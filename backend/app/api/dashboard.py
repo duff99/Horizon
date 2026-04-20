@@ -12,15 +12,23 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.bank_account import BankAccount
+from app.models.category import Category
+from app.models.counterparty import Counterparty
+from app.models.entity import Entity
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User
 from app.models.user_entity_access import UserEntityAccess
 from app.schemas.dashboard import (
+    BankAccountBalance,
+    CategoryBreakdown,
+    CategoryBreakdownItem,
     DailyBalance,
     DailyCashflow,
     DashboardPeriod,
     DashboardSummary,
+    TopCounterparties,
+    TopCounterpartyItem,
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -321,3 +329,310 @@ def _compute_total_balance(
     total = sum((r.closing_balance for r in rows), Decimal("0"))
     max_date = max((r.period_end for r in rows if r.period_end), default=None)
     return total, max_date
+
+
+def _resolve_accessible_bank_accounts(
+    db: Session, *, user: User, entity_id: int | None,
+) -> list[int]:
+    accessible_entity_ids = list(
+        db.scalars(
+            select(UserEntityAccess.entity_id).where(
+                UserEntityAccess.user_id == user.id
+            )
+        )
+    )
+    if entity_id is not None and entity_id not in accessible_entity_ids:
+        raise HTTPException(status_code=403, detail="Entité non accessible")
+    entity_filter = (
+        [BankAccount.entity_id == entity_id]
+        if entity_id is not None
+        else [BankAccount.entity_id.in_(accessible_entity_ids)]
+    )
+    return list(db.scalars(select(BankAccount.id).where(and_(*entity_filter))))
+
+
+@router.get("/bank-balances", response_model=list[BankAccountBalance])
+def get_bank_balances(
+    entity_id: int | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[BankAccountBalance]:
+    """Solde par compte bancaire + Δ vs mois précédent + date du dernier import."""
+    bank_account_ids = _resolve_accessible_bank_accounts(
+        db, user=user, entity_id=entity_id,
+    )
+    if not bank_account_ids:
+        return []
+
+    accounts = db.execute(
+        select(BankAccount, Entity.name.label("entity_name"))
+        .join(Entity, Entity.id == BankAccount.entity_id)
+        .where(BankAccount.id.in_(bank_account_ids))
+        .order_by(Entity.name, BankAccount.bank_name, BankAccount.name)
+    ).all()
+
+    # Dernier closing_balance par compte
+    latest_per_account = (
+        select(
+            ImportRecord.bank_account_id.label("ba_id"),
+            func.max(ImportRecord.period_end).label("last_end"),
+        )
+        .where(
+            and_(
+                ImportRecord.bank_account_id.in_(bank_account_ids),
+                ImportRecord.status == ImportStatus.COMPLETED,
+                ImportRecord.closing_balance.is_not(None),
+                ImportRecord.period_end.is_not(None),
+            )
+        )
+        .group_by(ImportRecord.bank_account_id)
+        .subquery()
+    )
+    latest_rows = db.execute(
+        select(
+            ImportRecord.bank_account_id,
+            ImportRecord.closing_balance,
+            ImportRecord.period_end,
+        )
+        .join(
+            latest_per_account,
+            and_(
+                ImportRecord.bank_account_id == latest_per_account.c.ba_id,
+                ImportRecord.period_end == latest_per_account.c.last_end,
+            ),
+        )
+    ).all()
+    latest_by_ba: dict[int, tuple[Decimal, date]] = {
+        r.bank_account_id: (Decimal(r.closing_balance), r.period_end)
+        for r in latest_rows
+    }
+
+    # Dernière date d'import (status COMPLETED) par compte — peut différer de period_end
+    last_import_rows = db.execute(
+        select(
+            ImportRecord.bank_account_id,
+            func.max(ImportRecord.created_at).label("last_at"),
+        )
+        .where(
+            and_(
+                ImportRecord.bank_account_id.in_(bank_account_ids),
+                ImportRecord.status == ImportStatus.COMPLETED,
+            )
+        )
+        .group_by(ImportRecord.bank_account_id)
+    ).all()
+    last_import_by_ba: dict[int, date] = {
+        r.bank_account_id: r.last_at.date() if r.last_at else None
+        for r in last_import_rows
+    }
+
+    # Δ vs mois précédent : solde actuel - solde du dernier import dont period_end < début du mois courant
+    today = date.today()
+    first_of_month = today.replace(day=1)
+    prev_rows = db.execute(
+        select(
+            ImportRecord.bank_account_id,
+            func.max(ImportRecord.period_end).label("last_end"),
+        )
+        .where(
+            and_(
+                ImportRecord.bank_account_id.in_(bank_account_ids),
+                ImportRecord.status == ImportStatus.COMPLETED,
+                ImportRecord.closing_balance.is_not(None),
+                ImportRecord.period_end < first_of_month,
+            )
+        )
+        .group_by(ImportRecord.bank_account_id)
+    ).all()
+    prev_end_by_ba = {r.bank_account_id: r.last_end for r in prev_rows}
+    prev_balance_rows = db.execute(
+        select(
+            ImportRecord.bank_account_id,
+            ImportRecord.closing_balance,
+        ).where(
+            and_(
+                ImportRecord.bank_account_id.in_(prev_end_by_ba.keys()),
+                ImportRecord.period_end.in_(prev_end_by_ba.values()),
+                ImportRecord.status == ImportStatus.COMPLETED,
+            )
+        )
+    ).all() if prev_end_by_ba else []
+    prev_balance_by_ba: dict[int, Decimal] = {
+        r.bank_account_id: Decimal(r.closing_balance)
+        for r in prev_balance_rows
+        if prev_end_by_ba.get(r.bank_account_id)
+    }
+
+    out: list[BankAccountBalance] = []
+    for ba, entity_name in accounts:
+        current = latest_by_ba.get(ba.id)
+        balance = current[0] if current else Decimal("0")
+        asof = current[1] if current else None
+        prev = prev_balance_by_ba.get(ba.id)
+        delta = balance - prev if prev is not None else None
+        out.append(
+            BankAccountBalance(
+                bank_account_id=ba.id,
+                entity_id=ba.entity_id,
+                entity_name=entity_name,
+                bank_name=ba.bank_name,
+                account_name=ba.name,
+                balance=balance,
+                asof=asof,
+                delta_vs_prev_month=delta,
+                last_import_at=last_import_by_ba.get(ba.id),
+            )
+        )
+    return out
+
+
+@router.get("/categories", response_model=CategoryBreakdown)
+def get_category_breakdown(
+    period: DashboardPeriod = Query(DashboardPeriod.CURRENT_MONTH),
+    entity_id: int | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CategoryBreakdown:
+    """Répartition des flux par catégorie (top 5 + 'Autres') sur la période."""
+    bank_account_ids = _resolve_accessible_bank_accounts(
+        db, user=user, entity_id=entity_id,
+    )
+    if not bank_account_ids:
+        return CategoryBreakdown(income=[], expense=[])
+
+    today = date.today()
+    period_start, period_end, _ = _resolve_period(period, today)
+
+    base_where = and_(
+        Transaction.bank_account_id.in_(bank_account_ids),
+        Transaction.operation_date >= period_start,
+        Transaction.operation_date <= period_end,
+        Transaction.is_aggregation_parent.is_(False),
+    )
+
+    rows = db.execute(
+        select(
+            Transaction.category_id,
+            Category.name,
+            Category.color,
+            func.sum(
+                case((Transaction.amount > 0, Transaction.amount), else_=0)
+            ).label("inflow"),
+            func.sum(
+                case((Transaction.amount < 0, Transaction.amount), else_=0)
+            ).label("outflow"),
+        )
+        .select_from(Transaction)
+        .outerjoin(Category, Category.id == Transaction.category_id)
+        .where(base_where)
+        .group_by(Transaction.category_id, Category.name, Category.color)
+    ).all()
+
+    income_raw: list[tuple[int | None, str, str | None, Decimal]] = []
+    expense_raw: list[tuple[int | None, str, str | None, Decimal]] = []
+    for r in rows:
+        name = r.name or "Non catégorisé"
+        if r.inflow and Decimal(r.inflow) > 0:
+            income_raw.append((r.category_id, name, r.color, Decimal(r.inflow)))
+        if r.outflow and Decimal(r.outflow) < 0:
+            expense_raw.append(
+                (r.category_id, name, r.color, abs(Decimal(r.outflow)))
+            )
+
+    return CategoryBreakdown(
+        income=_top_n_with_others(income_raw, 5),
+        expense=_top_n_with_others(expense_raw, 5),
+    )
+
+
+def _top_n_with_others(
+    rows: list[tuple[int | None, str, str | None, Decimal]],
+    n: int,
+) -> list[CategoryBreakdownItem]:
+    rows = sorted(rows, key=lambda r: r[3], reverse=True)
+    total = sum((r[3] for r in rows), Decimal("0"))
+    if total == 0:
+        return []
+    top = rows[:n]
+    rest = rows[n:]
+    out = [
+        CategoryBreakdownItem(
+            category_id=cid,
+            name=name,
+            color=color,
+            amount=amount,
+            pct=float(amount / total * 100),
+        )
+        for cid, name, color, amount in top
+    ]
+    if rest:
+        rest_sum = sum((r[3] for r in rest), Decimal("0"))
+        out.append(
+            CategoryBreakdownItem(
+                category_id=None,
+                name="Autres",
+                color=None,
+                amount=rest_sum,
+                pct=float(rest_sum / total * 100),
+            )
+        )
+    return out
+
+
+@router.get("/top-counterparties", response_model=TopCounterparties)
+def get_top_counterparties(
+    period: DashboardPeriod = Query(DashboardPeriod.CURRENT_MONTH),
+    entity_id: int | None = Query(None),
+    limit: int = Query(5, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TopCounterparties:
+    """Top N contreparties en encaissements / décaissements sur la période."""
+    bank_account_ids = _resolve_accessible_bank_accounts(
+        db, user=user, entity_id=entity_id,
+    )
+    if not bank_account_ids:
+        return TopCounterparties(top_inflows=[], top_outflows=[])
+
+    today = date.today()
+    period_start, period_end, _ = _resolve_period(period, today)
+
+    base_where = and_(
+        Transaction.bank_account_id.in_(bank_account_ids),
+        Transaction.operation_date >= period_start,
+        Transaction.operation_date <= period_end,
+        Transaction.is_aggregation_parent.is_(False),
+    )
+
+    def _query(is_inflow: bool) -> list[TopCounterpartyItem]:
+        amount_cond = Transaction.amount > 0 if is_inflow else Transaction.amount < 0
+        rows = db.execute(
+            select(
+                Transaction.counterparty_id,
+                Counterparty.name,
+                func.sum(Transaction.amount).label("total"),
+                func.count().label("n"),
+            )
+            .select_from(Transaction)
+            .outerjoin(Counterparty, Counterparty.id == Transaction.counterparty_id)
+            .where(and_(base_where, amount_cond))
+            .group_by(Transaction.counterparty_id, Counterparty.name)
+            .order_by(
+                (func.sum(Transaction.amount) if is_inflow else -func.sum(Transaction.amount)).desc()
+            )
+            .limit(limit)
+        ).all()
+        return [
+            TopCounterpartyItem(
+                counterparty_id=r.counterparty_id,
+                name=r.name or "Non attribué",
+                amount=abs(Decimal(r.total)),
+                transactions_count=int(r.n),
+            )
+            for r in rows
+        ]
+
+    return TopCounterparties(
+        top_inflows=_query(is_inflow=True),
+        top_outflows=_query(is_inflow=False),
+    )

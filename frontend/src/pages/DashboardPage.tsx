@@ -6,15 +6,29 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchDashboardSummary } from "../api/dashboard";
+import {
+  fetchBankBalances,
+  fetchCategoryBreakdown,
+  fetchDashboardSummary,
+  fetchTopCounterparties,
+} from "../api/dashboard";
 import { useEntities } from "../api/entities";
-import type { DashboardPeriod, DashboardSummary } from "../types/api";
+import type {
+  BankAccountBalance,
+  CategoryBreakdown,
+  DashboardPeriod,
+  DashboardSummary,
+  TopCounterparties,
+} from "../types/api";
 
 const PERIODS: { value: DashboardPeriod; label: string }[] = [
   { value: "current_month", label: "Ce mois" },
@@ -416,7 +430,292 @@ export function DashboardPage() {
       </div>
 
       {data && <BalanceTrendChart summary={data} />}
+
+      <BankBalancesSection entityId={entityId === "all" ? undefined : entityId} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <CategoriesSection
+          period={period}
+          entityId={entityId === "all" ? undefined : entityId}
+        />
+        <TopCounterpartiesSection
+          period={period}
+          entityId={entityId === "all" ? undefined : entityId}
+        />
+      </div>
+
       {data && <CashflowChart summary={data} />}
     </section>
+  );
+}
+
+function BankBalancesSection({ entityId }: { entityId?: number }) {
+  const { data = [], isLoading } = useQuery<BankAccountBalance[]>({
+    queryKey: ["dashboard-bank-balances", entityId],
+    queryFn: () => fetchBankBalances({ entityId }),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+        <div className="h-4 w-48 animate-pulse rounded bg-line-soft" />
+        <div className="mt-3 h-24 animate-pulse rounded bg-line-soft" />
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-line-soft bg-panel shadow-card">
+      <div className="border-b border-line-soft px-4 py-3 text-[13px] font-semibold text-ink">
+        Soldes par compte
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-line-soft bg-panel-2">
+            <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Société
+            </th>
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Compte
+            </th>
+            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Solde
+            </th>
+            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Δ vs mois-1
+            </th>
+            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Dernier import
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((b) => {
+            const delta = b.delta_vs_prev_month != null ? Number(b.delta_vs_prev_month) : null;
+            return (
+              <tr key={b.bank_account_id} className="border-b border-line-soft last:border-0">
+                <td className="px-4 py-3 text-[13px] text-ink">{b.entity_name}</td>
+                <td className="px-3 py-3 text-[13px] text-ink-2">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-ink">{b.account_name}</span>
+                    <span className="text-[11.5px] uppercase tracking-wider text-muted-foreground">
+                      {b.bank_name}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-ink">
+                  {formatEUR(b.balance)}
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-[12.5px] tabular-nums">
+                  {delta == null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <span className={delta >= 0 ? "text-credit" : "text-debit"}>
+                      {delta >= 0 ? "+" : ""}
+                      {formatEUR(Math.abs(delta))}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                  {b.last_import_at
+                    ? new Date(b.last_import_at).toLocaleDateString("fr-FR")
+                    : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const DONUT_COLORS = [
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#6b7280",
+];
+
+function DonutChart({
+  title,
+  items,
+}: {
+  title: string;
+  items: CategoryBreakdown["income"];
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+        <div className="mb-3 text-[13px] font-semibold text-ink">{title}</div>
+        <div className="flex h-[220px] items-center justify-center text-[13px] text-muted-foreground">
+          Aucune donnée sur cette période.
+        </div>
+      </div>
+    );
+  }
+
+  const data = items.map((it, i) => ({
+    name: it.name,
+    value: Number(it.amount),
+    color: it.color ?? DONUT_COLORS[i % DONUT_COLORS.length],
+    pct: it.pct,
+  }));
+
+  return (
+    <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+      <div className="mb-3 text-[13px] font-semibold text-ink">{title}</div>
+      <div style={{ width: "100%", height: 220 }}>
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={55}
+              outerRadius={85}
+              paddingAngle={2}
+            >
+              {data.map((d, i) => (
+                <Cell key={i} fill={d.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                background: "hsl(var(--panel))",
+                border: "1px solid hsl(var(--line))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              formatter={(v) => formatEUR(Number(v))}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {data.map((d, i) => (
+          <li
+            key={i}
+            className="flex items-center justify-between text-[12px] text-ink-2"
+          >
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: d.color }}
+              />
+              {d.name}
+            </span>
+            <span className="font-mono tabular-nums">
+              {formatEUR(d.value)}{" "}
+              <span className="text-muted-foreground">({d.pct.toFixed(0)} %)</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CategoriesSection({
+  period,
+  entityId,
+}: {
+  period: DashboardPeriod;
+  entityId?: number;
+}) {
+  const { data, isLoading } = useQuery<CategoryBreakdown>({
+    queryKey: ["dashboard-categories", period, entityId],
+    queryFn: () => fetchCategoryBreakdown({ period, entityId }),
+    staleTime: 60_000,
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+        <div className="h-4 w-40 animate-pulse rounded bg-line-soft" />
+        <div className="mt-3 h-[220px] animate-pulse rounded bg-line-soft" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <DonutChart title="Entrées par catégorie" items={data.income} />
+      <DonutChart title="Sorties par catégorie" items={data.expense} />
+    </div>
+  );
+}
+
+function TopCounterpartiesSection({
+  period,
+  entityId,
+}: {
+  period: DashboardPeriod;
+  entityId?: number;
+}) {
+  const { data, isLoading } = useQuery<TopCounterparties>({
+    queryKey: ["dashboard-top-counterparties", period, entityId],
+    queryFn: () => fetchTopCounterparties({ period, entityId }),
+    staleTime: 60_000,
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+        <div className="h-4 w-40 animate-pulse rounded bg-line-soft" />
+        <div className="mt-3 h-[180px] animate-pulse rounded bg-line-soft" />
+      </div>
+    );
+  }
+
+  const TopList = ({
+    title,
+    items,
+    tone,
+  }: {
+    title: string;
+    items: TopCounterparties["top_inflows"];
+    tone: "credit" | "debit";
+  }) => (
+    <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+      <div className="mb-3 text-[13px] font-semibold text-ink">{title}</div>
+      {items.length === 0 ? (
+        <div className="flex h-[100px] items-center justify-center text-[13px] text-muted-foreground">
+          Aucun mouvement sur cette période.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((it) => (
+            <li
+              key={`${it.counterparty_id}-${it.name}`}
+              className="flex items-center justify-between text-[13px]"
+            >
+              <span className="truncate text-ink">{it.name}</span>
+              <span
+                className={`font-mono tabular-nums ${
+                  tone === "credit" ? "text-credit" : "text-debit"
+                }`}
+              >
+                {tone === "debit" ? "−" : ""}
+                {formatEUR(it.amount)}
+                <span className="ml-2 text-[11px] text-muted-foreground">
+                  ({it.transactions_count})
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <TopList title="Top encaissements" items={data.top_inflows} tone="credit" />
+      <TopList title="Top décaissements" items={data.top_outflows} tone="debit" />
+    </div>
   );
 }

@@ -120,6 +120,43 @@ export interface DailyBalance {
   balance: string;
 }
 
+export interface BankAccountBalance {
+  bank_account_id: number;
+  entity_id: number;
+  entity_name: string;
+  bank_name: string;
+  account_name: string;
+  balance: string;
+  asof: string | null;
+  delta_vs_prev_month: string | null;
+  last_import_at: string | null;
+}
+
+export interface CategoryBreakdownItem {
+  category_id: number | null;
+  name: string;
+  color: string | null;
+  amount: string;
+  pct: number;
+}
+
+export interface CategoryBreakdown {
+  income: CategoryBreakdownItem[];
+  expense: CategoryBreakdownItem[];
+}
+
+export interface TopCounterpartyItem {
+  counterparty_id: number | null;
+  name: string;
+  amount: string;
+  transactions_count: number;
+}
+
+export interface TopCounterparties {
+  top_inflows: TopCounterpartyItem[];
+  top_outflows: TopCounterpartyItem[];
+}
+
 export interface DashboardSummary {
   period: DashboardPeriod;
   period_label: string;
