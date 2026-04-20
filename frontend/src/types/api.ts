@@ -120,6 +120,17 @@ export interface DailyBalance {
   balance: string;
 }
 
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface Alert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  detail: string;
+  entity_id: number | null;
+  bank_account_id: number | null;
+}
+
 export interface BankAccountBalance {
   bank_account_id: number;
   entity_id: number;

@@ -1,4 +1,5 @@
 import type {
+  Alert,
   BankAccountBalance,
   CategoryBreakdown,
   DashboardPeriod,
@@ -46,4 +47,8 @@ export function fetchTopCounterparties(args: {
   entityId?: number;
 }): Promise<TopCounterparties> {
   return getJson(`/api/dashboard/top-counterparties?${buildParams(args)}`);
+}
+
+export function fetchAlerts(args: { entityId?: number }): Promise<Alert[]> {
+  return getJson(`/api/dashboard/alerts?${buildParams(args)}`);
 }

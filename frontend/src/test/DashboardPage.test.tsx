@@ -49,6 +49,7 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => {
           if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/alerts")) return [];
           if (s.includes("/api/dashboard/categories")) {
             return { income: [], expense: [] };
           }
@@ -96,6 +97,7 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => {
           if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/alerts")) return [];
           if (s.includes("/api/dashboard/categories")) {
             return { income: [], expense: [] };
           }

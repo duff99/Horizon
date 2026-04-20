@@ -77,6 +77,23 @@ class TopCounterparties(BaseModel):
     top_outflows: list[TopCounterpartyItem]
 
 
+class AlertSeverity(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class Alert(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    severity: AlertSeverity
+    title: str
+    detail: str
+    entity_id: int | None = None
+    bank_account_id: int | None = None
+
+
 class DashboardSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  fetchAlerts,
   fetchBankBalances,
   fetchCategoryBreakdown,
   fetchDashboardSummary,
@@ -23,6 +24,7 @@ import {
 } from "../api/dashboard";
 import { useEntities } from "../api/entities";
 import type {
+  Alert,
   BankAccountBalance,
   CategoryBreakdown,
   DashboardPeriod,
@@ -429,6 +431,8 @@ export function DashboardPage() {
         )}
       </div>
 
+      <AlertsSection entityId={entityId === "all" ? undefined : entityId} />
+
       {data && <BalanceTrendChart summary={data} />}
 
       <BankBalancesSection entityId={entityId === "all" ? undefined : entityId} />
@@ -446,6 +450,63 @@ export function DashboardPage() {
 
       {data && <CashflowChart summary={data} />}
     </section>
+  );
+}
+
+const ALERT_STYLES: Record<Alert["severity"], { wrap: string; icon: string }> = {
+  info: {
+    wrap: "border-sky-200 bg-sky-50 text-sky-900",
+    icon: "text-sky-600",
+  },
+  warning: {
+    wrap: "border-amber-200 bg-amber-50 text-amber-900",
+    icon: "text-amber-600",
+  },
+  critical: {
+    wrap: "border-red-200 bg-red-50 text-red-900",
+    icon: "text-red-600",
+  },
+};
+
+function AlertsSection({ entityId }: { entityId?: number }) {
+  const { data = [] } = useQuery<Alert[]>({
+    queryKey: ["dashboard-alerts", entityId],
+    queryFn: () => fetchAlerts({ entityId }),
+    staleTime: 60_000,
+  });
+  if (data.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {data.map((a) => {
+        const styles = ALERT_STYLES[a.severity];
+        return (
+          <div
+            key={a.id}
+            role="alert"
+            className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-[13px] ${styles.wrap}`}
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`mt-0.5 h-4 w-4 shrink-0 ${styles.icon}`}
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div className="flex-1">
+              <div className="font-medium">{a.title}</div>
+              <div className="text-[12px] opacity-85">{a.detail}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

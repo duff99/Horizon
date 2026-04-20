@@ -20,6 +20,8 @@ from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User
 from app.models.user_entity_access import UserEntityAccess
 from app.schemas.dashboard import (
+    Alert,
+    AlertSeverity,
     BankAccountBalance,
     CategoryBreakdown,
     CategoryBreakdownItem,
@@ -636,3 +638,104 @@ def get_top_counterparties(
         top_inflows=_query(is_inflow=True),
         top_outflows=_query(is_inflow=False),
     )
+
+
+@router.get("/alerts", response_model=list[Alert])
+def get_alerts(
+    entity_id: int | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[Alert]:
+    """Alertes opérationnelles : soldes critiques, imports obsolètes, non catégorisées."""
+    bank_account_ids = _resolve_accessible_bank_accounts(
+        db, user=user, entity_id=entity_id,
+    )
+    if not bank_account_ids:
+        return []
+
+    alerts: list[Alert] = []
+    today = date.today()
+
+    # Alerte 1 : compte dont le dernier closing_balance est négatif
+    balances = get_bank_balances(entity_id=entity_id, user=user, db=db)
+    for b in balances:
+        if b.balance < 0:
+            alerts.append(
+                Alert(
+                    id=f"neg-balance-{b.bank_account_id}",
+                    severity=AlertSeverity.CRITICAL,
+                    title=f"Solde négatif sur {b.account_name}",
+                    detail=f"{b.entity_name} — {b.balance} € au {b.asof.isoformat() if b.asof else '?'}",
+                    entity_id=b.entity_id,
+                    bank_account_id=b.bank_account_id,
+                )
+            )
+        if b.last_import_at and (today - b.last_import_at).days > 35:
+            age = (today - b.last_import_at).days
+            alerts.append(
+                Alert(
+                    id=f"stale-{b.bank_account_id}",
+                    severity=AlertSeverity.WARNING,
+                    title=f"Aucun import récent — {b.account_name}",
+                    detail=f"{b.entity_name} — dernier import il y a {age} jours",
+                    entity_id=b.entity_id,
+                    bank_account_id=b.bank_account_id,
+                )
+            )
+
+    # Alerte 2 : transactions non catégorisées (seuil 20)
+    uncategorized_count = db.execute(
+        select(func.count())
+        .select_from(Transaction)
+        .where(
+            and_(
+                Transaction.bank_account_id.in_(bank_account_ids),
+                Transaction.is_aggregation_parent.is_(False),
+                Transaction.categorized_by == TransactionCategorizationSource.NONE,
+            )
+        )
+    ).scalar_one()
+    if uncategorized_count >= 20:
+        alerts.append(
+            Alert(
+                id="uncategorized-many",
+                severity=AlertSeverity.WARNING,
+                title=f"{uncategorized_count} transactions à catégoriser",
+                detail="Créez des règles ou catégorisez manuellement pour enrichir le tableau de bord.",
+                entity_id=entity_id,
+            )
+        )
+
+    # Alerte 3 : entrées prévisionnelles dont la due_date est passée et pas récurrente
+    from app.models.forecast_entry import ForecastEntry, ForecastRecurrence
+
+    accessible = list(
+        db.scalars(
+            select(UserEntityAccess.entity_id).where(
+                UserEntityAccess.user_id == user.id
+            )
+        )
+    )
+    forecast_where = [
+        ForecastEntry.due_date < today,
+        ForecastEntry.recurrence == ForecastRecurrence.NONE,
+    ]
+    if entity_id is not None:
+        forecast_where.append(ForecastEntry.entity_id == entity_id)
+    else:
+        forecast_where.append(ForecastEntry.entity_id.in_(accessible))
+    stale_entries = db.execute(
+        select(func.count()).select_from(ForecastEntry).where(and_(*forecast_where))
+    ).scalar_one()
+    if stale_entries > 0:
+        alerts.append(
+            Alert(
+                id="stale-forecast",
+                severity=AlertSeverity.INFO,
+                title=f"{stale_entries} entrée(s) prévisionnelle(s) dépassée(s)",
+                detail="Pensez à les supprimer ou les rapprocher d'une transaction réelle.",
+                entity_id=entity_id,
+            )
+        )
+
+    return alerts
