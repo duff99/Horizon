@@ -433,22 +433,25 @@ export function DashboardPage() {
 
       <AlertsSection entityId={entityId === "all" ? undefined : entityId} />
 
-      {data && <BalanceTrendChart summary={data} />}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {data && <BalanceTrendChart summary={data} />}
+        {data && <CashflowChart summary={data} />}
+      </div>
 
       <BankBalancesSection entityId={entityId === "all" ? undefined : entityId} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <CategoriesSection
+        <FlowColumn
+          kind="income"
           period={period}
           entityId={entityId === "all" ? undefined : entityId}
         />
-        <TopCounterpartiesSection
+        <FlowColumn
+          kind="expense"
           period={period}
           entityId={entityId === "all" ? undefined : entityId}
         />
       </div>
-
-      {data && <CashflowChart summary={data} />}
     </section>
   );
 }
@@ -680,67 +683,16 @@ function DonutChart({
   );
 }
 
-function CategoriesSection({
-  period,
-  entityId,
+function TopList({
+  title,
+  items,
+  tone,
 }: {
-  period: DashboardPeriod;
-  entityId?: number;
+  title: string;
+  items: TopCounterparties["top_inflows"];
+  tone: "credit" | "debit";
 }) {
-  const { data, isLoading } = useQuery<CategoryBreakdown>({
-    queryKey: ["dashboard-categories", period, entityId],
-    queryFn: () => fetchCategoryBreakdown({ period, entityId }),
-    staleTime: 60_000,
-  });
-
-  if (isLoading || !data) {
-    return (
-      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
-        <div className="h-4 w-40 animate-pulse rounded bg-line-soft" />
-        <div className="mt-3 h-[220px] animate-pulse rounded bg-line-soft" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <DonutChart title="Entrées par catégorie" items={data.income} />
-      <DonutChart title="Sorties par catégorie" items={data.expense} />
-    </div>
-  );
-}
-
-function TopCounterpartiesSection({
-  period,
-  entityId,
-}: {
-  period: DashboardPeriod;
-  entityId?: number;
-}) {
-  const { data, isLoading } = useQuery<TopCounterparties>({
-    queryKey: ["dashboard-top-counterparties", period, entityId],
-    queryFn: () => fetchTopCounterparties({ period, entityId }),
-    staleTime: 60_000,
-  });
-
-  if (isLoading || !data) {
-    return (
-      <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
-        <div className="h-4 w-40 animate-pulse rounded bg-line-soft" />
-        <div className="mt-3 h-[180px] animate-pulse rounded bg-line-soft" />
-      </div>
-    );
-  }
-
-  const TopList = ({
-    title,
-    items,
-    tone,
-  }: {
-    title: string;
-    items: TopCounterparties["top_inflows"];
-    tone: "credit" | "debit";
-  }) => (
     <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
       <div className="mb-3 text-[13px] font-semibold text-ink">{title}</div>
       {items.length === 0 ? (
@@ -772,11 +724,54 @@ function TopCounterpartiesSection({
       )}
     </div>
   );
+}
+
+function FlowColumn({
+  kind,
+  period,
+  entityId,
+}: {
+  kind: "income" | "expense";
+  period: DashboardPeriod;
+  entityId?: number;
+}) {
+  const cats = useQuery<CategoryBreakdown>({
+    queryKey: ["dashboard-categories", period, entityId],
+    queryFn: () => fetchCategoryBreakdown({ period, entityId }),
+    staleTime: 60_000,
+  });
+  const tops = useQuery<TopCounterparties>({
+    queryKey: ["dashboard-top-counterparties", period, entityId],
+    queryFn: () => fetchTopCounterparties({ period, entityId }),
+    staleTime: 60_000,
+  });
+
+  const isLoading = cats.isLoading || tops.isLoading;
+  if (isLoading || !cats.data || !tops.data) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+          <div className="h-4 w-40 animate-pulse rounded bg-line-soft" />
+          <div className="mt-3 h-[220px] animate-pulse rounded bg-line-soft" />
+        </div>
+        <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+          <div className="h-4 w-32 animate-pulse rounded bg-line-soft" />
+          <div className="mt-3 h-[100px] animate-pulse rounded bg-line-soft" />
+        </div>
+      </div>
+    );
+  }
+
+  const catItems = kind === "income" ? cats.data.income : cats.data.expense;
+  const topItems = kind === "income" ? tops.data.top_inflows : tops.data.top_outflows;
+  const tone: "credit" | "debit" = kind === "income" ? "credit" : "debit";
+  const donutTitle = kind === "income" ? "Entrées par catégorie" : "Sorties par catégorie";
+  const topTitle = kind === "income" ? "Top encaissements" : "Top décaissements";
 
   return (
     <div className="space-y-4">
-      <TopList title="Top encaissements" items={data.top_inflows} tone="credit" />
-      <TopList title="Top décaissements" items={data.top_outflows} tone="debit" />
+      <DonutChart title={donutTitle} items={catItems} />
+      <TopList title={topTitle} items={topItems} tone={tone} />
     </div>
   );
 }
