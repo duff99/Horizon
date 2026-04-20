@@ -8,6 +8,7 @@ from app.api import (
     counterparties,
     dashboard,
     entities,
+    forecast,
     health,
     imports,
     me,
@@ -30,3 +31,4 @@ api_router.include_router(counterparties.router)
 api_router.include_router(rules.router)
 api_router.include_router(categories.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(forecast.router)

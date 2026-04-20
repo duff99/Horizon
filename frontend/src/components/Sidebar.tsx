@@ -48,6 +48,16 @@ const pilotage: Item[] = [
     ),
   },
   {
+    to: '/previsionnel',
+    label: 'Prévisionnel',
+    icon: icon(
+      <>
+        <path d="M3 3v18h18" />
+        <path d="M7 15l4-4 3 3 5-6" />
+      </>,
+    ),
+  },
+  {
     to: '/imports',
     label: 'Imports',
     icon: icon(
