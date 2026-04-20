@@ -48,6 +48,8 @@ export interface ImportRecord {
   counterparties_pending_created: number;
   period_start: string | null;
   period_end: string | null;
+  opening_balance: string | null;
+  closing_balance: string | null;
   error_message: string | null;
   created_at: string | null;
 }

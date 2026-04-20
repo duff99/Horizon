@@ -15,6 +15,25 @@ const STATUS_CLASS: Record<string, string> = {
   failed: "bg-red-50 text-red-800 border-red-200",
 };
 
+const EUR = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 2,
+});
+
+function formatEUR(v: string | null): string {
+  if (v == null) return "—";
+  const n = Number(v);
+  return Number.isFinite(n) ? EUR.format(n) : "—";
+}
+
+function formatPeriod(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  return `${fmt(start)} → ${fmt(end)}`;
+}
+
 export function ImportHistoryPage() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["imports"],
@@ -78,6 +97,9 @@ export function ImportHistoryPage() {
                   Banque
                 </th>
                 <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Période
+                </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Statut
                 </th>
                 <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -85,6 +107,12 @@ export function ImportHistoryPage() {
                 </th>
                 <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Ignorées
+                </th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Solde début
+                </th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Solde fin
                 </th>
               </tr>
             </thead>
@@ -105,6 +133,9 @@ export function ImportHistoryPage() {
                   <td className="px-3 py-3 text-[12px] font-semibold uppercase tracking-wider text-ink-2">
                     {imp.bank_code}
                   </td>
+                  <td className="px-3 py-3 font-mono text-[12.5px] tabular-nums text-ink-2">
+                    {formatPeriod(imp.period_start, imp.period_end)}
+                  </td>
                   <td className="px-3 py-3">
                     <span
                       className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] font-medium ${
@@ -114,11 +145,17 @@ export function ImportHistoryPage() {
                       {STATUS_LABEL[imp.status] ?? imp.status}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-credit">
+                  <td className="px-3 py-3 text-right text-[13px] tabular-nums text-ink-2">
                     {imp.imported_count}
                   </td>
-                  <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
+                  <td className="px-3 py-3 text-right text-[13px] tabular-nums text-muted-foreground">
                     {imp.duplicates_skipped}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-ink-2">
+                    {formatEUR(imp.opening_balance)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-ink">
+                    {formatEUR(imp.closing_balance)}
                   </td>
                 </tr>
               ))}

@@ -92,7 +92,7 @@ export function ImportNewPage() {
           <h2 className="text-[14px] font-semibold text-ink">Import terminé</h2>
           <ul className="mt-2 space-y-1 text-[13px] text-ink-2">
             <li>
-              <span className="text-credit">
+              <span className="text-ink">
                 {result.imported_count} transaction(s) importée(s)
               </span>
             </li>
