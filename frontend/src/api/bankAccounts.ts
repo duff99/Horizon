@@ -64,6 +64,31 @@ export async function createBankAccount(
   return mapBA(r);
 }
 
+export type UpdateBankAccountInput = {
+  name?: string;
+  bic?: string | null;
+  bankName?: string;
+  bankCode?: string;
+  isActive?: boolean;
+};
+
+export async function updateBankAccount(
+  id: number,
+  i: UpdateBankAccountInput
+): Promise<BankAccount> {
+  const payload: Record<string, unknown> = {};
+  if (i.name !== undefined) payload.name = i.name;
+  if (i.bic !== undefined) payload.bic = i.bic;
+  if (i.bankName !== undefined) payload.bank_name = i.bankName;
+  if (i.bankCode !== undefined) payload.bank_code = i.bankCode;
+  if (i.isActive !== undefined) payload.is_active = i.isActive;
+  const r = await apiFetch<RawBA>(`/api/bank-accounts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  return mapBA(r);
+}
+
 export function useBankAccounts() {
   return useQuery({ queryKey: ['bankAccounts'], queryFn: listBankAccounts });
 }

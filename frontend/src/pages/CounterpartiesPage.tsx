@@ -31,10 +31,10 @@ export function CounterpartiesPage() {
     <section className="space-y-6">
       <div>
         <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Contreparties
+          Tiers
         </h1>
         <p className="mt-0.5 text-[13px] text-muted-foreground">
-          Validez ou ignorez les contreparties détectées lors des imports.
+          Validez ou ignorez les tiers (clients, fournisseurs…) détectés lors des imports.
         </p>
       </div>
 
@@ -60,7 +60,7 @@ export function CounterpartiesPage() {
 
       {data.length === 0 ? (
         <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
-          Aucune contrepartie {LABEL[tab].toLowerCase()}.
+          Aucun tiers {LABEL[tab].toLowerCase()}.
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">

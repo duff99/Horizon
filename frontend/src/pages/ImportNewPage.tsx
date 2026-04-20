@@ -106,7 +106,7 @@ export function ImportNewPage() {
             {result.counterparties_pending_created > 0 && (
               <li>
                 <span className="text-amber-700">
-                  {result.counterparties_pending_created} nouvelle(s) contrepartie(s) à valider
+                  {result.counterparties_pending_created} nouveau(x) tiers à valider
                 </span>
               </li>
             )}

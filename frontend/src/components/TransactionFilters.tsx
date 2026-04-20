@@ -24,7 +24,7 @@ export function TransactionFilters({ value, onChange }: TransactionFiltersProps)
         </svg>
         <input
           type="search"
-          placeholder="Rechercher par libellé, contrepartie, montant…"
+          placeholder="Rechercher par libellé, tiers, montant…"
           value={value.search ?? ""}
           onChange={(e) => onChange({ ...value, search: e.target.value || undefined, page: 1 })}
           className="w-full rounded-md border border-line bg-panel py-1.5 pl-9 pr-3 text-[12.5px] text-ink outline-none placeholder:text-muted-foreground focus:border-ink-2"

@@ -47,6 +47,21 @@ export async function createEntity(input: CreateEntityInput): Promise<Entity> {
   return mapEntity(r);
 }
 
+export type UpdateEntityInput = Partial<CreateEntityInput>;
+
+export async function updateEntity(id: number, input: UpdateEntityInput): Promise<Entity> {
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.legalName !== undefined) payload.legal_name = input.legalName;
+  if (input.siret !== undefined) payload.siret = input.siret ?? null;
+  if (input.parentEntityId !== undefined) payload.parent_entity_id = input.parentEntityId;
+  const r = await apiFetch<RawEntity>(`/api/entities/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  return mapEntity(r);
+}
+
 export async function deleteEntity(id: number): Promise<void> {
   await apiFetch<unknown>(`/api/entities/${id}`, { method: 'DELETE' });
 }

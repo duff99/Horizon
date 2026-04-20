@@ -49,3 +49,25 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   });
   return mapUser(r);
 }
+
+export type UpdateUserInput = {
+  role?: UserRole;
+  fullName?: string | null;
+  isActive?: boolean;
+};
+
+export async function updateUser(id: number, input: UpdateUserInput): Promise<User> {
+  const payload: Record<string, unknown> = {};
+  if (input.role !== undefined) payload.role = input.role;
+  if (input.fullName !== undefined) payload.full_name = input.fullName;
+  if (input.isActive !== undefined) payload.is_active = input.isActive;
+  const r = await apiFetch<RawUser>(`/api/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  return mapUser(r);
+}
+
+export async function deactivateUser(id: number): Promise<void> {
+  await apiFetch<unknown>(`/api/users/${id}`, { method: 'DELETE' });
+}

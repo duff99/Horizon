@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError } from '@/api/client';
-import { createEntity, deleteEntity, listEntities } from '@/api/entities';
+import { createEntity, deleteEntity, listEntities, updateEntity } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,21 +42,54 @@ export function AdminEntitiesPage() {
     queryFn: listEntities,
   });
 
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [legalName, setLegalName] = useState('');
   const [siret, setSiret] = useState('');
   const [parentId, setParentId] = useState<string>('none');
   const [formError, setFormError] = useState<string | null>(null);
 
+  function resetForm() {
+    setEditingId(null);
+    setName('');
+    setLegalName('');
+    setSiret('');
+    setParentId('none');
+    setFormError(null);
+  }
+
+  function startEdit(e: Entity) {
+    setEditingId(e.id);
+    setName(e.name);
+    setLegalName(e.legalName);
+    setSiret(e.siret ?? '');
+    setParentId(e.parentEntityId == null ? 'none' : String(e.parentEntityId));
+    setFormError(null);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
   const create = useMutation({
     mutationFn: createEntity,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entities'] });
-      setName('');
-      setLegalName('');
-      setSiret('');
-      setParentId('none');
-      setFormError(null);
+      resetForm();
+    },
+    onError: (e) => setFormError(e instanceof ApiError ? e.detail : 'Erreur'),
+  });
+
+  const update = useMutation({
+    mutationFn: (input: { id: number; name: string; legalName: string; siret?: string; parentEntityId: number | null }) =>
+      updateEntity(input.id, {
+        name: input.name,
+        legalName: input.legalName,
+        siret: input.siret,
+        parentEntityId: input.parentEntityId,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entities'] });
+      resetForm();
     },
     onError: (e) => setFormError(e instanceof ApiError ? e.detail : 'Erreur'),
   });
@@ -68,6 +101,7 @@ export function AdminEntitiesPage() {
   });
 
   const ordered = entities ? toTreeOrder(entities) : [];
+  const isEditing = editingId !== null;
 
   return (
     <section className="space-y-6">
@@ -82,17 +116,30 @@ export function AdminEntitiesPage() {
       </div>
 
       <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
-        <h2 className="text-[14px] font-semibold text-ink">Créer une société</h2>
+        <h2 className="text-[14px] font-semibold text-ink">
+          {isEditing ? 'Modifier la société' : 'Créer une société'}
+        </h2>
         <form
           className="mt-4 grid grid-cols-2 gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            create.mutate({
-              name,
-              legalName,
-              siret: siret || undefined,
-              parentEntityId: parentId === 'none' ? null : Number(parentId),
-            });
+            const parent = parentId === 'none' ? null : Number(parentId);
+            if (isEditing && editingId !== null) {
+              update.mutate({
+                id: editingId,
+                name,
+                legalName,
+                siret: siret || undefined,
+                parentEntityId: parent,
+              });
+            } else {
+              create.mutate({
+                name,
+                legalName,
+                siret: siret || undefined,
+                parentEntityId: parent,
+              });
+            }
           }}
         >
           <div className="space-y-1.5">
@@ -137,11 +184,13 @@ export function AdminEntitiesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Aucune (société racine)</SelectItem>
-                {entities?.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>
-                    {e.name}
-                  </SelectItem>
-                ))}
+                {entities
+                  ?.filter((e) => e.id !== editingId)
+                  .map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {e.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -153,10 +202,21 @@ export function AdminEntitiesPage() {
               {formError}
             </div>
           )}
-          <div className="col-span-2">
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Création…' : 'Créer'}
+          <div className="col-span-2 flex gap-2">
+            <Button type="submit" disabled={create.isPending || update.isPending}>
+              {isEditing
+                ? update.isPending
+                  ? 'Enregistrement…'
+                  : 'Enregistrer'
+                : create.isPending
+                ? 'Création…'
+                : 'Créer'}
             </Button>
+            {isEditing && (
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Annuler
+              </Button>
+            )}
           </div>
         </form>
       </div>
@@ -192,16 +252,25 @@ export function AdminEntitiesPage() {
                     </span>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-debit hover:text-debit"
-                  onClick={() => {
-                    if (confirm(`Supprimer "${e.name}" ?`)) del.mutate(e.id);
-                  }}
-                >
-                  Supprimer
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => startEdit(e)}
+                  >
+                    Éditer
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-debit hover:text-debit"
+                    onClick={() => {
+                      if (confirm(`Supprimer "${e.name}" ?`)) del.mutate(e.id);
+                    }}
+                  >
+                    Supprimer
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

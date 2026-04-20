@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError } from '@/api/client';
-import { createBankAccount, listBankAccounts } from '@/api/bankAccounts';
+import {
+  createBankAccount,
+  listBankAccounts,
+  updateBankAccount,
+} from '@/api/bankAccounts';
 import { listEntities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { BankAccount } from '@/types/api';
 
 function formatIban(raw: string): string {
   return raw
@@ -33,25 +38,73 @@ export function AdminBankAccountsPage() {
     queryFn: listEntities,
   });
 
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [entityId, setEntityId] = useState<string>('');
   const [name, setName] = useState('');
   const [iban, setIban] = useState('');
   const [bic, setBic] = useState('');
   const [bankName, setBankName] = useState('');
   const [bankCode, setBankCode] = useState('');
+  const [isActive, setIsActive] = useState<boolean>(true);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const isEditing = editingId !== null;
+
+  function resetForm() {
+    setEditingId(null);
+    setEntityId('');
+    setName('');
+    setIban('');
+    setBic('');
+    setBankName('');
+    setBankCode('');
+    setIsActive(true);
+    setFormError(null);
+  }
+
+  function startEdit(a: BankAccount) {
+    setEditingId(a.id);
+    setEntityId(String(a.entityId));
+    setName(a.name);
+    setIban(a.iban);
+    setBic(a.bic ?? '');
+    setBankName(a.bankName);
+    setBankCode(a.bankCode);
+    setIsActive(a.isActive);
+    setFormError(null);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
 
   const create = useMutation({
     mutationFn: createBankAccount,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bank-accounts'] });
-      setName('');
-      setIban('');
-      setBic('');
-      setBankName('');
-      setBankCode('');
-      setEntityId('');
-      setFormError(null);
+      resetForm();
+    },
+    onError: (e) => setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue'),
+  });
+
+  const update = useMutation({
+    mutationFn: (input: {
+      id: number;
+      name: string;
+      bic: string | null;
+      bankName: string;
+      bankCode: string;
+      isActive: boolean;
+    }) =>
+      updateBankAccount(input.id, {
+        name: input.name,
+        bic: input.bic,
+        bankName: input.bankName,
+        bankCode: input.bankCode,
+        isActive: input.isActive,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bank-accounts'] });
+      resetForm();
     },
     onError: (e) => setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue'),
   });
@@ -69,28 +122,45 @@ export function AdminBankAccountsPage() {
       </div>
 
       <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
-        <h2 className="text-[14px] font-semibold text-ink">Ajouter un compte bancaire</h2>
+        <h2 className="text-[14px] font-semibold text-ink">
+          {isEditing ? 'Modifier le compte bancaire' : 'Ajouter un compte bancaire'}
+        </h2>
         <form
           className="mt-4 grid grid-cols-2 gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!entityId) {
-              setFormError('Veuillez sélectionner une société');
-              return;
+            if (isEditing && editingId !== null) {
+              update.mutate({
+                id: editingId,
+                name,
+                bic: bic || null,
+                bankName,
+                bankCode,
+                isActive,
+              });
+            } else {
+              if (!entityId) {
+                setFormError('Veuillez sélectionner une société');
+                return;
+              }
+              create.mutate({
+                entityId: Number(entityId),
+                name,
+                iban,
+                bic: bic || undefined,
+                bankName,
+                bankCode,
+              });
             }
-            create.mutate({
-              entityId: Number(entityId),
-              name,
-              iban,
-              bic: bic || undefined,
-              bankName,
-              bankCode,
-            });
           }}
         >
           <div className="col-span-2 space-y-1.5">
             <Label className="text-[12.5px] font-medium text-ink-2">Société</Label>
-            <Select value={entityId} onValueChange={setEntityId}>
+            <Select
+              value={entityId}
+              onValueChange={setEntityId}
+              disabled={isEditing}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Choisir une société" />
               </SelectTrigger>
@@ -102,6 +172,11 @@ export function AdminBankAccountsPage() {
                 ))}
               </SelectContent>
             </Select>
+            {isEditing && (
+              <p className="text-[11.5px] text-muted-foreground">
+                La société ne peut pas être modifiée après création.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -126,6 +201,7 @@ export function AdminBankAccountsPage() {
               pattern="^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$"
               title="IBAN : 2 lettres + 2 chiffres + 10 à 30 caractères alphanumériques"
               required
+              disabled={isEditing}
               value={iban}
               onChange={(e) =>
                 setIban(e.target.value.toUpperCase().replace(/\s/g, ''))
@@ -134,6 +210,11 @@ export function AdminBankAccountsPage() {
             {iban && (
               <p className="font-mono text-[11.5px] tabular-nums text-muted-foreground">
                 {formatIban(iban)}
+              </p>
+            )}
+            {isEditing && (
+              <p className="text-[11.5px] text-muted-foreground">
+                L'IBAN ne peut pas être modifié — créez un nouveau compte si besoin.
               </p>
             )}
           </div>
@@ -179,13 +260,25 @@ export function AdminBankAccountsPage() {
               }
             />
             <p className="text-[11.5px] text-muted-foreground">
-              Utilisé par le module d'import (Plan 1) pour sélectionner le bon
-              analyseur. Exemples :{' '}
+              Utilisé par le module d'import pour sélectionner le bon analyseur. Exemples :{' '}
               <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">delubac</code>,{' '}
-              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">qonto</code>,{' '}
-              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">bnp</code>.
+              <code className="rounded bg-panel-2 px-1 font-mono text-[11px]">credit_agricole</code>.
             </p>
           </div>
+
+          {isEditing && (
+            <div className="col-span-2">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-accent"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                Compte actif
+              </label>
+            </div>
+          )}
 
           {formError && (
             <div
@@ -196,10 +289,21 @@ export function AdminBankAccountsPage() {
             </div>
           )}
 
-          <div className="col-span-2">
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Création…' : 'Créer'}
+          <div className="col-span-2 flex gap-2">
+            <Button type="submit" disabled={create.isPending || update.isPending}>
+              {isEditing
+                ? update.isPending
+                  ? 'Enregistrement…'
+                  : 'Enregistrer'
+                : create.isPending
+                ? 'Création…'
+                : 'Créer'}
             </Button>
+            {isEditing && (
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Annuler
+              </Button>
+            )}
           </div>
         </form>
       </div>
@@ -231,6 +335,9 @@ export function AdminBankAccountsPage() {
                 </th>
                 <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Statut
+                </th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -264,6 +371,11 @@ export function AdminBankAccountsPage() {
                       >
                         {a.isActive ? 'Actif' : 'Inactif'}
                       </span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(a)}>
+                        Éditer
+                      </Button>
                     </td>
                   </tr>
                 );

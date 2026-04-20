@@ -2,7 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError } from '@/api/client';
-import { createUser, listUsers } from '@/api/users';
+import {
+  createUser,
+  deactivateUser,
+  listUsers,
+  updateUser,
+  type User,
+} from '@/api/users';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,25 +28,75 @@ export function AdminUsersPage() {
     queryFn: listUsers,
   });
 
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('reader');
+  const [isActive, setIsActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const isEditing = editingId !== null;
+
+  function resetForm() {
+    setEditingId(null);
+    setEmail('');
+    setPassword('');
+    setFullName('');
+    setRole('reader');
+    setIsActive(true);
+    setFormError(null);
+  }
+
+  function startEdit(u: User) {
+    setEditingId(u.id);
+    setEmail(u.email);
+    setPassword('');
+    setFullName(u.fullName ?? '');
+    setRole(u.role);
+    setIsActive(u.isActive);
+    setFormError(null);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
 
   const create = useMutation({
     mutationFn: createUser,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });
-      setEmail('');
-      setPassword('');
-      setFullName('');
-      setRole('reader');
-      setFormError(null);
+      resetForm();
     },
     onError: (e) => {
       setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue');
     },
+  });
+
+  const update = useMutation({
+    mutationFn: (input: {
+      id: number;
+      fullName: string | null;
+      role: UserRole;
+      isActive: boolean;
+    }) =>
+      updateUser(input.id, {
+        fullName: input.fullName,
+        role: input.role,
+        isActive: input.isActive,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      resetForm();
+    },
+    onError: (e) => {
+      setFormError(e instanceof ApiError ? e.detail : 'Erreur inconnue');
+    },
+  });
+
+  const deactivate = useMutation({
+    mutationFn: deactivateUser,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError: (e) => alert(e instanceof ApiError ? e.detail : 'Erreur'),
   });
 
   return (
@@ -55,17 +111,28 @@ export function AdminUsersPage() {
       </div>
 
       <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
-        <h2 className="text-[14px] font-semibold text-ink">Créer un utilisateur</h2>
+        <h2 className="text-[14px] font-semibold text-ink">
+          {isEditing ? "Modifier l'utilisateur" : 'Créer un utilisateur'}
+        </h2>
         <form
           className="mt-4 grid grid-cols-2 gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            create.mutate({
-              email,
-              password,
-              role,
-              fullName: fullName || undefined,
-            });
+            if (isEditing && editingId !== null) {
+              update.mutate({
+                id: editingId,
+                fullName: fullName || null,
+                role,
+                isActive,
+              });
+            } else {
+              create.mutate({
+                email,
+                password,
+                role,
+                fullName: fullName || undefined,
+              });
+            }
           }}
         >
           <div className="space-y-1.5">
@@ -76,9 +143,15 @@ export function AdminUsersPage() {
               id="u-email"
               type="email"
               required
+              disabled={isEditing}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
+            {isEditing && (
+              <p className="text-[11.5px] text-muted-foreground">
+                L'email ne peut pas être modifié.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="u-name" className="text-[12.5px] font-medium text-ink-2">
@@ -90,19 +163,21 @@ export function AdminUsersPage() {
               onChange={(e) => setFullName(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="u-pwd" className="text-[12.5px] font-medium text-ink-2">
-              Mot de passe (12 caractères min.)
-            </Label>
-            <Input
-              id="u-pwd"
-              type="password"
-              minLength={12}
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          {!isEditing && (
+            <div className="space-y-1.5">
+              <Label htmlFor="u-pwd" className="text-[12.5px] font-medium text-ink-2">
+                Mot de passe (12 caractères min.)
+              </Label>
+              <Input
+                id="u-pwd"
+                type="password"
+                minLength={12}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-[12.5px] font-medium text-ink-2">Rôle</Label>
             <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
@@ -115,6 +190,19 @@ export function AdminUsersPage() {
               </SelectContent>
             </Select>
           </div>
+          {isEditing && (
+            <div className="col-span-2">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-accent"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                Utilisateur actif
+              </label>
+            </div>
+          )}
           {formError && (
             <div
               role="alert"
@@ -123,10 +211,21 @@ export function AdminUsersPage() {
               {formError}
             </div>
           )}
-          <div className="col-span-2">
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Création…' : 'Créer'}
+          <div className="col-span-2 flex gap-2">
+            <Button type="submit" disabled={create.isPending || update.isPending}>
+              {isEditing
+                ? update.isPending
+                  ? 'Enregistrement…'
+                  : 'Enregistrer'
+                : create.isPending
+                ? 'Création…'
+                : 'Créer'}
             </Button>
+            {isEditing && (
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Annuler
+              </Button>
+            )}
           </div>
         </form>
       </div>
@@ -159,6 +258,9 @@ export function AdminUsersPage() {
                 <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Créé le
                 </th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -189,6 +291,27 @@ export function AdminUsersPage() {
                   </td>
                   <td className="px-3 py-3 font-mono text-[12.5px] tabular-nums text-muted-foreground">
                     {new Date(u.createdAt).toLocaleDateString('fr-FR')}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(u)}>
+                        Éditer
+                      </Button>
+                      {u.isActive && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-debit hover:text-debit"
+                          onClick={() => {
+                            if (confirm(`Désactiver "${u.email}" ?`)) {
+                              deactivate.mutate(u.id);
+                            }
+                          }}
+                        >
+                          Désactiver
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
