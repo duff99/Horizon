@@ -244,7 +244,7 @@ export function TransactionsPage() {
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Catégorie
                 </th>
-                <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="sticky right-0 min-w-[130px] bg-panel-2 px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Montant
                 </th>
               </tr>
@@ -287,12 +287,12 @@ export function TransactionsPage() {
                       <td className="whitespace-nowrap px-2 py-2.5 text-[12.5px] text-muted-foreground mono">
                         {DATE.format(new Date(tx.operation_date))}
                       </td>
-                      <td className="px-4 py-2.5 text-[13.5px]">
-                        <div className="font-medium text-ink">
+                      <td className="max-w-[380px] px-4 py-2.5 text-[13.5px]">
+                        <div className="truncate font-medium text-ink" title={tx.counterparty?.name ?? tx.label}>
                           {tx.counterparty?.name ?? tx.label}
                         </div>
                         {tx.counterparty?.name && (
-                          <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                          <div className="mt-0.5 truncate text-[12px] text-muted-foreground" title={tx.label}>
                             {tx.label}
                           </div>
                         )}
@@ -311,7 +311,9 @@ export function TransactionsPage() {
                       </td>
                       <td
                         className={cn(
-                          "whitespace-nowrap px-5 py-2.5 text-right font-semibold mono",
+                          "sticky right-0 min-w-[130px] whitespace-nowrap bg-panel px-5 py-2.5 text-right font-semibold mono",
+                          selected && "bg-teal-50/60",
+                          tx.is_aggregation_parent && "bg-panel-2",
                           amount < 0 ? "text-debit" : "text-credit",
                         )}
                       >
