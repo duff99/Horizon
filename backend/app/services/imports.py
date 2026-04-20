@@ -347,9 +347,11 @@ def import_pdf_bytes(
     override_duplicates: bool = False,
     uploaded_by_id: int | None = None,
 ) -> ImportRecord:
+    from app.services.import_storage import save_pdf
     check_size_limit(pdf_bytes)
 
     file_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+    save_pdf(file_sha256, pdf_bytes)
 
     # Pré-crée le record pour pouvoir logger un échec de parsing
     rec = ImportRecord(

@@ -28,6 +28,9 @@ services:
       BACKEND_SESSION_HOURS: ${BACKEND_SESSION_HOURS:-8}
       BACKEND_CORS_ORIGINS: https://${APP_DOMAIN}
       BACKEND_COOKIE_SECURE: "true"
+      IMPORT_STORAGE_PATH: /data/imports
+    volumes:
+      - import_storage:/data/imports
     ports:
       - "127.0.0.1:8101:8000"
     depends_on:
@@ -51,3 +54,4 @@ services:
 
 volumes:
   pg_data:
+  import_storage:

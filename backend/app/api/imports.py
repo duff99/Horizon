@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import magic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -103,3 +104,37 @@ def get_import(
     ba = session.get(BankAccount, rec.bank_account_id)
     require_entity_access(session=session, user=user, entity_id=ba.entity_id)
     return ImportRecordRead.model_validate(rec)
+
+
+@router.get("/{import_id}/file")
+def get_import_file(
+    import_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Response:
+    """Stream le PDF original d'un import (permission = accès à l'entité)."""
+    from app.services.import_storage import read_pdf
+
+    rec = session.get(ImportRecord, import_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Import introuvable")
+
+    ba = session.get(BankAccount, rec.bank_account_id)
+    require_entity_access(session=session, user=user, entity_id=ba.entity_id)
+
+    if not rec.file_sha256:
+        raise HTTPException(status_code=404, detail="Fichier non disponible pour cet import")
+
+    data = read_pdf(rec.file_sha256)
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Le fichier n'a pas été conservé (import antérieur à l'activation du stockage)",
+        )
+
+    filename = rec.filename or f"import_{rec.id}.pdf"
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

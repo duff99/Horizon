@@ -1,4 +1,14 @@
+import os
+import tempfile
 from collections.abc import Iterator
+from pathlib import Path
+
+# Redirige le stockage des PDFs vers un dossier temporaire pour les tests,
+# sinon app.services.import_storage tente d'écrire dans /data/imports
+# (accessible uniquement dans le container backend prod).
+_test_storage = Path(tempfile.gettempdir()) / "horizon_test_imports"
+_test_storage.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("IMPORT_STORAGE_PATH", str(_test_storage))
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +23,11 @@ from app.models import Base
 from app.rate_limiter import limiter
 
 limiter.enabled = False
+# Le module lit IMPORT_STORAGE_PATH à l'import ; on force la valeur de test.
+from app.services import import_storage as _import_storage
+
+_import_storage.IMPORT_STORAGE_PATH = _test_storage
+
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity
 from app.models.user import User, UserRole

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { fetchImports } from "../api/imports";
 import { Button } from "@/components/ui/button";
+import type { ImportRecord } from "@/types/api";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "En cours",
@@ -39,6 +41,7 @@ export function ImportHistoryPage() {
     queryKey: ["imports"],
     queryFn: fetchImports,
   });
+  const [preview, setPreview] = useState<ImportRecord | null>(null);
 
   return (
     <section className="space-y-6">
@@ -114,6 +117,9 @@ export function ImportHistoryPage() {
                 <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Solde fin
                 </th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -157,10 +163,76 @@ export function ImportHistoryPage() {
                   <td className="px-3 py-3 text-right font-mono text-[13px] tabular-nums text-ink">
                     {formatEUR(imp.closing_balance)}
                   </td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setPreview(imp)}
+                      title="Visualiser le PDF"
+                      aria-label={`Visualiser ${imp.filename ?? `import ${imp.id}`}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-panel-2 hover:text-ink"
+                    >
+                      <svg
+                        aria-hidden
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-4 w-4"
+                      >
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {preview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Aperçu de ${preview.filename ?? 'import'}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-panel shadow-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
+              <div className="truncate text-[13px] font-medium text-ink">
+                {preview.filename ?? `Import #${preview.id}`}
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/imports/${preview.id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-line px-2.5 py-1 text-[12.5px] text-ink-2 hover:border-ink-2"
+                >
+                  Ouvrir dans un onglet
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  className="rounded-md border border-line px-2.5 py-1 text-[12.5px] text-ink-2 hover:border-ink-2"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+            <iframe
+              title={`PDF ${preview.id}`}
+              src={`/api/imports/${preview.id}/file`}
+              className="flex-1 w-full bg-white"
+            />
+          </div>
         </div>
       )}
     </section>
