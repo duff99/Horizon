@@ -82,6 +82,19 @@ _COUNTERPARTY_RULES: list[tuple[re.Pattern[str], int]] = [
     (re.compile(r"^PRLV\s+SEPA\s+(.+?)(?:\s+[A-Z]{2,}\d.*)?$", re.I), 1),
     # CARTE DD/MM <nom>
     (re.compile(r"^CARTE\s+\d{2}/\d{2}\s+(.+)$", re.I), 1),
+    # Crédit Agricole : "Carte X2043 <merchant> DD/MM"
+    (re.compile(r"^Carte\s+[A-Z]?\d+\s+(.+?)\s+\d{2}/\d{2}\s*$", re.I), 1),
+    # Crédit Agricole : "Virement [Web|Vir Inst vers|Recu de|de|vers] <name>"
+    (
+        re.compile(
+            r"^Virement\s+(?:Web|Vir\s+Inst(?:\s+vers)?|Recu\s+de|de|vers)\s+"
+            r"(.+?)(?:\s+Notes\s+de\s+frais.*|\s+FR\d{2}.*)?$",
+            re.I,
+        ),
+        1,
+    ),
+    # Crédit Agricole : "Prlv <name>" (hors PRLV SEPA déjà couvert)
+    (re.compile(r"^Prlv\s+(?!SEPA\b)(.+?)(?:\s+FR\d{2}.*)?$", re.I), 1),
 ]
 
 

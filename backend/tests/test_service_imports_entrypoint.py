@@ -35,6 +35,10 @@ def test_import_pdf_bytes_happy_path(db_session: Session) -> None:
     assert rec.imported_count >= 3
     assert rec.filename == "synthetic_minimal.pdf"
     assert rec.file_sha256 is not None
+    # Bug fix: period_start / period_end doivent être remontés depuis le parser
+    assert rec.period_start is not None
+    assert rec.period_end is not None
+    assert rec.period_start <= rec.period_end
 
 
 def test_import_pdf_bytes_rejects_oversized(db_session: Session) -> None:

@@ -59,3 +59,6 @@ frontend/tsconfig.tsbuildinfo
 # Docker
 docker-compose.override.yml
 .superpowers/
+
+# uv lock (local dev only, Dockerfile uses pip install -e .)
+backend/uv.lock

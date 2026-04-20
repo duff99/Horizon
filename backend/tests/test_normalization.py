@@ -85,6 +85,32 @@ def test_extract_counterparty_unknown_returns_none() -> None:
     assert extract_counterparty("Intérêts de retard") is None
 
 
+def test_extract_counterparty_ca_carte() -> None:
+    # Crédit Agricole : "Carte X2043 <merchant> DD/MM"
+    assert extract_counterparty(
+        "Carte X2043 Chambaud Frederique 31/12"
+    ) == "Chambaud Frederique"
+    assert extract_counterparty(
+        "Carte X2043 Rest L'escale Chaspu 05/01"
+    ) == "Rest L'escale Chaspu"
+
+
+def test_extract_counterparty_ca_virement() -> None:
+    assert extract_counterparty(
+        "Virement Web Steven Breuil Notes de frais"
+    ) == "Steven Breuil"
+    assert extract_counterparty(
+        "Virement Vir Inst vers Kaba Traore"
+    ) == "Kaba Traore"
+
+
+def test_extract_counterparty_ca_prlv() -> None:
+    assert extract_counterparty("Prlv Fygr SAS") == "Fygr SAS"
+    assert extract_counterparty(
+        "Prlv Cabinet Allegre Faure Associes"
+    ) == "Cabinet Allegre Faure Associes"
+
+
 def test_compute_dedup_key_stable() -> None:
     k1 = compute_dedup_key(bank_account_id=1, operation_date=date(2026, 3, 1),
                            value_date=date(2026, 3, 1), amount=Decimal("-80.00"),

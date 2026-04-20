@@ -369,6 +369,8 @@ def import_pdf_bytes(
         parser = get_parser_for(pdf_bytes)
         rec.bank_code = parser.bank_code
         statement = parser.parse(pdf_bytes)
+        rec.period_start = statement.period_start
+        rec.period_end = statement.period_end
         check_pages_limit(pages=statement.page_count)
         check_transactions_limit(
             count=sum(1 + len(t.children) for t in statement.transactions)
