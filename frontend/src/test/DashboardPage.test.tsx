@@ -28,10 +28,15 @@ function mockSummary(overrides: Partial<DashboardSummary> = {}): DashboardSummar
     inflows: "2500.00",
     outflows: "-800.50",
     uncategorized_count: 3,
+    prev_period_start: "2026-03-13",
+    prev_period_end: "2026-03-31",
+    prev_inflows: "2000.00",
+    prev_outflows: "-700.00",
     daily: [
       { date: "2026-04-01", inflows: "1000.00", outflows: "-200.00" },
       { date: "2026-04-02", inflows: "1500.00", outflows: "-600.50" },
     ],
+    balance_trend: [],
     ...overrides,
   };
 }

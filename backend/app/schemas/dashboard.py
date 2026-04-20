@@ -23,6 +23,13 @@ class DailyCashflow(BaseModel):
     outflows: Decimal
 
 
+class DailyBalance(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    balance: Decimal
+
+
 class DashboardSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -35,4 +42,12 @@ class DashboardSummary(BaseModel):
     inflows: Decimal
     outflows: Decimal
     uncategorized_count: int
+    # Comparaison avec la période précédente de même durée
+    prev_period_start: date
+    prev_period_end: date
+    prev_inflows: Decimal
+    prev_outflows: Decimal
     daily: list[DailyCashflow]
+    # Courbe de solde estimé sur 90 jours glissants (terminant sur period_end).
+    # Reconstruite à rebours depuis total_balance (le dernier point = total_balance).
+    balance_trend: list[DailyBalance]

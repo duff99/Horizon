@@ -115,6 +115,11 @@ export interface DailyCashflow {
   outflows: string;
 }
 
+export interface DailyBalance {
+  date: string;
+  balance: string;
+}
+
 export interface DashboardSummary {
   period: DashboardPeriod;
   period_label: string;
@@ -125,5 +130,10 @@ export interface DashboardSummary {
   inflows: string;
   outflows: string;
   uncategorized_count: number;
+  prev_period_start: string;
+  prev_period_end: string;
+  prev_inflows: string;
+  prev_outflows: string;
   daily: DailyCashflow[];
+  balance_trend: DailyBalance[];
 }

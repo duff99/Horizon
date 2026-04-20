@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -11,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { fetchDashboardSummary } from "../api/dashboard";
+import { useEntities } from "../api/entities";
 import type { DashboardPeriod, DashboardSummary } from "../types/api";
 
 const PERIODS: { value: DashboardPeriod; label: string }[] = [
@@ -36,16 +39,29 @@ function formatEUR(v: string | number): string {
   return Number.isFinite(n) ? EUR.format(n) : "—";
 }
 
+function formatPct(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${v.toFixed(1)} %`;
+}
+
+function relativeDelta(current: number, previous: number): number {
+  if (previous === 0) return current === 0 ? 0 : Number.POSITIVE_INFINITY;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
 function KpiCard({
   label,
   value,
   hint,
   tone = "neutral",
+  delta,
 }: {
   label: string;
   value: string;
   hint: string;
   tone?: "neutral" | "credit" | "debit" | "warn";
+  delta?: { pct: number; betterUp: boolean };
 }) {
   const toneClass = {
     neutral: "text-ink",
@@ -53,6 +69,33 @@ function KpiCard({
     debit: "text-debit",
     warn: "text-amber-700",
   }[tone];
+
+  let deltaBadge: JSX.Element | null = null;
+  if (delta) {
+    const isFinite = Number.isFinite(delta.pct);
+    const isUp = delta.pct > 0;
+    const isGood = isUp === delta.betterUp;
+    const color = !isFinite
+      ? "text-muted-foreground"
+      : delta.pct === 0
+        ? "text-muted-foreground"
+        : isGood
+          ? "text-credit"
+          : "text-debit";
+    const arrow = !isFinite
+      ? "·"
+      : delta.pct === 0
+        ? "="
+        : isUp
+          ? "↑"
+          : "↓";
+    deltaBadge = (
+      <span className={`ml-2 text-[11px] font-medium ${color}`}>
+        {arrow} {isFinite ? formatPct(delta.pct) : "n/a"}
+      </span>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -63,7 +106,10 @@ function KpiCard({
       >
         {value}
       </div>
-      <div className="mt-1 text-[12px] text-muted-foreground">{hint}</div>
+      <div className="mt-1 flex items-center text-[12px] text-muted-foreground">
+        <span>{hint}</span>
+        {deltaBadge}
+      </div>
     </div>
   );
 }
@@ -147,13 +193,108 @@ function CashflowChart({ summary }: { summary: DashboardSummary }) {
   );
 }
 
+function BalanceTrendChart({ summary }: { summary: DashboardSummary }) {
+  const data = useMemo(
+    () =>
+      summary.balance_trend.map((p) => ({
+        date: p.date,
+        dateLabel: DATE.format(new Date(p.date)),
+        Solde: Number(p.balance),
+      })),
+    [summary.balance_trend],
+  );
+
+  if (data.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="text-[13px] font-semibold text-ink">
+          Solde estimé — 90 derniers jours
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          Reconstruit à rebours depuis le dernier solde connu
+        </div>
+      </div>
+      <div style={{ width: "100%", height: 240 }}>
+        <ResponsiveContainer>
+          <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            <defs>
+              <linearGradient id="balance-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="2 2"
+              stroke="hsl(var(--line))"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="dateLabel"
+              tick={{ fontSize: 11, fill: "hsl(var(--muted-fg))" }}
+              axisLine={{ stroke: "hsl(var(--line))" }}
+              tickLine={false}
+              interval="preserveStartEnd"
+              minTickGap={24}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: "hsl(var(--muted-fg))" }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => EUR.format(Number(v)).replace(/\u202f?€/, "")}
+              width={72}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "hsl(var(--panel))",
+                border: "1px solid hsl(var(--line))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              formatter={(v) => formatEUR(Number(v))}
+            />
+            <Area
+              type="monotone"
+              dataKey="Solde"
+              stroke="hsl(var(--accent))"
+              strokeWidth={2}
+              fill="url(#balance-grad)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>("current_month");
+  const [entityId, setEntityId] = useState<number | "all">("all");
+  const { data: entities = [] } = useEntities();
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["dashboard-summary", period],
-    queryFn: () => fetchDashboardSummary({ period }),
+    queryKey: ["dashboard-summary", period, entityId],
+    queryFn: () =>
+      fetchDashboardSummary({
+        period,
+        entityId: entityId === "all" ? undefined : entityId,
+      }),
     staleTime: 60_000,
   });
+
+  const deltas = useMemo(() => {
+    if (!data) return null;
+    const inflowsDelta = relativeDelta(Number(data.inflows), Number(data.prev_inflows));
+    // Outflows sont négatifs : une baisse (delta < 0) = moins de sorties → bonne nouvelle.
+    const outflowsDelta = relativeDelta(
+      Math.abs(Number(data.outflows)),
+      Math.abs(Number(data.prev_outflows)),
+    );
+    return { inflowsDelta, outflowsDelta };
+  }, [data]);
 
   return (
     <section className="space-y-6">
@@ -169,28 +310,48 @@ export function DashboardPage() {
           </p>
         </div>
 
-        <div
-          role="tablist"
-          aria-label="Période"
-          className="inline-flex rounded-md border border-line-soft bg-panel p-0.5 shadow-card"
-        >
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              role="tab"
-              aria-selected={period === p.value}
-              onClick={() => setPeriod(p.value)}
-              className={
-                "px-3 py-1.5 text-[12.5px] font-medium transition-colors rounded " +
-                (period === p.value
-                  ? "bg-ink text-panel"
-                  : "text-ink-2 hover:text-ink")
+        <div className="flex flex-wrap items-center gap-2">
+          {entities.length > 1 && (
+            <select
+              aria-label="Filtrer par entité"
+              value={entityId === "all" ? "" : String(entityId)}
+              onChange={(e) =>
+                setEntityId(e.target.value === "" ? "all" : Number(e.target.value))
               }
+              className="rounded-md border border-line-soft bg-panel px-3 py-1.5 text-[12.5px] text-ink shadow-card outline-none focus:border-ink-2"
             >
-              {p.label}
-            </button>
-          ))}
+              <option value="">Toutes les entités</option>
+              {entities.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div
+            role="tablist"
+            aria-label="Période"
+            className="inline-flex rounded-md border border-line-soft bg-panel p-0.5 shadow-card"
+          >
+            {PERIODS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                role="tab"
+                aria-selected={period === p.value}
+                onClick={() => setPeriod(p.value)}
+                className={
+                  "px-3 py-1.5 text-[12.5px] font-medium transition-colors rounded " +
+                  (period === p.value
+                    ? "bg-ink text-panel"
+                    : "text-ink-2 hover:text-ink")
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -225,14 +386,24 @@ export function DashboardPage() {
             <KpiCard
               label="Entrées"
               value={formatEUR(data.inflows)}
-              hint="Crédits sur la période"
+              hint="vs période précédente"
               tone="credit"
+              delta={
+                deltas
+                  ? { pct: deltas.inflowsDelta, betterUp: true }
+                  : undefined
+              }
             />
             <KpiCard
               label="Sorties"
               value={formatEUR(data.outflows)}
-              hint="Débits sur la période"
+              hint="vs période précédente"
               tone="debit"
+              delta={
+                deltas
+                  ? { pct: deltas.outflowsDelta, betterUp: false }
+                  : undefined
+              }
             />
             <KpiCard
               label="Non catégorisées"
@@ -244,6 +415,7 @@ export function DashboardPage() {
         )}
       </div>
 
+      {data && <BalanceTrendChart summary={data} />}
       {data && <CashflowChart summary={data} />}
     </section>
   );
