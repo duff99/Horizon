@@ -32,7 +32,10 @@ def list_transactions(
         UserEntityAccess.user_id == user.id
     )
 
-    conditions = [BankAccount.entity_id.in_(accessible_entity_ids)]
+    conditions = [
+        BankAccount.entity_id.in_(accessible_entity_ids),
+        Transaction.is_aggregation_parent.is_(False),
+    ]
     if filters.bank_account_id:
         conditions.append(Transaction.bank_account_id == filters.bank_account_id)
     if filters.date_from:
