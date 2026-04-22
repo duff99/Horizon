@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { useEntities } from "../api/entities";
+import { useEntityFilter } from "../stores/entityFilter";
 import {
   createForecastEntry,
   deleteForecastEntry,
@@ -77,12 +78,11 @@ const emptyForm: FormState = {
 export function ForecastPage() {
   const qc = useQueryClient();
   const { data: entities = [] } = useEntities();
-  const [selectedEntity, setSelectedEntity] = useState<number | "all">("all");
+  const entityId = useEntityFilter((s) => s.entityId);
   const [horizon, setHorizon] = useState<number>(90);
   const [form, setForm] = useState<FormState>(emptyForm);
 
-  const entityIdForQueries =
-    selectedEntity === "all" ? undefined : selectedEntity;
+  const entityIdForQueries = entityId ?? undefined;
 
   const { data: projection, isLoading: projLoading } = useQuery({
     queryKey: ["forecast-projection", horizon, entityIdForQueries],
@@ -97,8 +97,8 @@ export function ForecastPage() {
   });
 
   const suggestionsEntityId =
-    typeof selectedEntity === "number"
-      ? selectedEntity
+    entityId != null
+      ? entityId
       : entities.length === 1
         ? entities[0].id
         : undefined;
@@ -214,23 +214,6 @@ export function ForecastPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {entities.length > 1 && (
-            <select
-              aria-label="Filtrer par entité"
-              value={selectedEntity === "all" ? "" : String(selectedEntity)}
-              onChange={(e) =>
-                setSelectedEntity(e.target.value === "" ? "all" : Number(e.target.value))
-              }
-              className="rounded-md border border-line-soft bg-panel px-3 py-1.5 text-[12.5px] text-ink shadow-card"
-            >
-              <option value="">Toutes les entités</option>
-              {entities.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          )}
           <div
             role="tablist"
             aria-label="Horizon"

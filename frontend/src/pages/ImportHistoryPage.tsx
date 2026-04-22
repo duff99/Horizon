@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { fetchImports } from "../api/imports";
 import { Button } from "@/components/ui/button";
 import type { ImportRecord } from "@/types/api";
+import { useEntityFilter } from "../stores/entityFilter";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "En cours",
@@ -37,9 +38,10 @@ function formatPeriod(start: string | null, end: string | null): string {
 }
 
 export function ImportHistoryPage() {
+  const entityId = useEntityFilter((s) => s.entityId);
   const { data = [], isLoading } = useQuery({
-    queryKey: ["imports"],
-    queryFn: fetchImports,
+    queryKey: ["imports", entityId],
+    queryFn: () => fetchImports({ entityId }),
   });
   const [preview, setPreview] = useState<ImportRecord | null>(null);
 

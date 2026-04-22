@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCounterparties, updateCounterparty } from "../api/counterparties";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useEntityFilter } from "../stores/entityFilter";
 
 type Status = "pending" | "active" | "ignored";
 
@@ -15,10 +16,11 @@ const LABEL: Record<Status, string> = {
 export function CounterpartiesPage() {
   const [tab, setTab] = useState<Status>("pending");
   const qc = useQueryClient();
+  const entityId = useEntityFilter((s) => s.entityId);
 
   const { data = [] } = useQuery({
-    queryKey: ["counterparties", tab],
-    queryFn: () => fetchCounterparties(tab),
+    queryKey: ["counterparties", tab, entityId],
+    queryFn: () => fetchCounterparties({ status: tab, entityId }),
   });
 
   const mutation = useMutation({

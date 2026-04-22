@@ -24,13 +24,18 @@ import { useEntities } from "@/api/entities";
 import { useCounterparties } from "@/api/counterparties";
 import { useBankAccounts } from "@/api/bankAccounts";
 import { useMe } from "@/hooks/useAuth";
+import { useEntityFilter } from "@/stores/entityFilter";
 
 export function RulesPage() {
   const meQuery = useMe();
-  const rulesQuery = useRules({ scope: "all" });
+  const entityId = useEntityFilter((s) => s.entityId);
+  const rulesQuery = useRules({
+    scope: "all",
+    entity_id: entityId ?? undefined,
+  });
   const categoriesQuery = useCategories();
   const entitiesQuery = useEntities();
-  const counterpartiesQuery = useCounterparties({});
+  const counterpartiesQuery = useCounterparties({ entityId });
   const bankAccountsQuery = useBankAccounts();
 
   const createMut = useCreateRule();
