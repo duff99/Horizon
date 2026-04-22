@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import (
+    analysis,
     auth,
     bank_accounts,
     bootstrap,
@@ -40,3 +41,4 @@ api_router.include_router(forecast_scenarios.router)
 api_router.include_router(forecast_lines.router)
 api_router.include_router(forecast_pivot.router)
 api_router.include_router(commitments.router)
+api_router.include_router(analysis.router)
