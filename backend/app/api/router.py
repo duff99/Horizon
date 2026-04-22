@@ -10,6 +10,7 @@ from app.api import (
     dashboard,
     entities,
     forecast,
+    forecast_lines,
     forecast_scenarios,
     health,
     imports,
@@ -35,4 +36,5 @@ api_router.include_router(categories.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(forecast.router)
 api_router.include_router(forecast_scenarios.router)
+api_router.include_router(forecast_lines.router)
 api_router.include_router(commitments.router)

@@ -1,0 +1,133 @@
+"""Endpoints /api/forecast/lines — CRUD upsert + validate-formula."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.deps import get_current_user, require_entity_access
+from app.models.forecast_line import ForecastLine, ForecastLineMethod
+from app.models.forecast_scenario import ForecastScenario
+from app.models.user import User
+from app.schemas.forecast import (
+    ForecastMethod,
+    LineRead,
+    LineUpsert,
+    ValidateFormulaRequest,
+    ValidateFormulaResponse,
+)
+
+router = APIRouter(prefix="/api/forecast/lines", tags=["forecast-lines"])
+
+
+def _get_scenario_with_access(
+    session: Session, user: User, scenario_id: int,
+) -> ForecastScenario:
+    sc = session.get(ForecastScenario, scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="Scénario introuvable")
+    require_entity_access(session=session, user=user, entity_id=sc.entity_id)
+    return sc
+
+
+@router.get("", response_model=list[LineRead])
+def list_lines(
+    scenario_id: int = Query(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> list[LineRead]:
+    _get_scenario_with_access(session, user, scenario_id)
+    rows = list(
+        session.scalars(
+            select(ForecastLine)
+            .where(ForecastLine.scenario_id == scenario_id)
+            .order_by(ForecastLine.category_id)
+        )
+    )
+    return [LineRead.model_validate(r) for r in rows]
+
+
+@router.put("", response_model=LineRead)
+def upsert_line(
+    payload: LineUpsert,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> LineRead:
+    sc = _get_scenario_with_access(session, user, payload.scenario_id)
+
+    # TODO Phase 4: validate formula via formula_parser + cycle detection
+    if payload.method == ForecastMethod.FORMULA and not (
+        payload.formula_expr and payload.formula_expr.strip()
+    ):
+        raise HTTPException(status_code=422, detail="formula_expr requis et non vide")
+
+    existing = session.scalar(
+        select(ForecastLine).where(
+            ForecastLine.scenario_id == payload.scenario_id,
+            ForecastLine.category_id == payload.category_id,
+        )
+    )
+
+    method_model = ForecastLineMethod(payload.method.value)
+
+    if existing is None:
+        line = ForecastLine(
+            scenario_id=payload.scenario_id,
+            entity_id=sc.entity_id,
+            category_id=payload.category_id,
+            method=method_model,
+            amount_cents=payload.amount_cents,
+            base_category_id=payload.base_category_id,
+            ratio=payload.ratio,
+            formula_expr=payload.formula_expr,
+            start_month=payload.start_month,
+            end_month=payload.end_month,
+            updated_by_id=user.id,
+        )
+        session.add(line)
+    else:
+        line = existing
+        line.method = method_model
+        line.amount_cents = payload.amount_cents
+        line.base_category_id = payload.base_category_id
+        line.ratio = payload.ratio
+        line.formula_expr = payload.formula_expr
+        line.start_month = payload.start_month
+        line.end_month = payload.end_month
+        line.updated_by_id = user.id
+
+    session.commit()
+    session.refresh(line)
+    return LineRead.model_validate(line)
+
+
+@router.delete("/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_line(
+    line_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> None:
+    line = session.get(ForecastLine, line_id)
+    if line is None:
+        raise HTTPException(status_code=404, detail="Ligne prévisionnelle introuvable")
+    require_entity_access(session=session, user=user, entity_id=line.entity_id)
+    session.delete(line)
+    session.commit()
+
+
+@router.post("/validate-formula", response_model=ValidateFormulaResponse)
+def validate_formula(
+    payload: ValidateFormulaRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> ValidateFormulaResponse:
+    """Valide une expression de formule.
+
+    Placeholder Phase 3 : contrôle d'accès + vérification non-vide.
+    TODO Phase 4: validate formula via formula_parser + cycle detection
+    """
+    _get_scenario_with_access(session, user, payload.scenario_id)
+    if not payload.formula_expr or not payload.formula_expr.strip():
+        return ValidateFormulaResponse(valid=False, error="formula_expr vide")
+    return ValidateFormulaResponse(valid=True, error=None)
