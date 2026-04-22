@@ -30,6 +30,8 @@ class TransactionRead(BaseModel):
     parent_transaction_id: int | None = None
     counterparty: CounterpartyNested | None = None
     category: CategoryNested | None = None
+    entity_id: int
+    entity_name: str
 
     def model_dump(self, **kw):
         d = super().model_dump(**kw)

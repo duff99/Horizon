@@ -34,6 +34,8 @@ def test_transaction_read_amount_is_string() -> None:
         is_aggregation_parent=False,
         counterparty=None,
         category=None,
+        entity_id=1,
+        entity_name="SAS Test",
     )
     d = obj.model_dump()
     assert d["amount"] == "-42.50"  # Decimal sérialisé en str pour précision

@@ -117,6 +117,25 @@ def test_transactions_filter_by_entity_id(
     assert resp2.json()["items"][0]["label"] == "TX-BETA"
 
 
+def test_transactions_response_exposes_entity_name(
+    client: TestClient, db_session: Session, auth_user_admin: User,
+) -> None:
+    """La réponse /api/transactions expose entity_id et entity_name
+    pour permettre une colonne « Société » côté front (Plan 5a phase D)."""
+    e1, _ba1, _tx1 = _seed_entity_with_tx(
+        db_session, user=auth_user_admin,
+        entity_name="SAS Gamma", iban="FR7600000000000000000000333",
+        tx_label="TX-GAMMA",
+    )
+    resp = client.get("/api/transactions", params={"per_page": 10})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] >= 1
+    item = next(x for x in body["items"] if x["label"] == "TX-GAMMA")
+    assert item["entity_id"] == e1.id
+    assert item["entity_name"] == "SAS Gamma"
+
+
 def test_transactions_entity_id_without_access_is_forbidden(
     client: TestClient, db_session: Session, auth_user_reader: User,
 ) -> None:
