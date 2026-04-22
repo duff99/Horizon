@@ -7,9 +7,16 @@ from app.models.categorization_rule import (  # noqa: F401
     RuleDirection,
 )
 from app.models.category import Category  # noqa: F401
+from app.models.commitment import (  # noqa: F401
+    Commitment,
+    CommitmentDirection,
+    CommitmentStatus,
+)
 from app.models.counterparty import Counterparty, CounterpartyStatus  # noqa: F401
 from app.models.entity import Entity
 from app.models.forecast_entry import ForecastEntry, ForecastRecurrence  # noqa: F401
+from app.models.forecast_line import ForecastLine, ForecastLineMethod  # noqa: F401
+from app.models.forecast_scenario import ForecastScenario  # noqa: F401
 from app.models.import_record import ImportRecord  # noqa: F401
 from app.models.transaction import Transaction, TransactionCategorizationSource  # noqa: F401
 from app.models.user import User, UserRole
