@@ -17,6 +17,7 @@ from app.schemas.forecast import (
     ValidateFormulaRequest,
     ValidateFormulaResponse,
 )
+from app.services.formula_parser import FormulaError, detect_cycle, parse as formula_parse
 
 router = APIRouter(prefix="/api/forecast/lines", tags=["forecast-lines"])
 
@@ -56,11 +57,27 @@ def upsert_line(
 ) -> LineRead:
     sc = _get_scenario_with_access(session, user, payload.scenario_id)
 
-    # TODO Phase 4: validate formula via formula_parser + cycle detection
-    if payload.method == ForecastMethod.FORMULA and not (
-        payload.formula_expr and payload.formula_expr.strip()
-    ):
-        raise HTTPException(status_code=422, detail="formula_expr requis et non vide")
+    if payload.method == ForecastMethod.FORMULA:
+        if not (payload.formula_expr and payload.formula_expr.strip()):
+            raise HTTPException(
+                status_code=422, detail="formula_expr requis et non vide"
+            )
+        try:
+            formula_parse(payload.formula_expr)
+        except FormulaError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"Formule invalide : {exc}"
+            ) from exc
+        if detect_cycle(
+            scenario_id=payload.scenario_id,
+            target_category_id=payload.category_id,
+            formula_expr=payload.formula_expr,
+            session=session,
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Cycle détecté : la formule référence sa propre catégorie",
+            )
 
     existing = session.scalar(
         select(ForecastLine).where(
@@ -124,10 +141,24 @@ def validate_formula(
 ) -> ValidateFormulaResponse:
     """Valide une expression de formule.
 
-    Placeholder Phase 3 : contrôle d'accès + vérification non-vide.
-    TODO Phase 4: validate formula via formula_parser + cycle detection
+    Retourne `{valid: true}` si la formule parse sans erreur ET ne contient
+    pas de cycle (si `category_id` fourni). Sinon `{valid: false, error: ...}`.
     """
     _get_scenario_with_access(session, user, payload.scenario_id)
     if not payload.formula_expr or not payload.formula_expr.strip():
         return ValidateFormulaResponse(valid=False, error="formula_expr vide")
+    try:
+        formula_parse(payload.formula_expr)
+    except FormulaError as exc:
+        return ValidateFormulaResponse(valid=False, error=str(exc))
+    if payload.category_id is not None and detect_cycle(
+        scenario_id=payload.scenario_id,
+        target_category_id=payload.category_id,
+        formula_expr=payload.formula_expr,
+        session=session,
+    ):
+        return ValidateFormulaResponse(
+            valid=False,
+            error="Cycle détecté : la formule référence sa propre catégorie",
+        )
     return ValidateFormulaResponse(valid=True, error=None)

@@ -167,14 +167,14 @@ class TestLinesCRUD:
         assert len(r.json()) == 1
 
 
-class TestValidateFormulaStub:
-    def test_valid_non_empty_formula(
+class TestValidateFormula:
+    def test_valid_simple_formula(
         self, client: TestClient, line_ctx: dict
     ) -> None:
         sc = line_ctx["scenario"]
         r = client.post(
             "/api/forecast/lines/validate-formula",
-            json={"scenario_id": sc.id, "formula_expr": "cat(1) * 2"},
+            json={"scenario_id": sc.id, "formula_expr": "{TestCat} * 2"},
         )
         assert r.status_code == 200
         assert r.json()["valid"] is True
@@ -189,3 +189,71 @@ class TestValidateFormulaStub:
         )
         assert r.status_code == 200
         assert r.json()["valid"] is False
+
+    def test_malformed_formula_invalid(
+        self, client: TestClient, line_ctx: dict
+    ) -> None:
+        sc = line_ctx["scenario"]
+        r = client.post(
+            "/api/forecast/lines/validate-formula",
+            json={"scenario_id": sc.id, "formula_expr": "{A} ++"},
+        )
+        assert r.status_code == 200
+        assert r.json()["valid"] is False
+        assert r.json()["error"] is not None
+
+
+class TestUpsertFormulaValidation:
+    def test_upsert_formula_malformed_422(
+        self, client: TestClient, line_ctx: dict
+    ) -> None:
+        sc = line_ctx["scenario"]
+        cat = line_ctx["category"]
+        r = client.put(
+            "/api/forecast/lines",
+            json={
+                "scenario_id": sc.id,
+                "category_id": cat.id,
+                "method": "FORMULA",
+                "formula_expr": "{UNCLOSED",
+            },
+        )
+        assert r.status_code == 422
+        assert "Formule invalide" in r.json()["detail"]
+
+    def test_upsert_formula_cycle_422(
+        self, client: TestClient, line_ctx: dict
+    ) -> None:
+        # Upsert une formule sur TestCat qui référence TestCat → cycle direct
+        sc = line_ctx["scenario"]
+        cat = line_ctx["category"]
+        r = client.put(
+            "/api/forecast/lines",
+            json={
+                "scenario_id": sc.id,
+                "category_id": cat.id,
+                "method": "FORMULA",
+                "formula_expr": "{TestCat} * 2",
+            },
+        )
+        assert r.status_code == 422
+        assert "Cycle" in r.json()["detail"]
+
+    def test_upsert_formula_valid_200(
+        self, client: TestClient, line_ctx: dict
+    ) -> None:
+        sc = line_ctx["scenario"]
+        cat = line_ctx["category"]
+        base = line_ctx["base_category"]
+        # Formule qui référence BaseCat (autre catégorie) → pas de cycle
+        r = client.put(
+            "/api/forecast/lines",
+            json={
+                "scenario_id": sc.id,
+                "category_id": cat.id,
+                "method": "FORMULA",
+                "formula_expr": "{BaseCat} * 0.5",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["formula_expr"] == "{BaseCat} * 0.5"
