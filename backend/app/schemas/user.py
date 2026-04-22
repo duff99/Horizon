@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
 
 from app.models.user import UserRole
 
@@ -28,3 +28,12 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     full_name: str | None = None
     is_active: bool | None = None
+
+
+class PasswordChangePayload(BaseModel):
+    current_password: SecretStr
+    new_password: SecretStr = Field(min_length=12)
+
+
+class AdminPasswordResetPayload(BaseModel):
+    new_password: SecretStr = Field(min_length=12)
