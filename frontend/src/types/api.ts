@@ -76,6 +76,8 @@ export interface Transaction {
   parent_transaction_id: number | null;
   counterparty: CounterpartyNested | null;
   category: CategoryNested | null;
+  entity_id: number;
+  entity_name: string;
 }
 
 export interface TransactionListResponse {
@@ -87,6 +89,7 @@ export interface TransactionListResponse {
 
 export interface TransactionFilter {
   bank_account_id?: number;
+  entity_id?: number | null;
   date_from?: string;
   date_to?: string;
   counterparty_id?: number;
