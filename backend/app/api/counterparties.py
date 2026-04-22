@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/counterparties", tags=["counterparties"])
 @router.get("", response_model=list[CounterpartyRead])
 def list_counterparties(
     status: Literal["pending", "active", "ignored"] | None = Query(default=None),
+    entity_id: int | None = Query(default=None),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[CounterpartyRead]:
@@ -27,6 +28,9 @@ def list_counterparties(
         UserEntityAccess.user_id == user.id
     )
     q = select(Counterparty).where(Counterparty.entity_id.in_(accessible))
+    if entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        q = q.where(Counterparty.entity_id == entity_id)
     if status:
         q = q.where(Counterparty.status == CounterpartyStatus(status))
     q = q.order_by(Counterparty.name.asc())

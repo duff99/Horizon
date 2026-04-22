@@ -1,14 +1,15 @@
 """Endpoint /api/transactions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_entity_access
 from app.models.bank_account import BankAccount
 from app.models.category import Category
+from app.models.entity import Entity
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User, UserRole
 from app.models.user_entity_access import UserEntityAccess
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 @router.get("", response_model=TransactionListResponse)
 def list_transactions(
     filters: TransactionFilter = Depends(),
+    entity_id: int | None = Query(None),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> TransactionListResponse:
@@ -36,6 +38,10 @@ def list_transactions(
         BankAccount.entity_id.in_(accessible_entity_ids),
         Transaction.is_aggregation_parent.is_(False),
     ]
+    if entity_id is not None:
+        # 403 si l'utilisateur n'a pas accès à l'entité demandée
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        conditions.append(BankAccount.entity_id == entity_id)
     if filters.bank_account_id:
         conditions.append(Transaction.bank_account_id == filters.bank_account_id)
     if filters.date_from:
@@ -58,8 +64,9 @@ def list_transactions(
         )
 
     base_q = (
-        select(Transaction)
+        select(Transaction, Entity.id.label("entity_id"), Entity.name.label("entity_name"))
         .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
+        .join(Entity, Entity.id == BankAccount.entity_id)
         .where(and_(*conditions))
         .order_by(
             Transaction.operation_date.desc(),
@@ -78,10 +85,28 @@ def list_transactions(
     offset = (filters.page - 1) * filters.per_page
     rows = session.execute(
         base_q.offset(offset).limit(filters.per_page)
-    ).scalars().all()
+    ).all()
+
+    items = []
+    for tx, ent_id, ent_name in rows:
+        data = {
+            "id": tx.id,
+            "operation_date": tx.operation_date,
+            "value_date": tx.value_date,
+            "label": tx.label,
+            "raw_label": tx.raw_label,
+            "amount": tx.amount,
+            "is_aggregation_parent": tx.is_aggregation_parent,
+            "parent_transaction_id": tx.parent_transaction_id,
+            "counterparty": tx.counterparty,
+            "category": tx.category,
+            "entity_id": ent_id,
+            "entity_name": ent_name,
+        }
+        items.append(TransactionRead.model_validate(data))
 
     return TransactionListResponse(
-        items=[TransactionRead.model_validate(r) for r in rows],
+        items=items,
         total=total,
         page=filters.page,
         per_page=filters.per_page,

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEntityFilter } from "../stores/entityFilter";
 import {
   Area,
   AreaChart,
@@ -22,7 +23,6 @@ import {
   fetchDashboardSummary,
   fetchTopCounterparties,
 } from "../api/dashboard";
-import { useEntities } from "../api/entities";
 import type {
   Alert,
   BankAccountBalance,
@@ -288,15 +288,15 @@ function BalanceTrendChart({ summary }: { summary: DashboardSummary }) {
 
 export function DashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>("current_month");
-  const [entityId, setEntityId] = useState<number | "all">("all");
-  const { data: entities = [] } = useEntities();
+  const entityId = useEntityFilter((s) => s.entityId);
+  const entityIdForQueries = entityId ?? undefined;
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard-summary", period, entityId],
     queryFn: () =>
       fetchDashboardSummary({
         period,
-        entityId: entityId === "all" ? undefined : entityId,
+        entityId: entityIdForQueries,
       }),
     staleTime: 60_000,
   });
@@ -327,24 +327,6 @@ export function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {entities.length > 1 && (
-            <select
-              aria-label="Filtrer par entité"
-              value={entityId === "all" ? "" : String(entityId)}
-              onChange={(e) =>
-                setEntityId(e.target.value === "" ? "all" : Number(e.target.value))
-              }
-              className="rounded-md border border-line-soft bg-panel px-3 py-1.5 text-[12.5px] text-ink shadow-card outline-none focus:border-ink-2"
-            >
-              <option value="">Toutes les entités</option>
-              {entities.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          )}
-
           <div
             role="tablist"
             aria-label="Période"
@@ -431,25 +413,25 @@ export function DashboardPage() {
         )}
       </div>
 
-      <AlertsSection entityId={entityId === "all" ? undefined : entityId} />
+      <AlertsSection entityId={entityIdForQueries} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {data && <BalanceTrendChart summary={data} />}
         {data && <CashflowChart summary={data} />}
       </div>
 
-      <BankBalancesSection entityId={entityId === "all" ? undefined : entityId} />
+      <BankBalancesSection entityId={entityIdForQueries} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <FlowColumn
           kind="income"
           period={period}
-          entityId={entityId === "all" ? undefined : entityId}
+          entityId={entityIdForQueries}
         />
         <FlowColumn
           kind="expense"
           period={period}
-          entityId={entityId === "all" ? undefined : entityId}
+          entityId={entityIdForQueries}
         />
       </div>
     </section>

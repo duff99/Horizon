@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTransactions, useBulkCategorize } from "../api/transactions";
+import { useEntityFilter } from "../stores/entityFilter";
 import { TransactionFilters } from "../components/TransactionFilters";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { RuleForm } from "../components/RuleForm";
@@ -44,14 +45,21 @@ export function TransactionsPage() {
   const [ruleInitialValue, setRuleInitialValue] = useState<RuleSuggestion | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
 
+  const entityId = useEntityFilter((s) => s.entityId);
+
+  const queryFilters: TransactionFilter = {
+    ...filters,
+    entity_id: entityId ?? undefined,
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions", filters],
-    queryFn: () => fetchTransactions(filters),
+    queryKey: ["transactions", queryFilters],
+    queryFn: () => fetchTransactions(queryFilters),
   });
 
   const categoriesQuery = useCategories();
   const entitiesQuery = useEntities();
-  const counterpartiesQuery = useCounterparties({});
+  const counterpartiesQuery = useCounterparties({ entityId });
   const bankAccountsQuery = useBankAccounts();
 
   const bulkMut = useBulkCategorize();
@@ -238,6 +246,11 @@ export function TransactionsPage() {
                 <th className="px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Date
                 </th>
+                {entityId === null && (
+                  <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Société
+                  </th>
+                )}
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Tiers / Libellé
                 </th>
@@ -252,13 +265,13 @@ export function TransactionsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={entityId === null ? 6 : 5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
                     Chargement…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={entityId === null ? 6 : 5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
                     Aucune transaction.
                   </td>
                 </tr>
@@ -287,6 +300,11 @@ export function TransactionsPage() {
                       <td className="whitespace-nowrap px-2 py-2.5 text-[12.5px] text-muted-foreground mono">
                         {DATE.format(new Date(tx.operation_date))}
                       </td>
+                      {entityId === null && (
+                        <td className="whitespace-nowrap px-3 py-2.5 text-[12.5px] text-ink-2">
+                          {tx.entity_name}
+                        </td>
+                      )}
                       <td className="max-w-[380px] px-4 py-2.5 text-[13.5px]">
                         <div className="truncate font-medium text-ink" title={tx.counterparty?.name ?? tx.label}>
                           {tx.counterparty?.name ?? tx.label}

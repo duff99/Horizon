@@ -28,7 +28,8 @@
     "react-router-dom": "^6.28.0",
     "recharts": "^3.8.1",
     "tailwind-merge": "^2.5.4",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

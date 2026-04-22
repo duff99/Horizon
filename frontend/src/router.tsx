@@ -12,6 +12,7 @@ import { RulesPage } from '@/pages/RulesPage';
 import { ImportHistoryPage } from '@/pages/ImportHistoryPage';
 import { ImportNewPage } from '@/pages/ImportNewPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { ProfilPage } from '@/pages/ProfilPage';
 import { TransactionsPage } from '@/pages/TransactionsPage';
 
 export const router = createBrowserRouter([
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       { path: '/tiers', element: <CounterpartiesPage /> },
       { path: '/contreparties', element: <Navigate to="/tiers" replace /> },
       { path: '/regles', element: <RulesPage /> },
+      { path: '/profil', element: <ProfilPage /> },
       { path: '/administration/utilisateurs', element: <AdminUsersPage /> },
       { path: '/administration/societes', element: <AdminEntitiesPage /> },
       {

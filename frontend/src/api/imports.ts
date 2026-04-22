@@ -2,8 +2,13 @@ import type { ImportRecord } from "../types/api";
 
 const DEFAULT_OPTIONS: RequestInit = { credentials: "include" };
 
-export async function fetchImports(): Promise<ImportRecord[]> {
-  const resp = await fetch("/api/imports", DEFAULT_OPTIONS);
+export async function fetchImports(
+  args: { entityId?: number | null } = {},
+): Promise<ImportRecord[]> {
+  const params = new URLSearchParams();
+  if (args.entityId != null) params.set("entity_id", String(args.entityId));
+  const qs = params.toString() ? `?${params}` : "";
+  const resp = await fetch(`/api/imports${qs}`, DEFAULT_OPTIONS);
   if (!resp.ok) throw new Error(`GET /api/imports → ${resp.status}`);
   return resp.json();
 }

@@ -2,9 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import type { Counterparty } from "../types/api";
 
 export async function fetchCounterparties(
-  status?: "pending" | "active" | "ignored",
+  args: {
+    status?: "pending" | "active" | "ignored";
+    entityId?: number | null;
+  } = {},
 ): Promise<Counterparty[]> {
-  const qs = status ? `?status=${status}` : "";
+  const params = new URLSearchParams();
+  if (args.status) params.set("status", args.status);
+  if (args.entityId != null) params.set("entity_id", String(args.entityId));
+  const qs = params.toString() ? `?${params}` : "";
   const resp = await fetch(`/api/counterparties${qs}`, { credentials: "include" });
   if (!resp.ok) throw new Error(`GET /api/counterparties → ${resp.status}`);
   return resp.json();
@@ -24,9 +30,14 @@ export async function updateCounterparty(
   return resp.json();
 }
 
-export function useCounterparties(filters: { status?: "pending" | "active" | "ignored" } = {}) {
+export function useCounterparties(
+  filters: {
+    status?: "pending" | "active" | "ignored";
+    entityId?: number | null;
+  } = {},
+) {
   return useQuery({
     queryKey: ["counterparties", filters],
-    queryFn: () => fetchCounterparties(filters.status),
+    queryFn: () => fetchCounterparties(filters),
   });
 }
