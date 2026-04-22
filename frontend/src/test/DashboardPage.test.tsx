@@ -49,6 +49,12 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => {
           if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/month-comparison")) {
+            return {
+              current: { month_label: "avr. 2026", in_cents: 0, out_cents: 0 },
+              previous: { month_label: "mars 2026", in_cents: 0, out_cents: 0 },
+            };
+          }
           if (s.includes("/api/dashboard/alerts")) return [];
           if (s.includes("/api/dashboard/categories")) {
             return { income: [], expense: [] };
@@ -86,7 +92,9 @@ describe("DashboardPage", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: /Mois précédent/i }));
 
-    expect(await screen.findByText(/Mars 2026/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Période\s*:\s*Mars 2026/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/9[\s\u00a0]999,00/)).toBeInTheDocument();
   });
 
@@ -97,6 +105,12 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => {
           if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/month-comparison")) {
+            return {
+              current: { month_label: "avr. 2026", in_cents: 0, out_cents: 0 },
+              previous: { month_label: "mars 2026", in_cents: 0, out_cents: 0 },
+            };
+          }
           if (s.includes("/api/dashboard/alerts")) return [];
           if (s.includes("/api/dashboard/categories")) {
             return { income: [], expense: [] };
@@ -125,6 +139,12 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => {
           if (s.includes("/api/dashboard/bank-balances")) return [];
+          if (s.includes("/api/dashboard/month-comparison")) {
+            return {
+              current: { month_label: "avr. 2026", in_cents: 0, out_cents: 0 },
+              previous: { month_label: "mars 2026", in_cents: 0, out_cents: 0 },
+            };
+          }
           if (s.includes("/api/dashboard/categories")) {
             return { income: [], expense: [] };
           }
