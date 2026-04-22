@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEntityFilter } from "../stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 import {
   Area,
   AreaChart,
@@ -327,6 +328,7 @@ export function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <EntitySelector />
           <div
             role="tablist"
             aria-label="Période"

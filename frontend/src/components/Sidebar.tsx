@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 import { useLogout, useMe } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -208,22 +208,28 @@ export function Sidebar() {
       <NavGroup label="Configuration" items={config} isAdmin={isAdmin} />
       <NavGroup label="Administration" items={admin} isAdmin={isAdmin} />
 
-      <div className="mt-auto flex items-center gap-2.5 border-t border-white/5 pt-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-accent to-emerald-700 text-[12px] font-bold text-[#042f2e]">
-          {initials(me.data ?? undefined)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[12.5px] font-medium text-white">
-            {me.data?.fullName ?? me.data?.email ?? '—'}
+      <div className="mt-auto flex items-center gap-2 border-t border-white/5 pt-4">
+        <Link
+          to="/profil"
+          aria-label="Mon profil"
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-1 -mx-1 transition-colors hover:bg-white/5"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-emerald-700 text-[12px] font-bold text-[#042f2e]">
+            {initials(me.data ?? undefined)}
           </div>
-          <div className="text-[11px] text-slate-500">
-            {me.data?.role === 'admin' ? 'admin' : 'utilisateur'}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12.5px] font-medium text-white">
+              {me.data?.fullName ?? me.data?.email ?? '—'}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {me.data?.role === 'admin' ? 'admin' : 'utilisateur'}
+            </div>
           </div>
-        </div>
+        </Link>
         <button
           type="button"
           onClick={() => logout.mutate()}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
           aria-label="Déconnexion"
         >
           <svg

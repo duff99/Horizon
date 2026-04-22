@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTransactions, useBulkCategorize } from "../api/transactions";
 import { useEntityFilter } from "../stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { RuleForm } from "../components/RuleForm";
@@ -159,7 +160,7 @@ export function TransactionsPage() {
   return (
     <div className="space-y-6">
       {/* Page head */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">Transactions</h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -171,6 +172,7 @@ export function TransactionsPage() {
               : ""}
           </p>
         </div>
+        <EntitySelector />
       </div>
 
       {/* Card: filters + bulk + table */}

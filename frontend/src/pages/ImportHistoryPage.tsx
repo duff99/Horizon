@@ -5,6 +5,7 @@ import { fetchImports } from "../api/imports";
 import { Button } from "@/components/ui/button";
 import type { ImportRecord } from "@/types/api";
 import { useEntityFilter } from "../stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "En cours",
@@ -47,7 +48,7 @@ export function ImportHistoryPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">
             Historique des imports
@@ -56,7 +57,9 @@ export function ImportHistoryPage() {
             {data.length} import{data.length > 1 ? "s" : ""} effectué{data.length > 1 ? "s" : ""}
           </p>
         </div>
-        <Link to="/imports/nouveau">
+        <div className="flex items-center gap-2">
+          <EntitySelector />
+          <Link to="/imports/nouveau">
           <Button>
             <svg
               aria-hidden
@@ -72,7 +75,8 @@ export function ImportHistoryPage() {
             </svg>
             Nouvel import
           </Button>
-        </Link>
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (

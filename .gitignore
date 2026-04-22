@@ -62,3 +62,4 @@ docker-compose.override.yml
 
 # uv lock (local dev only, Dockerfile uses pip install -e .)
 backend/uv.lock
+images-exemple/

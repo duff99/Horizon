@@ -4,6 +4,7 @@ import { fetchCounterparties, updateCounterparty } from "../api/counterparties";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEntityFilter } from "../stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 
 type Status = "pending" | "active" | "ignored";
 
@@ -31,13 +32,16 @@ export function CounterpartiesPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Tiers
-        </h1>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">
-          Validez ou ignorez les tiers (clients, fournisseurs…) détectés lors des imports.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+            Tiers
+          </h1>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Validez ou ignorez les tiers (clients, fournisseurs…) détectés lors des imports.
+          </p>
+        </div>
+        <EntitySelector />
       </div>
 
       <div className="flex gap-1 border-b border-line-soft">

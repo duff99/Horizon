@@ -25,6 +25,7 @@ import { useCounterparties } from "@/api/counterparties";
 import { useBankAccounts } from "@/api/bankAccounts";
 import { useMe } from "@/hooks/useAuth";
 import { useEntityFilter } from "@/stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 
 export function RulesPage() {
   const meQuery = useMe();
@@ -82,7 +83,7 @@ export function RulesPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">
             Règles de catégorisation
@@ -92,7 +93,9 @@ export function RulesPage() {
             {systemCount > 0 && ` · ${systemCount} système · ${customCount} personnalisée${customCount > 1 ? "s" : ""}`}
           </p>
         </div>
-        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <div className="flex items-center gap-2">
+          <EntitySelector />
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
           <DrawerTrigger asChild>
             <Button onClick={() => setEditing(null)}>
               <svg
@@ -131,7 +134,8 @@ export function RulesPage() {
               />
             </div>
           </DrawerContent>
-        </Drawer>
+          </Drawer>
+        </div>
       </div>
 
       {isLoading ? (

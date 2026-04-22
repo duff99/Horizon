@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useEntities } from "../api/entities";
 import { useEntityFilter } from "../stores/entityFilter";
+import { EntitySelector } from "@/components/EntitySelector";
 import {
   createForecastEntry,
   deleteForecastEntry,
@@ -214,6 +215,7 @@ export function ForecastPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <EntitySelector />
           <div
             role="tablist"
             aria-label="Horizon"
