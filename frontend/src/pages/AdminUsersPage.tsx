@@ -9,6 +9,7 @@ import {
   updateUser,
   type User,
 } from '@/api/users';
+import { AdminUsersResetPasswordDialog } from '@/pages/AdminUsersResetPasswordDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +30,7 @@ export function AdminUsersPage() {
   });
 
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -297,6 +299,13 @@ export function AdminUsersPage() {
                       <Button variant="ghost" size="sm" onClick={() => startEdit(u)}>
                         Éditer
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setResetUserId(u.id)}
+                      >
+                        Réinit. mdp
+                      </Button>
                       {u.isActive && (
                         <Button
                           variant="ghost"
@@ -318,6 +327,15 @@ export function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {resetUserId !== null && (
+        <AdminUsersResetPasswordDialog
+          userId={resetUserId}
+          userEmail={users?.find((u) => u.id === resetUserId)?.email ?? ''}
+          open={resetUserId !== null}
+          onClose={() => setResetUserId(null)}
+        />
       )}
     </section>
   );
