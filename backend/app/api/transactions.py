@@ -1,12 +1,12 @@
 """Endpoint /api/transactions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_entity_access
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.transaction import Transaction, TransactionCategorizationSource
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 @router.get("", response_model=TransactionListResponse)
 def list_transactions(
     filters: TransactionFilter = Depends(),
+    entity_id: int | None = Query(None),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> TransactionListResponse:
@@ -36,6 +37,10 @@ def list_transactions(
         BankAccount.entity_id.in_(accessible_entity_ids),
         Transaction.is_aggregation_parent.is_(False),
     ]
+    if entity_id is not None:
+        # 403 si l'utilisateur n'a pas accès à l'entité demandée
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        conditions.append(BankAccount.entity_id == entity_id)
     if filters.bank_account_id:
         conditions.append(Transaction.bank_account_id == filters.bank_account_id)
     if filters.date_from:
