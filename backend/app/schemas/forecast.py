@@ -185,3 +185,44 @@ class ValidateFormulaRequest(BaseModel):
 class ValidateFormulaResponse(BaseModel):
     valid: bool
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Plan 5b Phase 5 — Pivot response
+# ---------------------------------------------------------------------------
+
+
+class PivotCellRead(BaseModel):
+    """Cellule (catégorie, mois) du pivot prévisionnel."""
+
+    month: str  # format "YYYY-MM"
+    realized_cents: int
+    committed_cents: int
+    forecast_cents: int
+    total_cents: int
+    line_method: str | None = None
+    line_params: dict | None = None
+
+
+class PivotRowRead(BaseModel):
+    category_id: int
+    parent_id: int | None = None
+    label: str
+    level: int
+    direction: str  # "in" ou "out"
+    cells: list[PivotCellRead]
+
+
+class SeriesPointRead(BaseModel):
+    month: str
+    in_cents: int
+    out_cents: int
+
+
+class PivotResponse(BaseModel):
+    months: list[str]
+    opening_balance_cents: int
+    closing_balance_projection_cents: list[int]
+    rows: list[PivotRowRead]
+    realized_series: list[SeriesPointRead]
+    forecast_series: list[SeriesPointRead]
