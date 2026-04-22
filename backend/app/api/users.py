@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import require_admin
 from app.models.user import User, UserRole
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import (
+    AdminPasswordResetPayload,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
 from app.security import hash_password, validate_password_policy
 
 router = APIRouter(
@@ -81,6 +86,27 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_user_password(
+    user_id: int,
+    payload: AdminPasswordResetPayload,
+    db: Session = Depends(get_db),
+) -> None:
+    """Admin reset : définit un nouveau mot de passe pour n'importe quel user."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    new_pw = payload.new_password.get_secret_value()
+    try:
+        validate_password_policy(new_pw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    user.password_hash = hash_password(new_pw)
+    db.commit()
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
