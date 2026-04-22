@@ -314,13 +314,33 @@ def ingest_parsed_statement(
             if matched is not None:
                 categorized_count += 1
 
+        # 6. Auto-matching engagements (Plan 5b)
+        from app.models.commitment import CommitmentStatus as _CStatus
+        from app.services.commitment_matching import suggest_matches_for_tx
+
+        auto_matched_count = 0
+        for db_tx in inserted_map.values():
+            commitment = suggest_matches_for_tx(session, db_tx)
+            if commitment is None:
+                continue
+            # Re-vérifie qu'on ne bouscule pas un commitment déjà lié
+            if commitment.matched_transaction_id is not None:
+                continue
+            commitment.matched_transaction_id = db_tx.id
+            commitment.status = _CStatus.PAID
+            auto_matched_count += 1
+        session.flush()
+
         import_record.status = ImportStatus.COMPLETED
         import_record.imported_count = imported_count
         import_record.duplicates_skipped = duplicates_skipped
         import_record.counterparties_pending_created = pending_created
         import_record.opening_balance = statement.opening_balance
         import_record.closing_balance = statement.closing_balance
-        audit: dict = {"categorized_count": categorized_count}
+        audit: dict = {
+            "categorized_count": categorized_count,
+            "commitments_auto_matched": auto_matched_count,
+        }
         if overridden:
             audit["overridden"] = overridden
         import_record.audit = audit

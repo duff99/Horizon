@@ -3,10 +3,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import require_admin
+from app.deps import get_current_user, require_admin
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity, validate_entity_tree
+from app.models.user import User
 from app.schemas.entity import EntityCreate, EntityRead, EntityUpdate
+from app.services.forecast_scenarios import ensure_default_scenario
 
 router = APIRouter(
     prefix="/api/entities", tags=["entities"], dependencies=[Depends(require_admin)]
@@ -19,7 +21,11 @@ def list_entities(db: Session = Depends(get_db)) -> list[Entity]:
 
 
 @router.post("", response_model=EntityRead, status_code=status.HTTP_201_CREATED)
-def create_entity(payload: EntityCreate, db: Session = Depends(get_db)) -> Entity:
+def create_entity(
+    payload: EntityCreate,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+) -> Entity:
     e = Entity(**payload.model_dump())
     db.add(e)
     db.flush()
@@ -28,6 +34,8 @@ def create_entity(payload: EntityCreate, db: Session = Depends(get_db)) -> Entit
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Seed : chaque entité doit disposer d'un scénario prévisionnel par défaut.
+    ensure_default_scenario(db, e, created_by=current)
     db.commit()
     db.refresh(e)
     return e

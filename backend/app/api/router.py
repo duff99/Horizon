@@ -5,10 +5,14 @@ from app.api import (
     bank_accounts,
     bootstrap,
     categories,
+    commitments,
     counterparties,
     dashboard,
     entities,
     forecast,
+    forecast_lines,
+    forecast_pivot,
+    forecast_scenarios,
     health,
     imports,
     me,
@@ -32,3 +36,7 @@ api_router.include_router(rules.router)
 api_router.include_router(categories.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(forecast.router)
+api_router.include_router(forecast_scenarios.router)
+api_router.include_router(forecast_lines.router)
+api_router.include_router(forecast_pivot.router)
+api_router.include_router(commitments.router)

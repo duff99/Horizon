@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
+import { MonthComparisonCard } from "@/components/dashboard/MonthComparisonCard";
 import {
   Area,
   AreaChart,
@@ -416,6 +417,8 @@ export function DashboardPage() {
       </div>
 
       <AlertsSection entityId={entityIdForQueries} />
+
+      <MonthComparisonCard entityId={entityId} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {data && <BalanceTrendChart summary={data} />}

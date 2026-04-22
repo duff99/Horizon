@@ -29,6 +29,8 @@ from app.schemas.dashboard import (
     DailyCashflow,
     DashboardPeriod,
     DashboardSummary,
+    MonthComparison,
+    MonthComparisonPoint,
     TopCounterparties,
     TopCounterpartyItem,
 )
@@ -38,6 +40,11 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _FR_MONTHS = (
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+)
+
+_FR_MONTHS_ABBR = (
+    "janv.", "févr.", "mars", "avr.", "mai", "juin",
+    "juil.", "août", "sept.", "oct.", "nov.", "déc.",
 )
 
 
@@ -739,3 +746,85 @@ def get_alerts(
         )
 
     return alerts
+
+
+def _month_range(first_of: date) -> tuple[date, date]:
+    """Retourne (premier jour, dernier jour) du mois contenant `first_of`."""
+    last_day = calendar.monthrange(first_of.year, first_of.month)[1]
+    return first_of, date(first_of.year, first_of.month, last_day)
+
+
+def _previous_first(first_of: date) -> date:
+    if first_of.month == 1:
+        return date(first_of.year - 1, 12, 1)
+    return date(first_of.year, first_of.month - 1, 1)
+
+
+@router.get("/month-comparison", response_model=MonthComparison)
+def get_month_comparison(
+    entity_id: int | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MonthComparison:
+    """Comparaison in/out du mois courant vs mois précédent (en centimes)."""
+    bank_account_ids = _resolve_accessible_bank_accounts(
+        db, user=user, entity_id=entity_id,
+    )
+    today = date.today()
+    current_first = today.replace(day=1)
+    previous_first = _previous_first(current_first)
+
+    current_label = f"{_FR_MONTHS_ABBR[current_first.month - 1]} {current_first.year}"
+    previous_label = f"{_FR_MONTHS_ABBR[previous_first.month - 1]} {previous_first.year}"
+
+    if not bank_account_ids:
+        return MonthComparison(
+            current=MonthComparisonPoint(
+                month_label=current_label, in_cents=0, out_cents=0
+            ),
+            previous=MonthComparisonPoint(
+                month_label=previous_label, in_cents=0, out_cents=0
+            ),
+        )
+
+    def _totals(month_first: date) -> tuple[int, int]:
+        month_start, month_end = _month_range(month_first)
+        row = db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case((Transaction.amount > 0, Transaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("inflows"),
+                func.coalesce(
+                    func.sum(
+                        case((Transaction.amount < 0, Transaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("outflows"),
+            ).where(
+                and_(
+                    Transaction.bank_account_id.in_(bank_account_ids),
+                    Transaction.operation_date >= month_start,
+                    Transaction.operation_date <= month_end,
+                    Transaction.is_aggregation_parent.is_(False),
+                )
+            )
+        ).one()
+        # Conversion Decimal euros → centimes int.
+        in_cents = int((Decimal(row.inflows) * 100).to_integral_value())
+        out_cents = int((Decimal(row.outflows) * 100).to_integral_value())
+        return in_cents, out_cents
+
+    cur_in, cur_out = _totals(current_first)
+    prev_in, prev_out = _totals(previous_first)
+
+    return MonthComparison(
+        current=MonthComparisonPoint(
+            month_label=current_label, in_cents=cur_in, out_cents=cur_out
+        ),
+        previous=MonthComparisonPoint(
+            month_label=previous_label, in_cents=prev_in, out_cents=prev_out
+        ),
+    )

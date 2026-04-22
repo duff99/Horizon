@@ -5,9 +5,10 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AdminBankAccountsPage } from '@/pages/AdminBankAccountsPage';
 import { AdminEntitiesPage } from '@/pages/AdminEntitiesPage';
 import { AdminUsersPage } from '@/pages/AdminUsersPage';
+import { CommitmentsPage } from '@/pages/CommitmentsPage';
 import { CounterpartiesPage } from '@/pages/CounterpartiesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ForecastPage } from '@/pages/ForecastPage';
+import { ForecastV2Page } from '@/pages/ForecastV2Page';
 import { RulesPage } from '@/pages/RulesPage';
 import { ImportHistoryPage } from '@/pages/ImportHistoryPage';
 import { ImportNewPage } from '@/pages/ImportNewPage';
@@ -26,10 +27,11 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/tableau-de-bord" replace /> },
       { path: '/tableau-de-bord', element: <DashboardPage /> },
-      { path: '/previsionnel', element: <ForecastPage /> },
+      { path: '/previsionnel', element: <ForecastV2Page /> },
       { path: '/imports', element: <ImportHistoryPage /> },
       { path: '/imports/nouveau', element: <ImportNewPage /> },
       { path: '/transactions', element: <TransactionsPage /> },
+      { path: '/engagements', element: <CommitmentsPage /> },
       { path: '/tiers', element: <CounterpartiesPage /> },
       { path: '/contreparties', element: <Navigate to="/tiers" replace /> },
       { path: '/regles', element: <RulesPage /> },

@@ -15,6 +15,19 @@ class DashboardPeriod(StrEnum):
     LAST_90D = "last_90d"
 
 
+class MonthComparisonPoint(BaseModel):
+    """Point mensuel pour la comparaison courant vs précédent."""
+
+    month_label: str
+    in_cents: int
+    out_cents: int
+
+
+class MonthComparison(BaseModel):
+    current: MonthComparisonPoint
+    previous: MonthComparisonPoint
+
+
 class DailyCashflow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
