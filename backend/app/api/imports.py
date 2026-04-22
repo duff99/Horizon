@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import magic
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,6 +75,7 @@ async def create_import(
 
 @router.get("", response_model=list[ImportRecordRead])
 def list_imports(
+    entity_id: int | None = Query(None),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[ImportRecordRead]:
@@ -82,11 +83,16 @@ def list_imports(
     accessible_entity_ids = select(UserEntityAccess.entity_id).where(
         UserEntityAccess.user_id == user.id
     )
-    rows = session.execute(
+    stmt = (
         select(ImportRecord)
         .join(BankAccount, BankAccount.id == ImportRecord.bank_account_id)
         .where(BankAccount.entity_id.in_(accessible_entity_ids))
-        .order_by(ImportRecord.created_at.desc())
+    )
+    if entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        stmt = stmt.where(BankAccount.entity_id == entity_id)
+    rows = session.execute(
+        stmt.order_by(ImportRecord.created_at.desc())
     ).scalars().all()
     return [ImportRecordRead.model_validate(r) for r in rows]
 
