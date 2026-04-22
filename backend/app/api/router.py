@@ -5,6 +5,7 @@ from app.api import (
     bank_accounts,
     bootstrap,
     categories,
+    commitments,
     counterparties,
     dashboard,
     entities,
@@ -32,3 +33,4 @@ api_router.include_router(rules.router)
 api_router.include_router(categories.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(forecast.router)
+api_router.include_router(commitments.router)
