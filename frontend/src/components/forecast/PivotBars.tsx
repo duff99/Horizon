@@ -144,7 +144,7 @@ export function PivotBars({ result, currentMonth }: Props) {
               const p = payload?.[0]?.payload as ChartPoint | undefined;
               return p ? formatMonthLabel(p.month, "long") : "";
             }}
-            formatter={(value: number, name: string) => {
+            formatter={(value, name) => {
               const cents = Math.round(Number(value) * 100);
               const labels: Record<string, string> = {
                 realized_in: "Entrées réalisées",
@@ -154,7 +154,7 @@ export function PivotBars({ result, currentMonth }: Props) {
                 closing_past: "Solde de clôture",
                 closing_future: "Solde projeté",
               };
-              return [formatEUR(cents), labels[name] ?? name];
+              return [formatEUR(cents), labels[String(name)] ?? String(name)];
             }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--line))" />

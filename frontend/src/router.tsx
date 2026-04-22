@@ -8,7 +8,7 @@ import { AdminUsersPage } from '@/pages/AdminUsersPage';
 import { CommitmentsPage } from '@/pages/CommitmentsPage';
 import { CounterpartiesPage } from '@/pages/CounterpartiesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ForecastPage } from '@/pages/ForecastPage';
+import { ForecastV2Page } from '@/pages/ForecastV2Page';
 import { RulesPage } from '@/pages/RulesPage';
 import { ImportHistoryPage } from '@/pages/ImportHistoryPage';
 import { ImportNewPage } from '@/pages/ImportNewPage';
@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/tableau-de-bord" replace /> },
       { path: '/tableau-de-bord', element: <DashboardPage /> },
-      { path: '/previsionnel', element: <ForecastPage /> },
+      { path: '/previsionnel', element: <ForecastV2Page /> },
       { path: '/imports', element: <ImportHistoryPage /> },
       { path: '/imports/nouveau', element: <ImportNewPage /> },
       { path: '/transactions', element: <TransactionsPage /> },

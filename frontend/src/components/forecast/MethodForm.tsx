@@ -3,7 +3,11 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/client";
 import { useCategories } from "@/api/categories";
 import { useUpsertLine, useValidateFormula } from "@/api/forecastLines";
-import type { ForecastLine, ForecastMethod } from "@/types/forecast";
+import type {
+  ForecastLine,
+  ForecastMethod,
+  LineUpsert,
+} from "@/types/forecast";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -128,7 +132,7 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
-    const payload: Record<string, unknown> = {
+    const payload: LineUpsert = {
       scenario_id: scenarioId,
       category_id: categoryId,
       method,
@@ -161,9 +165,7 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
         }
         payload.formula_expr = formulaExpr.trim();
       }
-      await upsertMut.mutateAsync(
-        payload as Parameters<typeof upsertMut.mutateAsync>[0],
-      );
+      await upsertMut.mutateAsync(payload);
       onSave();
     } catch (err) {
       const msg =
