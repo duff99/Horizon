@@ -1,7 +1,7 @@
 """Endpoints /api/forecast/scenarios — CRUD + gestion du flag is_default."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.models.forecast_scenario import ForecastScenario
 from app.models.user import User
 from app.models.user_entity_access import UserEntityAccess
 from app.schemas.forecast import ScenarioCreate, ScenarioRead, ScenarioUpdate
+from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(prefix="/api/forecast/scenarios", tags=["forecast-scenarios"])
 
@@ -77,6 +78,7 @@ def list_scenarios(
 @router.post("", response_model=ScenarioRead, status_code=status.HTTP_201_CREATED)
 def create_scenario(
     payload: ScenarioCreate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> ScenarioRead:
@@ -93,6 +95,11 @@ def create_scenario(
         created_by_id=user.id,
     )
     session.add(sc)
+    session.flush()
+    record_audit(
+        session, user=user, action="create", entity=sc,
+        before=None, after=to_dict_for_audit(sc), request=request,
+    )
     session.commit()
     session.refresh(sc)
     return ScenarioRead.model_validate(sc)
@@ -102,18 +109,25 @@ def create_scenario(
 def update_scenario(
     scenario_id: int,
     payload: ScenarioUpdate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> ScenarioRead:
     sc = _get_scenario_or_404(session, scenario_id)
     require_entity_access(session=session, user=user, entity_id=sc.entity_id)
 
+    before_snapshot = to_dict_for_audit(sc)
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("is_default") is True:
         _unset_other_defaults(session, sc.entity_id, except_id=sc.id)
 
     for field, value in updates.items():
         setattr(sc, field, value)
+    session.flush()
+    record_audit(
+        session, user=user, action="update", entity=sc,
+        before=before_snapshot, after=to_dict_for_audit(sc), request=request,
+    )
     session.commit()
     session.refresh(sc)
     return ScenarioRead.model_validate(sc)
@@ -122,6 +136,7 @@ def update_scenario(
 @router.delete("/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scenario(
     scenario_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> None:
@@ -139,6 +154,11 @@ def delete_scenario(
             detail="Impossible de supprimer : l'entité doit conserver au moins un scénario",
         )
 
+    before_snapshot = to_dict_for_audit(sc)
+    record_audit(
+        session, user=user, action="delete", entity=sc,
+        before=before_snapshot, after=None, request=request,
+    )
     was_default = sc.is_default
     session.delete(sc)
     session.flush()

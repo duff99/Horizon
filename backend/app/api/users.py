@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.security import hash_password, validate_password_policy
+from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(
     prefix="/api/users", tags=["users"], dependencies=[Depends(require_admin)]
@@ -46,7 +47,12 @@ def list_users(db: Session = Depends(get_db)) -> list[User]:
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+def create_user(
+    payload: UserCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
+) -> User:
     validate_password_policy(payload.password)
     exists = db.scalar(select(User).where(User.email == payload.email))
     if exists:
@@ -58,6 +64,11 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
         full_name=payload.full_name,
     )
     db.add(user)
+    db.flush()
+    record_audit(
+        db, user=current, action="create", entity=user,
+        before=None, after=to_dict_for_audit(user), request=request,
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -65,7 +76,11 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
 
 @router.patch("/{user_id}", response_model=UserRead)
 def update_user(
-    user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
+    user_id: int,
+    payload: UserUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
 ) -> User:
     user = db.get(User, user_id)
     if user is None:
@@ -81,8 +96,14 @@ def update_user(
             status_code=409,
             detail="Impossible : cette opération laisserait le système sans administrateur actif",
         )
+    before_snapshot = to_dict_for_audit(user)
     for field, value in data.items():
         setattr(user, field, value)
+    db.flush()
+    record_audit(
+        db, user=current, action="update", entity=user,
+        before=before_snapshot, after=to_dict_for_audit(user), request=request,
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -92,7 +113,9 @@ def update_user(
 def reset_user_password(
     user_id: int,
     payload: AdminPasswordResetPayload,
+    request: Request,
     db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
 ) -> None:
     """Admin reset : définit un nouveau mot de passe pour n'importe quel user."""
     user = db.get(User, user_id)
@@ -105,12 +128,25 @@ def reset_user_password(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    # Audit : before/after masqués (password_hash filtré par _SENSITIVE_FIELDS),
+    # mais on trace tout de même l'action.
+    before_snapshot = to_dict_for_audit(user)
     user.password_hash = hash_password(new_pw)
+    db.flush()
+    record_audit(
+        db, user=current, action="update", entity=user,
+        before=before_snapshot, after=to_dict_for_audit(user), request=request,
+    )
     db.commit()
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deactivate_user(user_id: int, db: Session = Depends(get_db)) -> None:
+def deactivate_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
+) -> None:
     """Désactivation logique uniquement (pas de delete physique)."""
     user = db.get(User, user_id)
     if user is None:
@@ -120,5 +156,12 @@ def deactivate_user(user_id: int, db: Session = Depends(get_db)) -> None:
             status_code=409,
             detail="Impossible : cette opération laisserait le système sans administrateur actif",
         )
+    before_snapshot = to_dict_for_audit(user)
     user.is_active = False
+    db.flush()
+    # Désactivation logique = update (is_active: true -> false)
+    record_audit(
+        db, user=current, action="update", entity=user,
+        before=before_snapshot, after=to_dict_for_audit(user), request=request,
+    )
     db.commit()

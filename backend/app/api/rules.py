@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
+from app.models.audit_log import AuditLog
 from app.models.bank_account import BankAccount
 from app.models.categorization_rule import CategorizationRule
 from app.models.transaction import Transaction
@@ -27,6 +28,7 @@ from app.schemas.categorization_rule import (
     RuleSuggestion,
     RuleUpdate,
 )
+from app.services.audit import _extract_request_meta, record_audit, to_dict_for_audit
 from app.services.categorization import apply_rule as apply_rule_service
 from app.services.categorization import preview_rule as preview_rule_service
 
@@ -85,6 +87,7 @@ def list_rules(
 @router.post("", response_model=RuleRead, status_code=status.HTTP_201_CREATED)
 def create_rule(
     payload: RuleCreate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> RuleRead:
@@ -110,7 +113,7 @@ def create_rule(
     )
     session.add(rule)
     try:
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -120,6 +123,11 @@ def create_rule(
                 "message": "Priorité déjà utilisée dans ce scope",
             },
         )
+    record_audit(
+        session, user=user, action="create", entity=rule,
+        before=None, after=to_dict_for_audit(rule), request=request,
+    )
+    session.commit()
     session.refresh(rule)
     return RuleRead.model_validate(rule)
 
@@ -135,6 +143,7 @@ _STRUCTURAL_FIELDS = {
 def update_rule(
     rule_id: int,
     payload: RuleUpdate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> RuleRead:
@@ -156,11 +165,12 @@ def update_rule(
                         "message": "Règle système : seuls le nom et la priorité sont modifiables"},
             )
 
+    before_snapshot = to_dict_for_audit(rule)
     for field, value in data.items():
         setattr(rule, field, value)
 
     try:
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -168,6 +178,11 @@ def update_rule(
             detail={"code": "RULE_DUPLICATE_PRIORITY",
                     "message": "Priorité déjà utilisée dans ce scope"},
         )
+    record_audit(
+        session, user=user, action="update", entity=rule,
+        before=before_snapshot, after=to_dict_for_audit(rule), request=request,
+    )
+    session.commit()
     session.refresh(rule)
     return RuleRead.model_validate(rule)
 
@@ -175,6 +190,7 @@ def update_rule(
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_rule(
     rule_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> None:
@@ -191,6 +207,11 @@ def delete_rule(
         )
     if rule.entity_id is not None:
         require_entity_access(session=session, user=user, entity_id=rule.entity_id)
+    before_snapshot = to_dict_for_audit(rule)
+    record_audit(
+        session, user=user, action="delete", entity=rule,
+        before=before_snapshot, after=None, request=request,
+    )
     session.delete(rule)
     session.commit()
 
@@ -229,6 +250,7 @@ def preview_rule_endpoint(
 @router.post("/{rule_id}/apply", response_model=RuleApplyResponse)
 def apply_rule_endpoint(
     rule_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> RuleApplyResponse:
@@ -240,6 +262,34 @@ def apply_rule_endpoint(
         require_entity_access(session=session, user=user, entity_id=rule.entity_id)
 
     report = apply_rule_service(session, rule)
+    # Audit batch : 1 ligne résumant l'application (update N transactions).
+    if report.updated_count > 0:
+        try:
+            meta = _extract_request_meta(request)
+            session.add(
+                AuditLog(
+                    user_id=user.id,
+                    user_email=user.email,
+                    action="update",
+                    entity_type="Transaction",
+                    entity_id=f"rule-apply({rule.id})",
+                    before_json=None,
+                    after_json={
+                        "operation": "rule_apply",
+                        "rule_id": rule.id,
+                        "rule_name": rule.name,
+                        "updated_count": report.updated_count,
+                    },
+                    diff_json=None,
+                    ip_address=meta["ip_address"],
+                    user_agent=meta["user_agent"],
+                    request_id=meta["request_id"],
+                )
+            )
+            session.flush()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("audit.rule_apply_failed")
     session.commit()
     return RuleApplyResponse(updated_count=report.updated_count)
 
@@ -247,6 +297,7 @@ def apply_rule_endpoint(
 @router.post("/reorder", response_model=list[RuleRead])
 def reorder_rules(
     items: list[RuleReorderItem],
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[RuleRead]:
@@ -272,10 +323,11 @@ def reorder_rules(
         require_entity_access(session=session, user=user, entity_id=scope_entity)
 
     by_id = {r.id: r for r in rules}
+    before_priorities = {r.id: r.priority for r in rules}
     try:
         for item in items:
             by_id[item.id].priority = item.priority
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -283,6 +335,33 @@ def reorder_rules(
             detail={"code": "RULE_DUPLICATE_PRIORITY",
                     "message": "Conflit de priorités pendant le réordonnancement"},
         )
+
+    # Audit batch : 1 ligne résumant le réordonnancement.
+    try:
+        meta = _extract_request_meta(request)
+        session.add(
+            AuditLog(
+                user_id=user.id,
+                user_email=user.email,
+                action="update",
+                entity_type="CategorizationRule",
+                entity_id=f"reorder({len(items)})",
+                before_json={"priorities_before": before_priorities},
+                after_json={
+                    "operation": "reorder",
+                    "priorities_after": {i.id: i.priority for i in items},
+                },
+                diff_json=None,
+                ip_address=meta["ip_address"],
+                user_agent=meta["user_agent"],
+                request_id=meta["request_id"],
+            )
+        )
+        session.flush()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("audit.rules_reorder_failed")
+    session.commit()
 
     refreshed = session.execute(
         select(CategorizationRule)
