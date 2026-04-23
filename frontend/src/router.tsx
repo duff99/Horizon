@@ -27,6 +27,9 @@ const CounterpartiesPage = lazy(() =>
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
+const DocumentationPage = lazy(() =>
+  import('@/pages/DocumentationPage').then((m) => ({ default: m.DocumentationPage })),
+);
 const ForecastV2Page = lazy(() =>
   import('@/pages/ForecastV2Page').then((m) => ({ default: m.ForecastV2Page })),
 );
@@ -175,6 +178,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <AdminBankAccountsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/documentation',
+        element: (
+          <LazyPage>
+            <DocumentationPage />
           </LazyPage>
         ),
       },
