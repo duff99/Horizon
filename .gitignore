@@ -35,6 +35,7 @@ frontend/.env
 # Data / backups (ne JAMAIS commiter)
 /data/
 /backups/
+/logs/backup/
 *.sql
 *.sql.gpg
 *.dump

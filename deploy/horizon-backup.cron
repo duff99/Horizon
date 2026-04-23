@@ -1,0 +1,22 @@
+# Horizon backups — template crontab (à installer manuellement par root).
+#
+# Installation :
+#   sudo cp deploy/horizon-backup.cron /etc/cron.d/horizon-backup
+#   sudo chmod 644 /etc/cron.d/horizon-backup
+#   sudo chown root:root /etc/cron.d/horizon-backup
+#
+# Ce fichier doit être dans /etc/cron.d/ (pas dans un crontab utilisateur)
+# pour que la colonne utilisateur soit respectée.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=tdufr01@gmail.com
+
+# Backup quotidien DB à 2h00 locale.
+0 2 * * * root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/backup-db.sh >> /var/log/horizon-backup.log 2>&1
+
+# Verify-restore hebdomadaire le dimanche 4h00.
+0 4 * * 0 root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/verify-restore.sh >> /var/log/horizon-verify.log 2>&1
+
+# Monitoring disque chaque heure.
+0 * * * * root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/disk-monitor.sh >> /var/log/horizon-disk.log 2>&1
