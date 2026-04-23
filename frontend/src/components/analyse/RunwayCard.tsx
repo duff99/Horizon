@@ -1,6 +1,7 @@
 /**
  * RunwayCard — KPI "mois de runway" + burn rate + solde + sparkline 6m projection.
  */
+import { memo, useMemo } from "react";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
 
 import { useRunway } from "@/api/analysis";
@@ -47,14 +48,14 @@ function Skeleton() {
   );
 }
 
-export function RunwayCard({ entityId }: Props) {
+function RunwayCardInner({ entityId }: Props) {
   const query = useRunway({ entityId });
   const data = query.data;
 
-  const sparklineData = (data?.forecast_balance_6m_cents ?? []).map((v, i) => ({
-    i,
-    v,
-  }));
+  const sparklineData = useMemo(
+    () => (data?.forecast_balance_6m_cents ?? []).map((v, i) => ({ i, v })),
+    [data?.forecast_balance_6m_cents],
+  );
   const burnNegative = (data?.burn_rate_cents ?? 0) < 0;
 
   const runwayDisplay =
@@ -163,3 +164,5 @@ export function RunwayCard({ entityId }: Props) {
     </div>
   );
 }
+
+export const RunwayCard = memo(RunwayCardInner);

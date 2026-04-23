@@ -1,7 +1,7 @@
 /**
  * YoYChart — ComposedChart comparant 12 mois glissants vs Y-1.
  */
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -104,7 +104,7 @@ function CustomTooltip({
   );
 }
 
-export function YoYChart({ entityId }: Props) {
+function YoYChartInner({ entityId }: Props) {
   const query = useYoY({ entityId });
 
   const rows = useMemo<ChartRow[]>(() => {
@@ -239,3 +239,5 @@ export function YoYChart({ entityId }: Props) {
     </div>
   );
 }
+
+export const YoYChart = memo(YoYChartInner);

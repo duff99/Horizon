@@ -3,7 +3,7 @@
  *
  * Ligne "alert" : bg-rose-50. Max 15 visibles + bouton "Voir tout".
  */
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 import { useCategoryDrift } from "@/api/analysis";
 import { formatCents } from "@/lib/forecastFormat";
@@ -36,14 +36,20 @@ function Skeleton() {
   );
 }
 
-export function CategoryDriftTable({ entityId, seuilPct = 20 }: Props) {
+function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
   const [showAll, setShowAll] = useState(false);
   const query = useCategoryDrift({ entityId, seuilPct });
 
   const rows = query.data?.rows ?? [];
   const threshold = query.data?.seuil_pct ?? seuilPct;
-  const alertCount = rows.filter((r) => r.status === "alert").length;
-  const visible = showAll ? rows : rows.slice(0, 15);
+  const alertCount = useMemo(
+    () => rows.filter((r) => r.status === "alert").length,
+    [rows],
+  );
+  const visible = useMemo(
+    () => (showAll ? rows : rows.slice(0, 15)),
+    [rows, showAll],
+  );
 
   return (
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
@@ -180,3 +186,5 @@ export function CategoryDriftTable({ entityId, seuilPct = 20 }: Props) {
     </div>
   );
 }
+
+export const CategoryDriftTable = memo(CategoryDriftTableInner);

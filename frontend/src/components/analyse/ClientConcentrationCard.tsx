@@ -1,7 +1,7 @@
 /**
  * ClientConcentrationCard — donut top 5 clients + Autres, HHI au centre.
  */
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { useClientConcentration } from "@/api/analysis";
@@ -61,7 +61,7 @@ function Skeleton() {
   );
 }
 
-export function ClientConcentrationCard({ entityId, months = 12 }: Props) {
+function ClientConcentrationCardInner({ entityId, months = 12 }: Props) {
   const query = useClientConcentration({ entityId, months });
   const data = query.data;
 
@@ -186,3 +186,5 @@ export function ClientConcentrationCard({ entityId, months = 12 }: Props) {
     </div>
   );
 }
+
+export const ClientConcentrationCard = memo(ClientConcentrationCardInner);

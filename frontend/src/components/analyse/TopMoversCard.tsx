@@ -1,6 +1,7 @@
 /**
  * TopMoversCard — 2 colonnes (hausses / baisses) avec sparkline 3 mois.
  */
+import { memo } from "react";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
 
 import { useTopMovers } from "@/api/analysis";
@@ -79,7 +80,7 @@ function Skeleton() {
   );
 }
 
-export function TopMoversCard({ entityId, limit = 5 }: Props) {
+function TopMoversCardInner({ entityId, limit = 5 }: Props) {
   const query = useTopMovers({ entityId, limit });
   const increases = query.data?.increases ?? [];
   const decreases = query.data?.decreases ?? [];
@@ -141,3 +142,5 @@ export function TopMoversCard({ entityId, limit = 5 }: Props) {
     </div>
   );
 }
+
+export const TopMoversCard = memo(TopMoversCardInner);
