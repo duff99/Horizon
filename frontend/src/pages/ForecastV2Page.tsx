@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
 import { EntitySelector } from "@/components/EntitySelector";
+import {
+  PeriodSelector,
+  type PeriodValue,
+} from "@/components/PeriodSelector";
 import { useEntityFilter } from "@/stores/entityFilter";
 import { useEntities } from "@/api/entities";
 import { useScenarios } from "@/api/forecastScenarios";
@@ -32,16 +36,28 @@ export function ForecastV2Page() {
 
   const scenariosQuery = useScenarios(effectiveEntityId);
 
-  // 15-month window: current - 3, current + 12 (inclusive = 15 months)
+  // 15-month window par défaut: current - 3, current + 11 (inclusif = 15 mois)
   const currentMonth = useMemo(() => currentMonthStr(), []);
-  const from = useMemo(() => shiftMonth(currentMonth, -3), [currentMonth]);
-  const to = useMemo(() => shiftMonth(currentMonth, 11), [currentMonth]);
+  const defaultFrom = useMemo(
+    () => shiftMonth(currentMonth, -3),
+    [currentMonth],
+  );
+  const defaultTo = useMemo(
+    () => shiftMonth(currentMonth, 11),
+    [currentMonth],
+  );
+
+  const [period, setPeriod] = useState<PeriodValue>(() => ({
+    from: defaultFrom,
+    to: defaultTo,
+    preset: "custom",
+  }));
 
   const pivotQuery = usePivot({
     scenarioId,
     entityId: effectiveEntityId,
-    from,
-    to,
+    from: period.from,
+    to: period.to,
     accountIds,
   });
 
@@ -69,6 +85,11 @@ export function ForecastV2Page() {
           <EntitySelector />
           <ScenarioSelector entityId={effectiveEntityId} />
           <ConsolidatedAccountsPopover entityId={effectiveEntityId} />
+          <PeriodSelector
+            value={period}
+            onChange={setPeriod}
+            granularity="month"
+          />
         </div>
       </div>
 
