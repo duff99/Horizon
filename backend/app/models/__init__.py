@@ -1,3 +1,4 @@
+from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.backup_history import BackupHistory  # noqa: F401
 from app.models.bank_account import BankAccount
 from app.models.base import Base
