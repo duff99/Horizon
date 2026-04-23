@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.models.counterparty import Counterparty, CounterpartyStatus
 from app.models.user import User
 from app.models.user_entity_access import UserEntityAccess
 from app.schemas.counterparty import CounterpartyRead, CounterpartyUpdate
+from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(prefix="/api/counterparties", tags=["counterparties"])
 
@@ -42,6 +43,7 @@ def list_counterparties(
 def update_counterparty(
     counterparty_id: int,
     payload: CounterpartyUpdate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> CounterpartyRead:
@@ -50,6 +52,7 @@ def update_counterparty(
         raise HTTPException(status_code=404, detail="Contrepartie introuvable")
     require_entity_access(session=session, user=user, entity_id=cp.entity_id)
 
+    before_snapshot = to_dict_for_audit(cp)
     if payload.status is not None:
         cp.status = CounterpartyStatus(payload.status)
     if payload.name is not None:
@@ -58,6 +61,10 @@ def update_counterparty(
         from app.services.imports import _normalize_counterparty_name
         cp.normalized_name = _normalize_counterparty_name(cp.name)
     session.flush()
+    record_audit(
+        session, user=user, action="update", entity=cp,
+        before=before_snapshot, after=to_dict_for_audit(cp), request=request,
+    )
     session.commit()
     session.refresh(cp)
     return CounterpartyRead.model_validate(cp)

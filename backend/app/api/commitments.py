@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from app.schemas.commitment import (
     CommitmentUpdate,
     TransactionBrief,
 )
+from app.services.audit import record_audit, to_dict_for_audit
 from app.services.commitment_matching import suggest_matches
 
 router = APIRouter(prefix="/api/commitments", tags=["commitments"])
@@ -101,6 +102,7 @@ def list_commitments(
 @router.post("", response_model=CommitmentRead, status_code=status.HTTP_201_CREATED)
 def create_commitment(
     payload: CommitmentCreate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> CommitmentRead:
@@ -129,6 +131,11 @@ def create_commitment(
         created_by_id=user.id,
     )
     session.add(c)
+    session.flush()
+    record_audit(
+        session, user=user, action="create", entity=c,
+        before=None, after=to_dict_for_audit(c), request=request,
+    )
     session.commit()
     session.refresh(c)
     return CommitmentRead.model_validate(c)
@@ -148,10 +155,12 @@ def get_commitment(
 def update_commitment(
     commitment_id: int,
     payload: CommitmentUpdate,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> CommitmentRead:
     c = _get_or_404_with_access(session, user, commitment_id)
+    before_snapshot = to_dict_for_audit(c)
     updates = payload.model_dump(exclude_unset=True)
     # Validation dates si elles changent
     issue = updates.get("issue_date", c.issue_date)
@@ -172,6 +181,11 @@ def update_commitment(
             setattr(c, field, CommitmentStatus(value))
         else:
             setattr(c, field, value)
+    session.flush()
+    record_audit(
+        session, user=user, action="update", entity=c,
+        before=before_snapshot, after=to_dict_for_audit(c), request=request,
+    )
     session.commit()
     session.refresh(c)
     return CommitmentRead.model_validate(c)
@@ -180,12 +194,20 @@ def update_commitment(
 @router.delete("/{commitment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_commitment(
     commitment_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> None:
     """Soft-delete : passe le statut à `cancelled`."""
     c = _get_or_404_with_access(session, user, commitment_id)
+    before_snapshot = to_dict_for_audit(c)
     c.status = CommitmentStatus.CANCELLED
+    session.flush()
+    # Soft-delete = update (status -> cancelled) ; l'entité existe toujours.
+    record_audit(
+        session, user=user, action="update", entity=c,
+        before=before_snapshot, after=to_dict_for_audit(c), request=request,
+    )
     session.commit()
 
 
@@ -193,10 +215,12 @@ def delete_commitment(
 def match_commitment(
     commitment_id: int,
     payload: CommitmentMatchRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> CommitmentRead:
     c = _get_or_404_with_access(session, user, commitment_id)
+    before_snapshot = to_dict_for_audit(c)
     tx = session.get(Transaction, payload.transaction_id)
     if tx is None:
         raise HTTPException(status_code=404, detail="Transaction introuvable")
@@ -223,6 +247,11 @@ def match_commitment(
 
     c.matched_transaction_id = tx.id
     c.status = CommitmentStatus.PAID
+    session.flush()
+    record_audit(
+        session, user=user, action="update", entity=c,
+        before=before_snapshot, after=to_dict_for_audit(c), request=request,
+    )
     session.commit()
     session.refresh(c)
     return CommitmentRead.model_validate(c)
@@ -231,12 +260,19 @@ def match_commitment(
 @router.post("/{commitment_id}/unmatch", response_model=CommitmentRead)
 def unmatch_commitment(
     commitment_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> CommitmentRead:
     c = _get_or_404_with_access(session, user, commitment_id)
+    before_snapshot = to_dict_for_audit(c)
     c.matched_transaction_id = None
     c.status = CommitmentStatus.PENDING
+    session.flush()
+    record_audit(
+        session, user=user, action="update", entity=c,
+        before=before_snapshot, after=to_dict_for_audit(c), request=request,
+    )
     session.commit()
     session.refresh(c)
     return CommitmentRead.model_validate(c)

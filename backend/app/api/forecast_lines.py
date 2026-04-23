@@ -1,7 +1,7 @@
 """Endpoints /api/forecast/lines — CRUD upsert + validate-formula."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.schemas.forecast import (
     ValidateFormulaRequest,
     ValidateFormulaResponse,
 )
+from app.services.audit import record_audit, to_dict_for_audit
 from app.services.formula_parser import FormulaError, detect_cycle, parse as formula_parse
 
 router = APIRouter(prefix="/api/forecast/lines", tags=["forecast-lines"])
@@ -52,6 +53,7 @@ def list_lines(
 @router.put("", response_model=LineRead)
 def upsert_line(
     payload: LineUpsert,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> LineRead:
@@ -103,8 +105,12 @@ def upsert_line(
             updated_by_id=user.id,
         )
         session.add(line)
+        audit_action: str = "create"
+        before_snapshot: dict | None = None
     else:
         line = existing
+        audit_action = "update"
+        before_snapshot = to_dict_for_audit(line)
         line.method = method_model
         line.amount_cents = payload.amount_cents
         line.base_category_id = payload.base_category_id
@@ -114,6 +120,11 @@ def upsert_line(
         line.end_month = payload.end_month
         line.updated_by_id = user.id
 
+    session.flush()
+    record_audit(
+        session, user=user, action=audit_action, entity=line,  # type: ignore[arg-type]
+        before=before_snapshot, after=to_dict_for_audit(line), request=request,
+    )
     session.commit()
     session.refresh(line)
     return LineRead.model_validate(line)
@@ -122,6 +133,7 @@ def upsert_line(
 @router.delete("/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_line(
     line_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> None:
@@ -129,6 +141,11 @@ def delete_line(
     if line is None:
         raise HTTPException(status_code=404, detail="Ligne prévisionnelle introuvable")
     require_entity_access(session=session, user=user, entity_id=line.entity_id)
+    before_snapshot = to_dict_for_audit(line)
+    record_audit(
+        session, user=user, action="delete", entity=line,
+        before=before_snapshot, after=None, request=request,
+    )
     session.delete(line)
     session.commit()
 

@@ -118,6 +118,21 @@ const config: Item[] = [
   },
 ];
 
+const help: Item[] = [
+  {
+    to: '/documentation',
+    label: 'Documentation',
+    icon: icon(
+      <>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        <path d="M8 7h8" />
+        <path d="M8 11h6" />
+      </>,
+    ),
+  },
+];
+
 const admin: Item[] = [
   {
     to: '/administration/utilisateurs',
@@ -149,6 +164,21 @@ const admin: Item[] = [
       <>
         <rect x="2" y="5" width="20" height="14" rx="2" />
         <path d="M2 10h20" />
+      </>,
+    ),
+    adminOnly: true,
+  },
+  {
+    to: '/administration/audit',
+    label: "Journal d'audit",
+    icon: icon(
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M8 12h8" />
+        <path d="M8 16h5" />
+        <circle cx="18" cy="18" r="3" />
+        <path d="M20.5 20.5 22 22" />
       </>,
     ),
     adminOnly: true,
@@ -230,6 +260,7 @@ export function Sidebar() {
       <NavGroup label="Pilotage" items={pilotage} isAdmin={isAdmin} />
       <NavGroup label="Configuration" items={config} isAdmin={isAdmin} />
       <NavGroup label="Administration" items={admin} isAdmin={isAdmin} />
+      <NavGroup label="Aide" items={help} isAdmin={isAdmin} />
 
       <div className="mt-auto flex items-center gap-2 border-t border-white/5 pt-4">
         <Link

@@ -1,21 +1,73 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { Layout } from '@/components/Layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AdminBankAccountsPage } from '@/pages/AdminBankAccountsPage';
-import { AdminEntitiesPage } from '@/pages/AdminEntitiesPage';
-import { AdminUsersPage } from '@/pages/AdminUsersPage';
-import { AnalysePage } from '@/pages/AnalysePage';
-import { CommitmentsPage } from '@/pages/CommitmentsPage';
-import { CounterpartiesPage } from '@/pages/CounterpartiesPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { ForecastV2Page } from '@/pages/ForecastV2Page';
-import { RulesPage } from '@/pages/RulesPage';
-import { ImportHistoryPage } from '@/pages/ImportHistoryPage';
-import { ImportNewPage } from '@/pages/ImportNewPage';
 import { LoginPage } from '@/pages/LoginPage';
-import { ProfilPage } from '@/pages/ProfilPage';
-import { TransactionsPage } from '@/pages/TransactionsPage';
+
+// Route-based code-splitting. LoginPage reste eager (critical path + petit).
+const AdminAuditLogPage = lazy(() =>
+  import('@/pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })),
+);
+const AdminBankAccountsPage = lazy(() =>
+  import('@/pages/AdminBankAccountsPage').then((m) => ({ default: m.AdminBankAccountsPage })),
+);
+const AdminEntitiesPage = lazy(() =>
+  import('@/pages/AdminEntitiesPage').then((m) => ({ default: m.AdminEntitiesPage })),
+);
+const AdminUsersPage = lazy(() =>
+  import('@/pages/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
+);
+const AnalysePage = lazy(() =>
+  import('@/pages/AnalysePage').then((m) => ({ default: m.AnalysePage })),
+);
+const CommitmentsPage = lazy(() =>
+  import('@/pages/CommitmentsPage').then((m) => ({ default: m.CommitmentsPage })),
+);
+const CounterpartiesPage = lazy(() =>
+  import('@/pages/CounterpartiesPage').then((m) => ({ default: m.CounterpartiesPage })),
+);
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const DocumentationPage = lazy(() =>
+  import('@/pages/DocumentationPage').then((m) => ({ default: m.DocumentationPage })),
+);
+const ForecastV2Page = lazy(() =>
+  import('@/pages/ForecastV2Page').then((m) => ({ default: m.ForecastV2Page })),
+);
+const RulesPage = lazy(() =>
+  import('@/pages/RulesPage').then((m) => ({ default: m.RulesPage })),
+);
+const ImportHistoryPage = lazy(() =>
+  import('@/pages/ImportHistoryPage').then((m) => ({ default: m.ImportHistoryPage })),
+);
+const ImportNewPage = lazy(() =>
+  import('@/pages/ImportNewPage').then((m) => ({ default: m.ImportNewPage })),
+);
+const ProfilPage = lazy(() =>
+  import('@/pages/ProfilPage').then((m) => ({ default: m.ProfilPage })),
+);
+const TransactionsPage = lazy(() =>
+  import('@/pages/TransactionsPage').then((m) => ({ default: m.TransactionsPage })),
+);
+
+function PageLoadingFallback() {
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
+      <div className="h-8 w-64 animate-pulse rounded bg-slate-100" />
+      <div className="h-40 animate-pulse rounded bg-slate-100" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="h-48 animate-pulse rounded bg-slate-100" />
+        <div className="h-48 animate-pulse rounded bg-slate-100" />
+      </div>
+    </div>
+  );
+}
+
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<PageLoadingFallback />}>{children}</Suspense>;
+}
 
 export const router = createBrowserRouter([
   { path: '/connexion', element: <LoginPage /> },
@@ -27,22 +79,126 @@ export const router = createBrowserRouter([
     ),
     children: [
       { path: '/', element: <Navigate to="/tableau-de-bord" replace /> },
-      { path: '/tableau-de-bord', element: <DashboardPage /> },
-      { path: '/analyse', element: <AnalysePage /> },
-      { path: '/previsionnel', element: <ForecastV2Page /> },
-      { path: '/imports', element: <ImportHistoryPage /> },
-      { path: '/imports/nouveau', element: <ImportNewPage /> },
-      { path: '/transactions', element: <TransactionsPage /> },
-      { path: '/engagements', element: <CommitmentsPage /> },
-      { path: '/tiers', element: <CounterpartiesPage /> },
+      {
+        path: '/tableau-de-bord',
+        element: (
+          <LazyPage>
+            <DashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/analyse',
+        element: (
+          <LazyPage>
+            <AnalysePage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/previsionnel',
+        element: (
+          <LazyPage>
+            <ForecastV2Page />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/imports',
+        element: (
+          <LazyPage>
+            <ImportHistoryPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/imports/nouveau',
+        element: (
+          <LazyPage>
+            <ImportNewPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/transactions',
+        element: (
+          <LazyPage>
+            <TransactionsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/engagements',
+        element: (
+          <LazyPage>
+            <CommitmentsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/tiers',
+        element: (
+          <LazyPage>
+            <CounterpartiesPage />
+          </LazyPage>
+        ),
+      },
       { path: '/contreparties', element: <Navigate to="/tiers" replace /> },
-      { path: '/regles', element: <RulesPage /> },
-      { path: '/profil', element: <ProfilPage /> },
-      { path: '/administration/utilisateurs', element: <AdminUsersPage /> },
-      { path: '/administration/societes', element: <AdminEntitiesPage /> },
+      {
+        path: '/regles',
+        element: (
+          <LazyPage>
+            <RulesPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/profil',
+        element: (
+          <LazyPage>
+            <ProfilPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/utilisateurs',
+        element: (
+          <LazyPage>
+            <AdminUsersPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/societes',
+        element: (
+          <LazyPage>
+            <AdminEntitiesPage />
+          </LazyPage>
+        ),
+      },
       {
         path: '/administration/comptes-bancaires',
-        element: <AdminBankAccountsPage />,
+        element: (
+          <LazyPage>
+            <AdminBankAccountsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/audit',
+        element: (
+          <LazyPage>
+            <AdminAuditLogPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/documentation',
+        element: (
+          <LazyPage>
+            <DocumentationPage />
+          </LazyPage>
+        ),
       },
     ],
   },

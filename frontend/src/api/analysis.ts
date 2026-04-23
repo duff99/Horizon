@@ -91,7 +91,7 @@ export function fetchEntitiesComparison(args: {
 // Hooks
 // ---------------------------------------------------------------------------
 
-const STALE = 60_000;
+const STALE = 5 * 60_000;
 
 export function useCategoryDrift(args: {
   entityId?: number;

@@ -3,6 +3,8 @@
  *
  * Si l'API retourne ≤ 1 entité accessible, le widget se masque (`return null`).
  */
+import { memo, useMemo } from "react";
+
 import { useEntitiesComparison } from "@/api/analysis";
 import { formatCents } from "@/lib/forecastFormat";
 import type { EntityCompareRow } from "../../types/analysis";
@@ -34,16 +36,11 @@ function Skeleton() {
   );
 }
 
-export function EntitiesComparisonTable({ months = 1 }: Props) {
+function EntitiesComparisonTableInner({ months = 1 }: Props) {
   const query = useEntitiesComparison({ months });
   const data = query.data;
 
-  // Si 1 seule entité accessible → ne rien rendre.
-  if (data && data.entities.length <= 1 && !query.isLoading) {
-    return null;
-  }
-
-  const rows: KpiRow[] = [
+  const rows: KpiRow[] = useMemo(() => [
     {
       key: "revenues",
       label: "Revenus",
@@ -96,7 +93,12 @@ export function EntitiesComparisonTable({ months = 1 }: Props) {
             ? "text-amber-700"
             : "text-ink-2",
     },
-  ];
+  ], []);
+
+  // Si 1 seule entité accessible → ne rien rendre.
+  if (data && data.entities.length <= 1 && !query.isLoading) {
+    return null;
+  }
 
   return (
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
@@ -169,3 +171,5 @@ export function EntitiesComparisonTable({ months = 1 }: Props) {
     </div>
   );
 }
+
+export const EntitiesComparisonTable = memo(EntitiesComparisonTableInner);

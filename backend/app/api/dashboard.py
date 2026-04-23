@@ -382,13 +382,17 @@ def _resolve_accessible_bank_accounts(
     return list(db.scalars(select(BankAccount.id).where(and_(*entity_filter))))
 
 
-@router.get("/bank-balances", response_model=list[BankAccountBalance])
-def get_bank_balances(
-    entity_id: int | None = Query(None),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+def _compute_bank_state(
+    db: Session,
+    *,
+    user: User,
+    entity_id: int | None,
 ) -> list[BankAccountBalance]:
-    """Solde par compte bancaire + Δ vs mois précédent + date du dernier import."""
+    """Helper partagé : calcule le solde par compte bancaire.
+
+    Utilisé par les endpoints `/bank-balances` et `/alerts` pour éviter
+    de refaire le même travail deux fois au mount du Dashboard.
+    """
     bank_account_ids = _resolve_accessible_bank_accounts(
         db, user=user, entity_id=entity_id,
     )
@@ -515,6 +519,16 @@ def get_bank_balances(
             )
         )
     return out
+
+
+@router.get("/bank-balances", response_model=list[BankAccountBalance])
+def get_bank_balances(
+    entity_id: int | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[BankAccountBalance]:
+    """Solde par compte bancaire + Δ vs mois précédent + date du dernier import."""
+    return _compute_bank_state(db, user=user, entity_id=entity_id)
 
 
 @router.get("/categories", response_model=CategoryBreakdown)
@@ -690,7 +704,7 @@ def get_alerts(
     today = date.today()
 
     # Alerte 1 : compte dont le dernier closing_balance est négatif
-    balances = get_bank_balances(entity_id=entity_id, user=user, db=db)
+    balances = _compute_bank_state(db, user=user, entity_id=entity_id)
     for b in balances:
         if b.balance < 0:
             alerts.append(
