@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AdminBankAccountsPage } from '@/pages/AdminBankAccountsPage';
 import { AdminEntitiesPage } from '@/pages/AdminEntitiesPage';
 import { AdminUsersPage } from '@/pages/AdminUsersPage';
+import { AnalysePage } from '@/pages/AnalysePage';
 import { CommitmentsPage } from '@/pages/CommitmentsPage';
 import { CounterpartiesPage } from '@/pages/CounterpartiesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/tableau-de-bord" replace /> },
       { path: '/tableau-de-bord', element: <DashboardPage /> },
+      { path: '/analyse', element: <AnalysePage /> },
       { path: '/previsionnel', element: <ForecastV2Page /> },
       { path: '/imports', element: <ImportHistoryPage /> },
       { path: '/imports/nouveau', element: <ImportNewPage /> },

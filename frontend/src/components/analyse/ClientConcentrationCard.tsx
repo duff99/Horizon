@@ -137,9 +137,7 @@ export function ClientConcentrationCard({ entityId, months = 12 }: Props) {
                       fontSize: 12,
                       fontVariantNumeric: "tabular-nums",
                     }}
-                    formatter={(value: number | string) =>
-                      formatCents(Number(value))
-                    }
+                    formatter={(value) => formatCents(Number(value))}
                   />
                 </PieChart>
               </ResponsiveContainer>
