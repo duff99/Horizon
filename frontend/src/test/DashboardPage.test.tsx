@@ -90,7 +90,7 @@ describe("DashboardPage", () => {
     renderPage();
     await screen.findByText(/Avril 2026/i);
 
-    await userEvent.click(screen.getByRole("tab", { name: /Mois précédent/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Mois-1/i }));
 
     expect(
       await screen.findByText(/Période\s*:\s*Mars 2026/i),
