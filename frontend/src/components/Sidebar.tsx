@@ -39,6 +39,17 @@ const pilotage: Item[] = [
     ),
   },
   {
+    to: '/analyse',
+    label: 'Analyse',
+    icon: icon(
+      <>
+        <path d="M3 3v18h18" />
+        <polyline points="7 14 11 10 14 13 20 7" />
+        <polyline points="15 7 20 7 20 12" />
+      </>,
+    ),
+  },
+  {
     to: '/transactions',
     label: 'Transactions',
     icon: icon(

@@ -71,15 +71,37 @@ def _resolve_period(period: DashboardPeriod, today: date) -> tuple[date, date, s
     return start, end, label
 
 
+def _resolve_range(
+    period: DashboardPeriod,
+    date_from: date | None,
+    date_to: date | None,
+    today: date,
+) -> tuple[date, date, str]:
+    """Résout la plage effective.
+
+    Si `date_from` et `date_to` sont fournis, ils priment sur `period` et
+    on retourne un label lisible (plage personnalisée).
+    Sinon, on utilise la logique enum historique.
+    """
+    if date_from is not None and date_to is not None:
+        label = f"{date_from.strftime('%d/%m/%Y')} → {date_to.strftime('%d/%m/%Y')}"
+        return date_from, date_to, label
+    return _resolve_period(period, today)
+
+
 @router.get("/summary", response_model=DashboardSummary)
 def get_summary(
     period: DashboardPeriod = Query(DashboardPeriod.CURRENT_MONTH),
     entity_id: int | None = Query(None),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DashboardSummary:
     today = date.today()
-    period_start, period_end, period_label = _resolve_period(period, today)
+    period_start, period_end, period_label = _resolve_range(
+        period, date_from, date_to, today
+    )
 
     accessible_entity_ids = list(
         db.scalars(
@@ -499,6 +521,8 @@ def get_bank_balances(
 def get_category_breakdown(
     period: DashboardPeriod = Query(DashboardPeriod.CURRENT_MONTH),
     entity_id: int | None = Query(None),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CategoryBreakdown:
@@ -510,7 +534,7 @@ def get_category_breakdown(
         return CategoryBreakdown(income=[], expense=[])
 
     today = date.today()
-    period_start, period_end, _ = _resolve_period(period, today)
+    period_start, period_end, _ = _resolve_range(period, date_from, date_to, today)
 
     base_where = and_(
         Transaction.bank_account_id.in_(bank_account_ids),
@@ -593,6 +617,8 @@ def get_top_counterparties(
     period: DashboardPeriod = Query(DashboardPeriod.CURRENT_MONTH),
     entity_id: int | None = Query(None),
     limit: int = Query(5, ge=1, le=20),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TopCounterparties:
@@ -604,7 +630,7 @@ def get_top_counterparties(
         return TopCounterparties(top_inflows=[], top_outflows=[])
 
     today = date.today()
-    period_start, period_end, _ = _resolve_period(period, today)
+    period_start, period_end, _ = _resolve_range(period, date_from, date_to, today)
 
     base_where = and_(
         Transaction.bank_account_id.in_(bank_account_ids),

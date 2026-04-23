@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
+import {
+  PeriodSelector,
+  defaultPeriodValue,
+  type PeriodValue,
+} from "@/components/PeriodSelector";
 import { MonthComparisonCard } from "@/components/dashboard/MonthComparisonCard";
 import {
   Area,
@@ -34,12 +39,21 @@ import type {
   TopCounterparties,
 } from "../types/api";
 
-const PERIODS: { value: DashboardPeriod; label: string }[] = [
-  { value: "current_month", label: "Ce mois" },
-  { value: "previous_month", label: "Mois précédent" },
-  { value: "last_30d", label: "30 jours" },
-  { value: "last_90d", label: "90 jours" },
-];
+// Mapping PeriodSelector preset → DashboardPeriod enum (fallback côté backend).
+function presetToLegacy(
+  preset: PeriodValue["preset"],
+): DashboardPeriod | undefined {
+  switch (preset) {
+    case "30d":
+      return "last_30d";
+    case "90d":
+      return "last_90d";
+    case "previous_month":
+      return "previous_month";
+    default:
+      return undefined; // backend utilise from/to
+  }
+}
 
 const EUR = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -289,16 +303,22 @@ function BalanceTrendChart({ summary }: { summary: DashboardSummary }) {
 }
 
 export function DashboardPage() {
-  const [period, setPeriod] = useState<DashboardPeriod>("current_month");
+  const [period, setPeriod] = useState<PeriodValue>(() =>
+    defaultPeriodValue("30d"),
+  );
   const entityId = useEntityFilter((s) => s.entityId);
   const entityIdForQueries = entityId ?? undefined;
 
+  const legacyPeriod = presetToLegacy(period.preset);
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["dashboard-summary", period, entityId],
+    queryKey: ["dashboard-summary", period.preset, period.from, period.to, entityId],
     queryFn: () =>
       fetchDashboardSummary({
-        period,
+        period: legacyPeriod,
         entityId: entityIdForQueries,
+        from: period.from,
+        to: period.to,
       }),
     staleTime: 60_000,
   });
@@ -330,29 +350,7 @@ export function DashboardPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <EntitySelector />
-          <div
-            role="tablist"
-            aria-label="Période"
-            className="inline-flex rounded-md border border-line-soft bg-panel p-0.5 shadow-card"
-          >
-            {PERIODS.map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                role="tab"
-                aria-selected={period === p.value}
-                onClick={() => setPeriod(p.value)}
-                className={
-                  "px-3 py-1.5 text-[12.5px] font-medium transition-colors rounded " +
-                  (period === p.value
-                    ? "bg-ink text-panel"
-                    : "text-ink-2 hover:text-ink")
-                }
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <PeriodSelector value={period} onChange={setPeriod} />
         </div>
       </div>
 
@@ -439,6 +437,7 @@ export function DashboardPage() {
           entityId={entityIdForQueries}
         />
       </div>
+
     </section>
   );
 }
@@ -719,17 +718,42 @@ function FlowColumn({
   entityId,
 }: {
   kind: "income" | "expense";
-  period: DashboardPeriod;
+  period: PeriodValue;
   entityId?: number;
 }) {
+  const legacyPeriod = presetToLegacy(period.preset);
   const cats = useQuery<CategoryBreakdown>({
-    queryKey: ["dashboard-categories", period, entityId],
-    queryFn: () => fetchCategoryBreakdown({ period, entityId }),
+    queryKey: [
+      "dashboard-categories",
+      period.preset,
+      period.from,
+      period.to,
+      entityId,
+    ],
+    queryFn: () =>
+      fetchCategoryBreakdown({
+        period: legacyPeriod,
+        entityId,
+        from: period.from,
+        to: period.to,
+      }),
     staleTime: 60_000,
   });
   const tops = useQuery<TopCounterparties>({
-    queryKey: ["dashboard-top-counterparties", period, entityId],
-    queryFn: () => fetchTopCounterparties({ period, entityId }),
+    queryKey: [
+      "dashboard-top-counterparties",
+      period.preset,
+      period.from,
+      period.to,
+      entityId,
+    ],
+    queryFn: () =>
+      fetchTopCounterparties({
+        period: legacyPeriod,
+        entityId,
+        from: period.from,
+        to: period.to,
+      }),
     staleTime: 60_000,
   });
 

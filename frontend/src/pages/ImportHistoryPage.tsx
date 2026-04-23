@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import type { ImportRecord } from "@/types/api";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
+import {
+  PeriodSelector,
+  defaultPeriodValue,
+  type PeriodValue,
+} from "@/components/PeriodSelector";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "En cours",
@@ -40,9 +45,13 @@ function formatPeriod(start: string | null, end: string | null): string {
 
 export function ImportHistoryPage() {
   const entityId = useEntityFilter((s) => s.entityId);
+  const [period, setPeriod] = useState<PeriodValue>(() =>
+    defaultPeriodValue("12m"),
+  );
   const { data = [], isLoading } = useQuery({
-    queryKey: ["imports", entityId],
-    queryFn: () => fetchImports({ entityId }),
+    queryKey: ["imports", entityId, period.from, period.to],
+    queryFn: () =>
+      fetchImports({ entityId, from: period.from, to: period.to }),
   });
   const [preview, setPreview] = useState<ImportRecord | null>(null);
 
@@ -59,6 +68,7 @@ export function ImportHistoryPage() {
         </div>
         <div className="flex items-center gap-2">
           <EntitySelector />
+          <PeriodSelector value={period} onChange={setPeriod} />
           <Link to="/imports/nouveau">
           <Button>
             <svg
