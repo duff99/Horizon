@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import (
+    admin_audit,
     admin_backups,
     analysis,
     auth,
@@ -44,3 +45,4 @@ api_router.include_router(forecast_pivot.router)
 api_router.include_router(commitments.router)
 api_router.include_router(analysis.router)
 api_router.include_router(admin_backups.router)
+api_router.include_router(admin_audit.router)
