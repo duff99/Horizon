@@ -168,6 +168,21 @@ const admin: Item[] = [
     ),
     adminOnly: true,
   },
+  {
+    to: '/administration/audit',
+    label: "Journal d'audit",
+    icon: icon(
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M8 12h8" />
+        <path d="M8 16h5" />
+        <circle cx="18" cy="18" r="3" />
+        <path d="M20.5 20.5 22 22" />
+      </>,
+    ),
+    adminOnly: true,
+  },
 ];
 
 function NavGroup({

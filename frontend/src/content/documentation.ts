@@ -265,6 +265,29 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
   },
   {
+    id: "audit",
+    title: "Journal d'audit",
+    subtitle:
+      "Trace historique de toutes les mutations finance-sensibles (admins uniquement).",
+    sees: [
+      "Une table paginée listant chaque création, modification ou suppression effectuée sur les données critiques : utilisateurs, sociétés, comptes bancaires, transactions, engagements, tiers, règles de catégorisation, scénarios et lignes prévisionnelles.",
+      "Pour chaque événement : horodatage, utilisateur auteur, IP, action (create/update/delete), type et identifiant de l'entité, et un résumé des champs modifiés.",
+      "Des filtres en haut de page : type d'entité, action, utilisateur, période.",
+      "Un panneau de détail (clic sur une ligne) exposant les JSON complets : état avant, état après, diff champ par champ.",
+    ],
+    does: [
+      "Accédez à /administration/audit depuis le groupe Administration de la sidebar.",
+      "Filtrez par type d'entité pour vérifier qui a modifié quoi sur une société, une transaction, un engagement.",
+      "Ouvrez une ligne pour voir exactement les valeurs avant/après — utile pour reconstituer un changement problématique.",
+      "Les mots de passe et secrets sont toujours masqués (`<redacted>`) dans les snapshots : aucune donnée sensible n'est exposée.",
+    ],
+    tips: [
+      "Les lectures (GET) ne sont pas tracées, seulement les mutations. Impossible donc de savoir qui a simplement consulté une transaction — c'est voulu (volume et bruit).",
+      "Les imports massifs (500 transactions créées d'un coup) ne génèrent qu'une seule entrée d'audit résumée, pas une par transaction.",
+      "La rétention est de 365 jours : les événements plus anciens peuvent être purgés via l'endpoint admin dédié.",
+    ],
+  },
+  {
     id: "securite",
     title: "Sécurité et sauvegardes",
     subtitle: "Comment vos données sont protégées et restaurables.",

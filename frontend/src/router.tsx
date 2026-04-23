@@ -6,6 +6,9 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
 
 // Route-based code-splitting. LoginPage reste eager (critical path + petit).
+const AdminAuditLogPage = lazy(() =>
+  import('@/pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })),
+);
 const AdminBankAccountsPage = lazy(() =>
   import('@/pages/AdminBankAccountsPage').then((m) => ({ default: m.AdminBankAccountsPage })),
 );
@@ -178,6 +181,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <AdminBankAccountsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/audit',
+        element: (
+          <LazyPage>
+            <AdminAuditLogPage />
           </LazyPage>
         ),
       },
