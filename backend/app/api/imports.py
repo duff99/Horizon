@@ -1,6 +1,8 @@
 """Endpoints /api/imports."""
 from __future__ import annotations
 
+from datetime import date, datetime, time
+
 import magic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
@@ -76,6 +78,8 @@ async def create_import(
 @router.get("", response_model=list[ImportRecordRead])
 def list_imports(
     entity_id: int | None = Query(None),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[ImportRecordRead]:
@@ -91,6 +95,15 @@ def list_imports(
     if entity_id is not None:
         require_entity_access(session=session, user=user, entity_id=entity_id)
         stmt = stmt.where(BankAccount.entity_id == entity_id)
+    if date_from is not None:
+        # `created_at` est un DateTime avec timezone → on compare à minuit UTC.
+        stmt = stmt.where(
+            ImportRecord.created_at >= datetime.combine(date_from, time.min)
+        )
+    if date_to is not None:
+        stmt = stmt.where(
+            ImportRecord.created_at <= datetime.combine(date_to, time.max)
+        )
     rows = session.execute(
         stmt.order_by(ImportRecord.created_at.desc())
     ).scalars().all()

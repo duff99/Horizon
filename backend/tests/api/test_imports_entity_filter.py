@@ -75,3 +75,49 @@ def test_imports_entity_id_without_access_is_forbidden(
 
     resp = client.get("/api/imports", params={"entity_id": e_other.id})
     assert resp.status_code == 403
+
+
+def test_imports_date_range_filter(
+    client: TestClient, db_session: Session, auth_user_admin: User,
+) -> None:
+    """Filtre from/to : ne retient que les imports dont created_at est dans la plage."""
+    from datetime import datetime, timedelta, timezone
+
+    e, ba, _ = _seed_entity_with_import(
+        db_session, user=auth_user_admin,
+        entity_name="SAS Gamma", iban="FR7600000000000000000000333",
+        filename="gamma-recent.pdf",
+    )
+    # Seed un import "vieux" directement (created_at antérieur)
+    old_imp = ImportRecord(
+        bank_account_id=ba.id, bank_code="delubac",
+        status=ImportStatus.COMPLETED, filename="gamma-old.pdf",
+    )
+    db_session.add(old_imp)
+    db_session.flush()
+    # Backdate : plus d'un an en arrière
+    old_imp.created_at = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
+    db_session.commit()
+
+    today = datetime.now(timezone.utc).date()
+    last_week = today - timedelta(days=7)
+
+    # Filtre from = il y a 7 jours → ne retient que l'import récent
+    resp = client.get(
+        "/api/imports",
+        params={"entity_id": e.id, "from": last_week.isoformat()},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["filename"] == "gamma-recent.pdf"
+
+    # Filtre to = début 2024-01-31 → ne retient que l'ancien
+    resp2 = client.get(
+        "/api/imports",
+        params={"entity_id": e.id, "to": "2024-01-31"},
+    )
+    assert resp2.status_code == 200
+    body2 = resp2.json()
+    assert len(body2) == 1
+    assert body2[0]["filename"] == "gamma-old.pdf"
