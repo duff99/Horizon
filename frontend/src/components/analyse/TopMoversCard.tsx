@@ -50,21 +50,28 @@ function MoverRow({
   positive: boolean;
 }) {
   return (
-    <li className="flex items-center justify-between gap-3 border-b border-line-soft py-2.5 last:border-0">
+    <li
+      className="flex items-start justify-between gap-3 border-b border-line-soft py-2.5 last:border-0"
+      title={row.label}
+    >
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] text-ink">{row.label}</div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-[13px] leading-snug text-ink break-words">
+          {row.label}
+        </div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">
           {row.direction === "in" ? "Entrée" : "Sortie"}
         </div>
       </div>
-      <Sparkline values={row.sparkline_3m_cents} positive={positive} />
-      <div
-        className={
-          "w-[96px] text-right font-mono text-[13px] tabular-nums " +
-          (positive ? "text-emerald-600" : "text-rose-600")
-        }
-      >
-        {formatDelta(row.delta_cents)}
+      <div className="flex shrink-0 items-center gap-3 pt-0.5">
+        <Sparkline values={row.sparkline_3m_cents} positive={positive} />
+        <div
+          className={
+            "w-[96px] text-right font-mono text-[13px] tabular-nums " +
+            (positive ? "text-emerald-600" : "text-rose-600")
+          }
+        >
+          {formatDelta(row.delta_cents)}
+        </div>
       </div>
     </li>
   );

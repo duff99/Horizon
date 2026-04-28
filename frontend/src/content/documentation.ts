@@ -125,12 +125,15 @@ export const DOC_SECTIONS: DocSectionData[] = [
     subtitle:
       "Six widgets KPI pour détecter dérives, tendances et concentrations sur les 12 derniers mois.",
     sees: [
-      "Dérives par catégorie : tableau qui compare le mois courant à la moyenne des trois derniers mois. Un badge « Dérive » apparaît au-delà de 20 % d'écart.",
-      "Top mouvements : catégories en plus forte hausse et plus forte baisse sur les trois derniers mois, avec une mini-courbe (sparkline) pour visualiser la trajectoire.",
-      "Runway (autonomie de trésorerie) : nombre de mois de trésorerie restants au rythme de burn (vitesse de consommation de cash) actuel, plus la courbe du solde projeté sur six mois.",
-      "Comparaison année sur année (YoY) : graphique des revenus et dépenses mois par mois, comparés à l'année précédente.",
+      "Autonomie de trésorerie (Runway) : nombre de mois pendant lesquels la société peut tenir si elle continue à dépenser au rythme actuel. Phrase d'interprétation contextuelle (Stable / Vigilance / Critique), consommation mensuelle (Burn rate), trésorerie disponible aujourd'hui, courbe projetée sur 6 mois.",
+      "Besoin en fonds de roulement (BFR) : trois métriques combinées — DSO (délai moyen de paiement client), DPO (délai moyen de paiement fournisseur), BFR (créances clients à encaisser moins dettes fournisseurs à payer). Le widget reste vide tant qu'aucun engagement n'a été saisi sur la page Engagements.",
+      "Précision du prévisionnel : tableau des 6 derniers mois comparant le prévu (saisi sur la page Prévisionnel) au réalisé (transactions importées). L'écart est coloré (vert si fiable, ambre si attention, rouge si écart fort). Ce widget reste vide tant qu'aucune prévision n'a été saisie.",
+      "Dérives par catégorie : tableau qui compare le mois courant à la moyenne des trois derniers mois. Un badge « Dérive » apparaît au-delà de 20 % d'écart. Cliquez sur une ligne pour voir précisément les transactions du mois qui expliquent l'écart.",
+      "Top mouvements : catégories en plus forte hausse et plus forte baisse sur les trois derniers mois, avec une mini-courbe (sparkline) pour visualiser la trajectoire. Les libellés longs sont affichés en entier (passez la souris pour le tooltip).",
       "Concentration clients : part du top 5 dans le chiffre d'affaires, indice HHI (Herfindahl-Hirschman, mesure standard de la concentration) et niveau de risque (faible, moyen, élevé).",
-      "Comparaison des sociétés : pour chaque entité accessible, revenus, dépenses, variation nette, solde, burn et runway.",
+      "Comparaison année sur année (YoY) : graphique des revenus et dépenses mois par mois, comparés à l'année précédente.",
+      "Comparaison des sociétés : pour chaque entité accessible, revenus, dépenses, variation nette, solde, consommation mensuelle et autonomie.",
+      "En bas de page : un accordéon Lexique des sigles (Runway, Burn rate, YoY, HHI, DSO, DPO, BFR) explicitant chaque terme financier utilisé.",
     ],
     does: [
       "L'analyse se fait toujours sur une société à la fois : à votre arrivée, la première société accessible est sélectionnée automatiquement (ordre alphabétique). Pour basculer sur une autre société, utilisez l'EntitySelector en haut à droite. La page n'a pas de mode « Toutes les sociétés » car un agrégat cross-entité n'a pas de sens financier (chaque société a son propre business et ses propres tendances).",
@@ -148,11 +151,11 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     panel: {
       summary:
-        "Indicateurs clés : dérives par catégorie, top mouvements, runway, comparaison année/année, concentration clients, comparaison des sociétés.",
+        "Indicateurs clés (par société, sélection auto de la 1ère accessible) : autonomie (Runway), BFR (DSO/DPO), précision du prévisionnel, dérives par catégorie avec drill-down, top mouvements, concentration clients, YoY, comparaison entre sociétés.",
       does: [
         "Choisissez la société analysée dans l'EntitySelector (la première accessible est pré-sélectionnée).",
-        "Lisez Dérives + Top mouvements pour repérer ce qui décale votre résultat.",
-        "Surveillez Autonomie de trésorerie (Runway, rouge < 6 mois) et l'indice HHI de concentration clients (> 2500 = forte).",
+        "Cliquez une ligne du tableau Dérives pour voir les transactions du mois qui l'expliquent.",
+        "Surveillez Autonomie (Runway, rouge < 6 mois), BFR (DSO élevé = clients lents), et la Précision du prévisionnel (écart > 20 % = forecast à revoir).",
       ],
       hide: ["tips"],
     },

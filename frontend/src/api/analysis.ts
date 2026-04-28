@@ -5,11 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "./client";
 import type {
+  CategoryDriftDetailResponse,
   CategoryDriftResponse,
   ClientConcentrationResponse,
   EntitiesComparisonResponse,
+  ForecastVarianceResponse,
   RunwayResponse,
   TopMoversResponse,
+  WorkingCapitalResponse,
   YoYResponse,
 } from "../types/analysis";
 
@@ -153,5 +156,89 @@ export function useEntitiesComparison(args: { months?: number } = {}) {
     queryKey: ["analysis", "entities-comparison", args.months],
     queryFn: () => fetchEntitiesComparison(args),
     staleTime: STALE,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Drill-down + Variance + BFR (nouveaux endpoints 2026-04)
+// ---------------------------------------------------------------------------
+
+export function fetchCategoryDriftDetail(args: {
+  categoryId: number;
+  entityId: number;
+}): Promise<CategoryDriftDetailResponse> {
+  return apiFetch<CategoryDriftDetailResponse>(
+    `/api/analysis/category-drift/${args.categoryId}/transactions${buildParams([
+      ["entity_id", args.entityId],
+    ])}`,
+  );
+}
+
+export function useCategoryDriftDetail(args: {
+  categoryId: number | null;
+  entityId?: number;
+}) {
+  return useQuery({
+    queryKey: [
+      "analysis",
+      "category-drift-detail",
+      args.categoryId,
+      args.entityId,
+    ],
+    queryFn: () =>
+      fetchCategoryDriftDetail({
+        categoryId: args.categoryId as number,
+        entityId: args.entityId as number,
+      }),
+    staleTime: STALE,
+    enabled: args.categoryId !== null && args.entityId !== undefined,
+  });
+}
+
+export function fetchForecastVariance(args: {
+  entityId?: number;
+  months?: number;
+}): Promise<ForecastVarianceResponse> {
+  return apiFetch<ForecastVarianceResponse>(
+    `/api/analysis/forecast-variance${buildParams([
+      ["entity_id", args.entityId],
+      ["months", args.months],
+    ])}`,
+  );
+}
+
+export function useForecastVariance(args: {
+  entityId?: number;
+  months?: number;
+}) {
+  return useQuery({
+    queryKey: [
+      "analysis",
+      "forecast-variance",
+      args.entityId,
+      args.months,
+    ],
+    queryFn: () => fetchForecastVariance(args),
+    staleTime: STALE,
+    enabled: args.entityId !== undefined,
+  });
+}
+
+export function fetchWorkingCapital(args: {
+  entityId?: number;
+}): Promise<WorkingCapitalResponse> {
+  return apiFetch<WorkingCapitalResponse>(
+    `/api/analysis/working-capital${buildParams([
+      ["entity_id", args.entityId],
+    ])}`,
+  );
+}
+
+export function useWorkingCapital(args: { entityId?: number }) {
+  return useQuery({
+    queryKey: ["analysis", "working-capital", args.entityId],
+    queryFn: () => fetchWorkingCapital(args),
+    staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }

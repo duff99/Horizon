@@ -9,20 +9,17 @@
  * unique : si rien n'est sélectionné au chargement, on prend la première
  * entité accessible (ordre alphabétique côté API).
  */
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { useEntities } from "@/api/entities";
 import { EntitySelector } from "@/components/EntitySelector";
-import {
-  PeriodSelector,
-  defaultPeriodValue,
-  type PeriodValue,
-} from "@/components/PeriodSelector";
 import { CategoryDriftTable } from "@/components/analyse/CategoryDriftTable";
 import { ClientConcentrationCard } from "@/components/analyse/ClientConcentrationCard";
 import { EntitiesComparisonTable } from "@/components/analyse/EntitiesComparisonTable";
+import { ForecastVarianceCard } from "@/components/analyse/ForecastVarianceCard";
 import { RunwayCard } from "@/components/analyse/RunwayCard";
 import { TopMoversCard } from "@/components/analyse/TopMoversCard";
+import { WorkingCapitalCard } from "@/components/analyse/WorkingCapitalCard";
 import { YoYChart } from "@/components/analyse/YoYChart";
 import { useEntityFilter } from "@/stores/entityFilter";
 
@@ -41,10 +38,6 @@ export function AnalysePage() {
       setEntityId(entities[0].id);
     }
   }, [entityId, entities, setEntityId]);
-
-  const [period, setPeriod] = useState<PeriodValue>(() =>
-    defaultPeriodValue("30d"),
-  );
 
   // Si l'utilisateur n'a accès à aucune entité (cas reader sans grant),
   // on évite de monter les widgets qui partiraient en 422/403 silencieux.
@@ -79,11 +72,22 @@ export function AnalysePage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <EntitySelector allowAll={false} />
-          <PeriodSelector value={period} onChange={setPeriod} />
         </div>
       </div>
 
       <div className="grid grid-cols-12 gap-4">
+        {/* Ligne 1 : santé immédiate (Runway pleine largeur, BFR pleine largeur) */}
+        <div className="col-span-12 md:col-span-6">
+          <RunwayCard entityId={entityId ?? undefined} />
+        </div>
+        <div className="col-span-12 md:col-span-6">
+          <WorkingCapitalCard entityId={entityId ?? undefined} />
+        </div>
+        {/* Ligne 2 : précision du forecast (utile pour l'utilisateur du module Prévisionnel) */}
+        <div className="col-span-12">
+          <ForecastVarianceCard entityId={entityId ?? undefined} />
+        </div>
+        {/* Ligne 3 : analyse de coûts */}
         <div className="col-span-12">
           <CategoryDriftTable entityId={entityId ?? undefined} />
         </div>
@@ -91,13 +95,11 @@ export function AnalysePage() {
           <TopMoversCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-6">
-          <RunwayCard entityId={entityId ?? undefined} />
-        </div>
-        <div className="col-span-12 md:col-span-8">
-          <YoYChart entityId={entityId ?? undefined} />
-        </div>
-        <div className="col-span-12 md:col-span-4">
           <ClientConcentrationCard entityId={entityId ?? undefined} />
+        </div>
+        {/* Ligne 4 : tendance long terme + comparaison */}
+        <div className="col-span-12">
+          <YoYChart entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12">
           <EntitiesComparisonTable />
@@ -149,6 +151,39 @@ export function AnalysePage() {
               (parfaitement diversifié) à 10 000 (un seul client). Repères :
               moins de 1500 = faible, 1500 à 2500 = modérée, plus de 2500 =
               forte.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              DSO (Days Sales Outstanding)
+            </dt>
+            <dd>
+              Délai moyen, en jours, entre l'émission d'une facture client
+              et son encaissement réel. Plus c'est court, mieux c'est : un
+              DSO élevé signifie que vos clients payent tard, votre
+              trésorerie est immobilisée.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              DPO (Days Payable Outstanding)
+            </dt>
+            <dd>
+              Symétrique du DSO côté fournisseurs : délai moyen entre
+              l'émission d'une facture fournisseur et son paiement par
+              vous. Un DPO court = vous payez vite, vous immobilisez du
+              cash chez vous.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              BFR (Besoin en Fonds de Roulement)
+            </dt>
+            <dd>
+              Cash immobilisé dans le cycle d'exploitation : créances
+              clients en cours moins dettes fournisseurs en cours. Un BFR
+              positif élevé tire sur la trésorerie ; un BFR négatif (ce que
+              cherche un grand distributeur) la finance.
             </dd>
           </div>
         </dl>

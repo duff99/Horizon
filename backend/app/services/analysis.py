@@ -17,8 +17,14 @@ from sqlalchemy.orm import Session
 from app.deps import accessible_entity_ids_subquery
 from app.models.bank_account import BankAccount
 from app.models.category import Category
+from app.models.commitment import (
+    Commitment,
+    CommitmentDirection,
+    CommitmentStatus,
+)
 from app.models.counterparty import Counterparty
 from app.models.entity import Entity
+from app.models.forecast_entry import ForecastEntry
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -29,9 +35,12 @@ from app.schemas.analysis import (
     ClientSlice,
     EntitiesComparisonResponse,
     EntityCompareRow,
+    ForecastVariancePoint,
+    ForecastVarianceResponse,
     RunwayResponse,
     TopMoverRow,
     TopMoversResponse,
+    WorkingCapitalResponse,
     YoYPoint,
     YoYResponse,
 )
@@ -158,6 +167,80 @@ def compute_category_drift(
 
     out.sort(key=lambda r: abs(r.delta_pct), reverse=True)
     return CategoryDriftResponse(rows=out, seuil_pct=seuil_pct)
+
+
+def compute_category_drift_detail(
+    session: Session, *, entity_id: int, category_id: int,
+):
+    """Drill-down : transactions du mois courant pour une catégorie donnée.
+
+    Utilisé par le clic sur une ligne du tableau Dérives par catégorie pour
+    répondre à la question "à cause de quelles transactions exactement ?".
+    Les transactions sont triées par montant absolu décroissant (les plus
+    impactantes en premier).
+    """
+    from app.schemas.analysis import (
+        CategoryDriftDetailResponse,
+        CategoryDriftTransaction,
+    )
+
+    today = date.today()
+    current_first = _first_of_month(today)
+    next_first = _add_months(current_first, 1)
+
+    ba_ids = _bank_account_ids_for_entity(session, entity_id)
+    cat = session.get(Category, category_id)
+    label = cat.name if cat else f"#{category_id}"
+
+    if not ba_ids:
+        return CategoryDriftDetailResponse(
+            category_id=category_id,
+            category_label=label,
+            month=_month_key(current_first),
+            total_cents=0,
+            transactions=[],
+        )
+
+    rows = session.execute(
+        select(
+            Transaction.id,
+            Transaction.operation_date,
+            Transaction.label,
+            Transaction.amount,
+            Counterparty.name.label("counterparty_name"),
+        )
+        .outerjoin(Counterparty, Counterparty.id == Transaction.counterparty_id)
+        .where(
+            and_(
+                Transaction.bank_account_id.in_(ba_ids),
+                Transaction.category_id == category_id,
+                Transaction.operation_date >= current_first,
+                Transaction.operation_date < next_first,
+                Transaction.is_aggregation_parent.is_(False),
+            )
+        )
+        .order_by(func.abs(Transaction.amount).desc())
+    ).all()
+
+    transactions = [
+        CategoryDriftTransaction(
+            id=int(r.id),
+            operation_date=r.operation_date.isoformat(),
+            label=r.label or "",
+            counterparty=r.counterparty_name,
+            amount_cents=_eur_to_cents(Decimal(r.amount)),
+        )
+        for r in rows
+    ]
+    total = sum(t.amount_cents for t in transactions)
+
+    return CategoryDriftDetailResponse(
+        category_id=category_id,
+        category_label=label,
+        month=_month_key(current_first),
+        total_cents=total,
+        transactions=transactions,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -668,3 +751,211 @@ def compute_entities_comparison(
             )
         )
     return EntitiesComparisonResponse(entities=out)
+
+
+# ---------------------------------------------------------------------------
+# 7. Forecast variance — réalisé vs prévisionnel
+# ---------------------------------------------------------------------------
+
+
+def compute_forecast_variance(
+    session: Session, *, entity_id: int, months: int = 6,
+) -> ForecastVarianceResponse:
+    """Compare le réalisé (transactions) au prévisionnel (forecast_entries)
+    sur les N derniers mois (mois courant inclus, défaut 6).
+
+    Pour chaque mois :
+      forecasted_cents = somme des forecast_entries.amount du mois
+      actual_cents     = somme des Transaction.amount du mois
+      delta            = actual - forecasted (signé)
+      delta_pct        = delta / forecasted * 100, ou 0 si pas de prévu
+
+    Renvoie has_forecast=False si aucune entrée prévisionnelle n'existe pour
+    cette entité sur la fenêtre — l'UI affichera un état vide avec un
+    call-to-action vers la page Prévisionnel.
+    """
+    today = date.today()
+    current_first = _first_of_month(today)
+    earliest = _add_months(current_first, -(months - 1))
+    next_first = _add_months(current_first, 1)  # exclusive
+
+    # Forecast aggregation par mois
+    forecast_month = func.date_trunc("month", ForecastEntry.due_date)
+    forecast_rows = session.execute(
+        select(
+            forecast_month.label("month"),
+            func.coalesce(func.sum(ForecastEntry.amount), 0).label("total"),
+        )
+        .where(
+            and_(
+                ForecastEntry.entity_id == entity_id,
+                ForecastEntry.due_date >= earliest,
+                ForecastEntry.due_date < next_first,
+            )
+        )
+        .group_by(forecast_month)
+    ).all()
+    forecast_by_month: dict[str, int] = {}
+    for month, total in forecast_rows:
+        if month is None:
+            continue
+        forecast_by_month[_month_key(month)] = _eur_to_cents(Decimal(total))
+
+    # Actual aggregation par mois (depuis transactions)
+    ba_ids = _bank_account_ids_for_entity(session, entity_id)
+    actual_by_month: dict[str, int] = {}
+    if ba_ids:
+        actual_month = func.date_trunc("month", Transaction.operation_date)
+        actual_rows = session.execute(
+            select(
+                actual_month.label("month"),
+                func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+            )
+            .where(
+                and_(
+                    Transaction.bank_account_id.in_(ba_ids),
+                    Transaction.operation_date >= earliest,
+                    Transaction.operation_date < next_first,
+                    Transaction.is_aggregation_parent.is_(False),
+                )
+            )
+            .group_by(actual_month)
+        ).all()
+        for month, total in actual_rows:
+            if month is None:
+                continue
+            actual_by_month[_month_key(month)] = _eur_to_cents(Decimal(total))
+
+    # Construit la série complète mois par mois
+    points: list[ForecastVariancePoint] = []
+    cursor = earliest
+    while cursor < next_first:
+        key = _month_key(cursor)
+        forecasted = forecast_by_month.get(key, 0)
+        actual = actual_by_month.get(key, 0)
+        delta = actual - forecasted
+        if forecasted != 0:
+            delta_pct = round((delta / forecasted) * 100, 1)
+        else:
+            delta_pct = 0.0
+        points.append(
+            ForecastVariancePoint(
+                month=key,
+                forecasted_cents=forecasted,
+                actual_cents=actual,
+                delta_cents=delta,
+                delta_pct=delta_pct,
+            )
+        )
+        cursor = _add_months(cursor, 1)
+
+    has_forecast = bool(forecast_by_month)
+    return ForecastVarianceResponse(points=points, has_forecast=has_forecast)
+
+
+# ---------------------------------------------------------------------------
+# 8. Working capital — DSO / DPO / BFR
+# ---------------------------------------------------------------------------
+
+
+def _avg_payment_delay(
+    session: Session, *, entity_id: int, direction: CommitmentDirection,
+) -> tuple[float | None, int]:
+    """Délai moyen entre issue_date d'un commitment et la date de la
+    transaction réellement appariée. Retourne (avg_days, n).
+
+    Calculé sur les commitments matched (status='success' ou matched_transaction_id
+    not null). Si moins de 3 échantillons, retourne (None, n) pour éviter de
+    publier une moyenne non significative.
+    """
+    rows = session.execute(
+        select(
+            Commitment.issue_date,
+            Transaction.operation_date,
+        )
+        .join(Transaction, Transaction.id == Commitment.matched_transaction_id)
+        .where(
+            and_(
+                Commitment.entity_id == entity_id,
+                Commitment.direction == direction,
+                Commitment.matched_transaction_id.is_not(None),
+            )
+        )
+    ).all()
+    delays = [
+        (paid - issued).days
+        for issued, paid in rows
+        if issued is not None and paid is not None
+    ]
+    if len(delays) < 3:
+        return None, len(delays)
+    avg = sum(delays) / len(delays)
+    return round(avg, 1), len(delays)
+
+
+def _outstanding_amount(
+    session: Session, *, entity_id: int, direction: CommitmentDirection,
+) -> int:
+    """Montant total des engagements en attente (status='pending') pour cette
+    direction et cette entité, en centimes."""
+    total = session.scalar(
+        select(func.coalesce(func.sum(Commitment.amount_cents), 0))
+        .where(
+            and_(
+                Commitment.entity_id == entity_id,
+                Commitment.direction == direction,
+                Commitment.status == CommitmentStatus.PENDING,
+            )
+        )
+    )
+    return int(total or 0)
+
+
+def compute_working_capital(
+    session: Session, *, entity_id: int,
+) -> WorkingCapitalResponse:
+    """Calcule DSO / DPO / BFR à partir des engagements (Commitments).
+
+    DSO (Days Sales Outstanding) = délai moyen entre issue_date et date de
+    paiement réel pour les engagements de direction IN (créances clients).
+    DPO (Days Payable Outstanding) = pareil pour la direction OUT (dettes
+    fournisseurs).
+    BFR (Besoin en Fonds de Roulement) approximé par
+        receivables_cents - payables_cents
+    où receivables/payables = montants des engagements pending par direction.
+
+    Si aucun commitment n'existe pour l'entité, has_data=False : l'UI
+    affichera un état vide avec un lien vers la page Engagements.
+    """
+    total_commitments = session.scalar(
+        select(func.count(Commitment.id))
+        .where(Commitment.entity_id == entity_id)
+    ) or 0
+    if total_commitments == 0:
+        return WorkingCapitalResponse(
+            dso_days=None, dpo_days=None, bfr_cents=None,
+            receivables_cents=0, payables_cents=0,
+            matched_in_count=0, matched_out_count=0,
+            has_data=False,
+        )
+
+    dso_days, in_count = _avg_payment_delay(
+        session, entity_id=entity_id, direction=CommitmentDirection.IN
+    )
+    dpo_days, out_count = _avg_payment_delay(
+        session, entity_id=entity_id, direction=CommitmentDirection.OUT
+    )
+    receivables = _outstanding_amount(
+        session, entity_id=entity_id, direction=CommitmentDirection.IN
+    )
+    payables = _outstanding_amount(
+        session, entity_id=entity_id, direction=CommitmentDirection.OUT
+    )
+    bfr = receivables - payables
+
+    return WorkingCapitalResponse(
+        dso_days=dso_days, dpo_days=dpo_days, bfr_cents=bfr,
+        receivables_cents=receivables, payables_cents=payables,
+        matched_in_count=in_count, matched_out_count=out_count,
+        has_data=True,
+    )

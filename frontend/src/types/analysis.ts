@@ -108,3 +108,55 @@ export interface EntityCompareRow {
 export interface EntitiesComparisonResponse {
   entities: EntityCompareRow[];
 }
+
+// ---------------------------------------------------------------------------
+// 7. Category-drift drill-down (détail des transactions du mois courant)
+// ---------------------------------------------------------------------------
+
+export interface CategoryDriftTransaction {
+  id: number;
+  operation_date: string;
+  label: string;
+  counterparty: string | null;
+  amount_cents: number;
+}
+
+export interface CategoryDriftDetailResponse {
+  category_id: number;
+  category_label: string;
+  month: string;
+  total_cents: number;
+  transactions: CategoryDriftTransaction[];
+}
+
+// ---------------------------------------------------------------------------
+// 8. Forecast variance (réalisé vs prévisionnel)
+// ---------------------------------------------------------------------------
+
+export interface ForecastVariancePoint {
+  month: string;
+  forecasted_cents: number;
+  actual_cents: number;
+  delta_cents: number;
+  delta_pct: number;
+}
+
+export interface ForecastVarianceResponse {
+  points: ForecastVariancePoint[];
+  has_forecast: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// 9. Working capital (DSO / DPO / BFR)
+// ---------------------------------------------------------------------------
+
+export interface WorkingCapitalResponse {
+  dso_days: number | null;
+  dpo_days: number | null;
+  bfr_cents: number | null;
+  receivables_cents: number;
+  payables_cents: number;
+  matched_in_count: number;
+  matched_out_count: number;
+  has_data: boolean;
+}

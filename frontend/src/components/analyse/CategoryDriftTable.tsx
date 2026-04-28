@@ -6,6 +6,7 @@
 import { memo, useMemo, useState } from "react";
 
 import { useCategoryDrift } from "@/api/analysis";
+import { CategoryDriftDetailModal } from "@/components/analyse/CategoryDriftDetailModal";
 import { formatCents } from "@/lib/forecastFormat";
 
 interface Props {
@@ -38,6 +39,7 @@ function Skeleton() {
 
 function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [drilledCategoryId, setDrilledCategoryId] = useState<number | null>(null);
   const query = useCategoryDrift({ entityId, seuilPct });
 
   const rows = query.data?.rows ?? [];
@@ -60,6 +62,7 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
           </div>
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">
             Mois en cours vs moyenne des 3 mois précédents · seuil ±{threshold} %
+            · cliquez une ligne pour voir les transactions concernées
           </div>
         </div>
         {alertCount > 0 && (
@@ -112,9 +115,10 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
                 {visible.map((r) => (
                   <tr
                     key={r.category_id}
+                    onClick={() => setDrilledCategoryId(r.category_id)}
                     className={
-                      "border-b border-line-soft last:border-0 " +
-                      (r.status === "alert" ? "bg-rose-50" : "")
+                      "cursor-pointer border-b border-line-soft last:border-0 hover:bg-panel-2/60 " +
+                      (r.status === "alert" ? "bg-rose-50 hover:bg-rose-100/50" : "")
                     }
                   >
                     <td
@@ -183,6 +187,13 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
           )}
         </>
       )}
+
+      <CategoryDriftDetailModal
+        open={drilledCategoryId !== null}
+        categoryId={drilledCategoryId}
+        entityId={entityId}
+        onClose={() => setDrilledCategoryId(null)}
+      />
     </div>
   );
 }

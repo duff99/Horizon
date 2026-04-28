@@ -1,6 +1,9 @@
 /**
- * RunwayCard — autonomie de trésorerie (Runway) + consommation mensuelle
- * (Burn rate) + solde + projection sur 6 mois.
+ * RunwayCard — autonomie de trésorerie (Runway).
+ *
+ * Répond à la question « combien de mois je peux tenir si je continue
+ * comme ça ? ». Lecture pédagogique : phrase synthétique en haut, chiffre
+ * principal grand, ventilation détaillée en dessous, projection 6 mois.
  */
 import { memo, useMemo } from "react";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
@@ -24,23 +27,52 @@ function ringClass(status: string): string {
   }
 }
 
-function statusLabel(status: string): { label: string; className: string } {
+interface StatusInfo {
+  label: string;
+  className: string;
+  /** Phrase pédagogique d'interprétation. */
+  interpretation: (months: number | null) => string;
+}
+
+function statusInfo(status: string): StatusInfo {
   switch (status) {
     case "critical":
-      return { label: "Critique", className: "bg-rose-50 text-rose-900" };
+      return {
+        label: "Critique",
+        className: "bg-rose-50 text-rose-900",
+        interpretation: (m) =>
+          `Moins de 6 mois de trésorerie devant vous (${m ?? "?"} mois). À ce rythme, vous serez à court avant ${m ?? "?"} mois. Action recommandée : rentrer du cash (factures impayées) ou réduire les sorties.`,
+      };
     case "warning":
-      return { label: "Vigilance", className: "bg-amber-50 text-amber-900" };
+      return {
+        label: "Vigilance",
+        className: "bg-amber-50 text-amber-900",
+        interpretation: (m) =>
+          `Entre 6 et 12 mois de trésorerie devant vous (${m ?? "?"} mois). Confortable mais à surveiller — un imprévu peut faire basculer en zone critique.`,
+      };
     case "ok":
-      return { label: "Stable", className: "bg-emerald-50 text-emerald-900" };
+      return {
+        label: "Stable",
+        className: "bg-emerald-50 text-emerald-900",
+        interpretation: (m) =>
+          m == null
+            ? "Vos entrées couvrent vos sorties — vous ne consommez pas votre trésorerie."
+            : `Plus de 12 mois de trésorerie devant vous (${m} mois). Situation saine, vous pouvez investir.`,
+      };
     default:
-      return { label: "N/A", className: "bg-slate-100 text-slate-600" };
+      return {
+        label: "N/A",
+        className: "bg-slate-100 text-slate-600",
+        interpretation: () =>
+          "Pas assez d'historique pour calculer (besoin de 3 mois de transactions au moins).",
+      };
   }
 }
 
 function Skeleton() {
   return (
     <div>
-      <div className="h-3 w-20 animate-pulse rounded bg-slate-100" />
+      <div className="h-3 w-48 animate-pulse rounded bg-slate-100" />
       <div className="mt-3 h-14 w-40 animate-pulse rounded bg-slate-100" />
       <div className="mt-4 h-3 w-48 animate-pulse rounded bg-slate-100" />
       <div className="mt-2 h-3 w-48 animate-pulse rounded bg-slate-100" />
@@ -67,7 +99,7 @@ function RunwayCardInner({ entityId }: Props) {
         : String(data.runway_months);
 
   const status = data?.status ?? "none";
-  const sl = statusLabel(status);
+  const info = statusInfo(status);
 
   return (
     <div
@@ -85,17 +117,18 @@ function RunwayCardInner({ entityId }: Props) {
             </span>
           </div>
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Nombre de mois de trésorerie restants au rythme actuel
+            Combien de mois pouvez-vous tenir si vous continuez à dépenser
+            au rythme actuel ?
           </div>
         </div>
         {data && (
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-medium",
-              sl.className,
+              "inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11.5px] font-medium",
+              info.className,
             )}
           >
-            {sl.label}
+            {info.label}
           </span>
         )}
       </div>
@@ -116,11 +149,13 @@ function RunwayCardInner({ entityId }: Props) {
               {runwayDisplay}
             </div>
             <div className="text-[13px] text-muted-foreground">
-              {runwayDisplay === "∞"
-                ? "trésorerie stable"
-                : "mois"}
+              {runwayDisplay === "∞" ? "trésorerie stable" : "mois"}
             </div>
           </div>
+
+          <p className="mt-3 rounded-md bg-panel-2/50 px-3 py-2 text-[12.5px] leading-relaxed text-ink-2">
+            {info.interpretation(data.runway_months)}
+          </p>
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-[12.5px]">
             <div>
@@ -137,11 +172,21 @@ function RunwayCardInner({ entityId }: Props) {
                 {burnNegative ? "−" : "+"}
                 {formatCents(Math.abs(data.burn_rate_cents))}
               </dd>
+              <dd className="mt-0.5 text-[11px] text-muted-foreground">
+                {burnNegative
+                  ? "vous consommez ce montant chaque mois en moyenne"
+                  : "vos entrées dépassent vos sorties chaque mois"}
+              </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Solde actuel</dt>
+              <dt className="text-muted-foreground">
+                Trésorerie disponible aujourd'hui
+              </dt>
               <dd className="mt-0.5 font-mono tabular-nums text-ink">
                 {formatCents(data.current_balance_cents)}
+              </dd>
+              <dd className="mt-0.5 text-[11px] text-muted-foreground">
+                solde cumulé de vos comptes bancaires
               </dd>
             </div>
           </dl>
@@ -149,7 +194,7 @@ function RunwayCardInner({ entityId }: Props) {
           {sparklineData.length >= 2 && (
             <div className="mt-4">
               <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Projection 6 mois
+                Solde projeté sur les 6 prochains mois
               </div>
               <div style={{ width: "100%", height: 56 }}>
                 <ResponsiveContainer>
@@ -167,6 +212,10 @@ function RunwayCardInner({ entityId }: Props) {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Extrapolation à partir du burn rate moyen (sans tenir compte
+                de vos engagements futurs).
               </div>
             </div>
           )}
