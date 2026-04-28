@@ -67,7 +67,7 @@ class TestForecastEntries:
         assert r.json() == []
 
     def test_cannot_create_for_inaccessible_entity(
-        self, client: TestClient, auth_user: User, db_session: Session,
+        self, client: TestClient, auth_user_reader: User, db_session: Session,
     ) -> None:
         other = Entity(name="Other", legal_name="Other")
         db_session.add(other)

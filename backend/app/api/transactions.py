@@ -6,14 +6,17 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.audit_log import AuditLog
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.entity import Entity
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User, UserRole
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.categorization_rule import BulkCategorizeRequest
 from app.schemas.transaction import (
     TransactionFilter,
@@ -32,9 +35,7 @@ def list_transactions(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> TransactionListResponse:
-    accessible_entity_ids = select(UserEntityAccess.entity_id).where(
-        UserEntityAccess.user_id == user.id
-    )
+    accessible_entity_ids = accessible_entity_ids_subquery(session=session, user=user)
 
     conditions = [
         BankAccount.entity_id.in_(accessible_entity_ids),
@@ -129,9 +130,7 @@ def bulk_categorize(
     if cat is None:
         raise HTTPException(status_code=404, detail="Catégorie introuvable")
 
-    accessible_entities = select(UserEntityAccess.entity_id).where(
-        UserEntityAccess.user_id == user.id
-    )
+    accessible_entities = accessible_entity_ids_subquery(session=session, user=user)
     accessible_accounts = select(BankAccount.id).where(
         BankAccount.entity_id.in_(accessible_entities)
     )

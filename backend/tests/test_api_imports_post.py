@@ -36,7 +36,7 @@ def test_post_import_rejects_non_pdf(
 
 
 def test_post_import_forbidden_without_access(
-    client: TestClient, auth_user, other_entity_bank_account,
+    client: TestClient, auth_user_reader, other_entity_bank_account,
 ) -> None:
     resp = client.post(
         "/api/imports",

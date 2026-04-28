@@ -9,12 +9,15 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.bank_account import BankAccount
 from app.models.commitment import Commitment, CommitmentDirection, CommitmentStatus
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentListResponse,
@@ -32,11 +35,7 @@ router = APIRouter(prefix="/api/commitments", tags=["commitments"])
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
-        session.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        session.scalars(accessible_entity_ids_subquery(session=session, user=user))
     )
 
 

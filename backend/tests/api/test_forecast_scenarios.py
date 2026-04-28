@@ -49,7 +49,7 @@ class TestScenariosCRUD:
         self,
         client: TestClient,
         foreign_entity: Entity,
-        auth_user: User,  # ensure login happened
+        auth_user_reader: User,  # reader → toujours bloqué (option C 2026-04)
     ) -> None:
         r = client.get(f"/api/forecast/scenarios?entity_id={foreign_entity.id}")
         assert r.status_code == 403

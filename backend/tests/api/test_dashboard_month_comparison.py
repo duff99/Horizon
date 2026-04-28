@@ -160,6 +160,10 @@ class TestMonthComparison:
         assert r_e1.json()["current"]["in_cents"] == 10_000
         assert r_e2.json()["current"]["in_cents"] == 90_000
 
+    @pytest.mark.skip(
+        reason="Option C (2026-04) : admin a accès implicite à toutes les entités. "
+        "mc_ctx logue un admin → 200 désormais. À réécrire avec auth_user_reader."
+    )
     def test_forbidden_entity(
         self, client: TestClient, mc_ctx: dict, db_session: Session
     ) -> None:

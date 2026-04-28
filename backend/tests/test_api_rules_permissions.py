@@ -47,9 +47,16 @@ def test_reader_cannot_delete(client: TestClient, auth_user_reader, db_session) 
     assert r.status_code == 403
 
 
-def test_admin_without_entity_access_forbidden(
+def test_admin_without_entity_access_grants_implicit_access(
     client: TestClient, auth_user, db_session,
 ) -> None:
+    """Politique option C (2026-04) : un admin a accès implicite à toutes les entités.
+
+    Ce test remplace l'ancien `test_admin_without_entity_access_forbidden` :
+    auparavant, un admin sans entrée `user_entity_access` recevait 403, ce qui
+    rendait inutilisable un compte admin tout neuf. Désormais, le rôle ADMIN
+    suffit (cf. `app.deps.require_entity_access`).
+    """
     other = Entity(name="Hors accès", legal_name="Hors accès SAS")
     db_session.add(other)
     db_session.commit()
@@ -67,4 +74,5 @@ def test_admin_without_entity_access_forbidden(
         "direction": "ANY",
         "category_id": cat.id,
     })
-    assert r.status_code == 403
+    # Auparavant 403 ; maintenant 201 (création autorisée pour un admin).
+    assert r.status_code == 201

@@ -8,10 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.counterparty import Counterparty, CounterpartyStatus
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.counterparty import CounterpartyRead, CounterpartyUpdate
 from app.services.audit import record_audit, to_dict_for_audit
 
@@ -25,9 +28,7 @@ def list_counterparties(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[CounterpartyRead]:
-    accessible = select(UserEntityAccess.entity_id).where(
-        UserEntityAccess.user_id == user.id
-    )
+    accessible = accessible_entity_ids_subquery(session=session, user=user)
     q = select(Counterparty).where(Counterparty.entity_id.in_(accessible))
     if entity_id is not None:
         require_entity_access(session=session, user=user, entity_id=entity_id)

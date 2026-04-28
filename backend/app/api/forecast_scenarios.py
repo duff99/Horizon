@@ -6,10 +6,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.forecast_scenario import ForecastScenario
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.forecast import ScenarioCreate, ScenarioRead, ScenarioUpdate
 from app.services.audit import record_audit, to_dict_for_audit
 
@@ -18,11 +21,7 @@ router = APIRouter(prefix="/api/forecast/scenarios", tags=["forecast-scenarios"]
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
-        session.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        session.scalars(accessible_entity_ids_subquery(session=session, user=user))
     )
 
 

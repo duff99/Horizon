@@ -14,6 +14,7 @@ from typing import Iterable
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
+from app.deps import accessible_entity_ids_subquery
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.counterparty import Counterparty
@@ -21,7 +22,6 @@ from app.models.entity import Entity
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.analysis import (
     CategoryDriftResponse,
     CategoryDriftRow,
@@ -73,11 +73,7 @@ def _bank_account_ids_for_entity(session: Session, entity_id: int) -> list[int]:
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
-        session.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        session.scalars(accessible_entity_ids_subquery(session=session, user=user))
     )
 
 

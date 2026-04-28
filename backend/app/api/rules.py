@@ -10,13 +10,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.audit_log import AuditLog
 from app.models.bank_account import BankAccount
 from app.models.categorization_rule import CategorizationRule
 from app.models.transaction import Transaction
 from app.models.user import User, UserRole
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.categorization_rule import (
     RuleApplyResponse,
     RuleCreate,
@@ -36,12 +39,9 @@ router = APIRouter(prefix="/api/rules", tags=["rules"])
 
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
-    rows = session.execute(
-        select(UserEntityAccess.entity_id).where(
-            UserEntityAccess.user_id == user.id
-        )
-    ).scalars().all()
-    return list(rows)
+    return list(
+        session.scalars(accessible_entity_ids_subquery(session=session, user=user))
+    )
 
 
 def _require_editor(user: User) -> None:

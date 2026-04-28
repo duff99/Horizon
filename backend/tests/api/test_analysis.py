@@ -166,7 +166,7 @@ class TestCategoryDrift:
         assert sales["avg3m_cents"] == 100000
 
     def test_403_on_inaccessible_entity(
-        self, client: TestClient, auth_user: User, other_entity: Entity,
+        self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
         r = client.get(
             f"/api/analysis/category-drift?entity_id={other_entity.id}"
@@ -239,7 +239,7 @@ class TestTopMovers:
         assert dec["direction"] == "out"
 
     def test_403(
-        self, client: TestClient, auth_user: User, other_entity: Entity,
+        self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
         r = client.get(f"/api/analysis/top-movers?entity_id={other_entity.id}")
         assert r.status_code == 403
@@ -297,7 +297,7 @@ class TestRunway:
         assert body["status"] in ("warning", "critical")
 
     def test_403(
-        self, client: TestClient, auth_user: User, other_entity: Entity,
+        self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
         r = client.get(f"/api/analysis/runway?entity_id={other_entity.id}")
         assert r.status_code == 403
@@ -359,7 +359,7 @@ class TestYoY:
         assert last["expenses_current"] == 50000
 
     def test_403(
-        self, client: TestClient, auth_user: User, other_entity: Entity,
+        self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
         r = client.get(f"/api/analysis/yoy?entity_id={other_entity.id}")
         assert r.status_code == 403
@@ -433,7 +433,7 @@ class TestClientConcentration:
         assert body["risk_level"] == "high"
 
     def test_403(
-        self, client: TestClient, auth_user: User, other_entity: Entity,
+        self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
         r = client.get(
             f"/api/analysis/client-concentration?entity_id={other_entity.id}"

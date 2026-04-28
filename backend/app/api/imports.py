@@ -10,11 +10,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.bank_account import BankAccount
 from app.models.import_record import ImportRecord
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.parsers.errors import ParserError, UnknownBankError
 from app.schemas.import_record import ImportRecordRead
 from app.services.imports import (
@@ -84,9 +87,7 @@ def list_imports(
     session: Session = Depends(get_db),
 ) -> list[ImportRecordRead]:
     # Imports accessibles = ceux dont le bank_account appartient à une entity où user a accès
-    accessible_entity_ids = select(UserEntityAccess.entity_id).where(
-        UserEntityAccess.user_id == user.id
-    )
+    accessible_entity_ids = accessible_entity_ids_subquery(session=session, user=user)
     stmt = (
         select(ImportRecord)
         .join(BankAccount, BankAccount.id == ImportRecord.bank_account_id)

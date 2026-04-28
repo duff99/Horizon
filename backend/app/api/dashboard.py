@@ -10,7 +10,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import accessible_entity_ids_subquery, get_current_user
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.counterparty import Counterparty
@@ -18,7 +18,6 @@ from app.models.entity import Entity
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.dashboard import (
     Alert,
     AlertSeverity,
@@ -104,11 +103,7 @@ def get_summary(
     )
 
     accessible_entity_ids = list(
-        db.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        db.scalars(accessible_entity_ids_subquery(session=db, user=user))
     )
 
     if entity_id is not None and entity_id not in accessible_entity_ids:
@@ -366,11 +361,7 @@ def _resolve_accessible_bank_accounts(
     db: Session, *, user: User, entity_id: int | None,
 ) -> list[int]:
     accessible_entity_ids = list(
-        db.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        db.scalars(accessible_entity_ids_subquery(session=db, user=user))
     )
     if entity_id is not None and entity_id not in accessible_entity_ids:
         raise HTTPException(status_code=403, detail="Entité non accessible")
@@ -757,11 +748,7 @@ def get_alerts(
     from app.models.forecast_entry import ForecastEntry, ForecastRecurrence
 
     accessible = list(
-        db.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        db.scalars(accessible_entity_ids_subquery(session=db, user=user))
     )
     forecast_where = [
         ForecastEntry.due_date < today,

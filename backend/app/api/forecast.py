@@ -9,12 +9,15 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user, require_entity_access
+from app.deps import (
+    accessible_entity_ids_subquery,
+    get_current_user,
+    require_entity_access,
+)
 from app.models.bank_account import BankAccount
 from app.models.forecast_entry import ForecastEntry
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.user import User
-from app.models.user_entity_access import UserEntityAccess
 from app.schemas.forecast import (
     DetectedRecurrenceSuggestion,
     ForecastEntryCreate,
@@ -29,11 +32,7 @@ router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
 def _accessible_entities(db: Session, user: User) -> list[int]:
     return list(
-        db.scalars(
-            select(UserEntityAccess.entity_id).where(
-                UserEntityAccess.user_id == user.id
-            )
-        )
+        db.scalars(accessible_entity_ids_subquery(session=db, user=user))
     )
 
 
