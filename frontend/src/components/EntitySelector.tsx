@@ -8,13 +8,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-export function EntitySelector() {
+interface EntitySelectorProps {
+  /**
+   * Si false, masque l'option "Toutes les sociétés" — l'utilisateur DOIT
+   * choisir une entité unique. À utiliser sur les pages où une vue agrégée
+   * cross-entité n'a pas de sens métier (Analyse, Prévisionnel : KPI par
+   * business, contextes financiers indépendants).
+   * Default true (Dashboard, Transactions, etc.).
+   */
+  allowAll?: boolean;
+}
+
+export function EntitySelector({ allowAll = true }: EntitySelectorProps = {}) {
   const entitiesQuery = useEntities();
   const entityId = useEntityFilter((s) => s.entityId);
   const setEntityId = useEntityFilter((s) => s.setEntityId);
   const entities = entitiesQuery.data ?? [];
 
   const value = entityId === null ? 'all' : String(entityId);
+  const placeholder = allowAll ? 'Toutes les sociétés' : 'Choisir une société';
 
   return (
     <Select
@@ -46,10 +58,10 @@ export function EntitySelector() {
             <path d="M9 17v.01" />
           </svg>
         </span>
-        <SelectValue placeholder="Toutes les sociétés" />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent align="end">
-        <SelectItem value="all">Toutes les sociétés</SelectItem>
+        {allowAll && <SelectItem value="all">Toutes les sociétés</SelectItem>}
         {entities.map((e) => (
           <SelectItem key={e.id} value={String(e.id)}>
             {e.name}

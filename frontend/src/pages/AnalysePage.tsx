@@ -2,9 +2,16 @@
  * AnalysePage — tableau de bord d'indicateurs clés et de dérives.
  *
  * 6 widgets orientés KPI, alimentés par `/api/analysis/*`.
+ *
+ * Politique 2026-04 : la vue cross-entité ("Toutes les sociétés") n'a pas de
+ * sens sur cette page (les KPI agrégés mélangeraient des structures de coûts
+ * et de revenus indépendantes). On force donc la sélection d'une entité
+ * unique : si rien n'est sélectionné au chargement, on prend la première
+ * entité accessible (ordre alphabétique côté API).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { useEntities } from "@/api/entities";
 import { EntitySelector } from "@/components/EntitySelector";
 import {
   PeriodSelector,
@@ -21,14 +28,42 @@ import { useEntityFilter } from "@/stores/entityFilter";
 
 export function AnalysePage() {
   const entityId = useEntityFilter((s) => s.entityId);
-  const entityIdForQueries = entityId ?? undefined;
+  const setEntityId = useEntityFilter((s) => s.setEntityId);
+  const entitiesQuery = useEntities();
+  const entities = entitiesQuery.data ?? [];
 
-  // Le PeriodSelector est affiché dans l'en-tête pour cohérence visuelle avec
-  // les autres pages. Les widgets Analyse ont leurs propres horizons métier
-  // (mois courant, 3m, 6m, 12m) et ne dépendent pas directement de `period`.
+  // Auto-sélection de la première entité au chargement si l'utilisateur
+  // arrive avec entityId === null (cas "Toutes les sociétés" persisté
+  // avant cette fix, ou nouveau user). Évite les 422 backend sur les 5
+  // endpoints d'analyse qui exigent entity_id.
+  useEffect(() => {
+    if (entityId === null && entities.length > 0) {
+      setEntityId(entities[0].id);
+    }
+  }, [entityId, entities, setEntityId]);
+
   const [period, setPeriod] = useState<PeriodValue>(() =>
     defaultPeriodValue("30d"),
   );
+
+  // Si l'utilisateur n'a accès à aucune entité (cas reader sans grant),
+  // on évite de monter les widgets qui partiraient en 422/403 silencieux.
+  if (entitiesQuery.isSuccess && entities.length === 0) {
+    return (
+      <section className="space-y-6">
+        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          Analyse
+        </h1>
+        <div
+          role="alert"
+          className="rounded-md bg-amber-50 px-4 py-3 text-[13px] text-amber-900"
+        >
+          Tu n'as accès à aucune société pour le moment. Demande à un
+          administrateur de t'accorder un accès.
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
@@ -43,26 +78,26 @@ export function AnalysePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <EntitySelector />
+          <EntitySelector allowAll={false} />
           <PeriodSelector value={period} onChange={setPeriod} />
         </div>
       </div>
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12">
-          <CategoryDriftTable entityId={entityIdForQueries} />
+          <CategoryDriftTable entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-6">
-          <TopMoversCard entityId={entityIdForQueries} />
+          <TopMoversCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-6">
-          <RunwayCard entityId={entityIdForQueries} />
+          <RunwayCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-8">
-          <YoYChart entityId={entityIdForQueries} />
+          <YoYChart entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-4">
-          <ClientConcentrationCard entityId={entityIdForQueries} />
+          <ClientConcentrationCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12">
           <EntitiesComparisonTable />

@@ -93,6 +93,10 @@ export function fetchEntitiesComparison(args: {
 
 const STALE = 5 * 60_000;
 
+// Les 5 hooks ci-dessous exigent un `entityId` (le backend rejette en 422
+// sinon — `entity_id: int = Query(...)` obligatoire). On désactive le fetch
+// tant qu'aucune entité n'est sélectionnée, pour éviter les requêtes
+// transitoires qui polluent les logs et déclenchent des isError côté UI.
 export function useCategoryDrift(args: {
   entityId?: number;
   seuilPct?: number;
@@ -101,6 +105,7 @@ export function useCategoryDrift(args: {
     queryKey: ["analysis", "category-drift", args.entityId, args.seuilPct],
     queryFn: () => fetchCategoryDrift(args),
     staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }
 
@@ -109,6 +114,7 @@ export function useTopMovers(args: { entityId?: number; limit?: number }) {
     queryKey: ["analysis", "top-movers", args.entityId, args.limit],
     queryFn: () => fetchTopMovers(args),
     staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }
 
@@ -117,6 +123,7 @@ export function useRunway(args: { entityId?: number }) {
     queryKey: ["analysis", "runway", args.entityId],
     queryFn: () => fetchRunway(args),
     staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }
 
@@ -125,6 +132,7 @@ export function useYoY(args: { entityId?: number }) {
     queryKey: ["analysis", "yoy", args.entityId],
     queryFn: () => fetchYoY(args),
     staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }
 
@@ -136,6 +144,7 @@ export function useClientConcentration(args: {
     queryKey: ["analysis", "client-concentration", args.entityId, args.months],
     queryFn: () => fetchClientConcentration(args),
     staleTime: STALE,
+    enabled: args.entityId !== undefined,
   });
 }
 
