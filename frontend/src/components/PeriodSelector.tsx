@@ -6,6 +6,8 @@
  */
 import { useMemo } from "react";
 
+import { DatePicker } from "@/components/ui/date-picker";
+
 export type PeriodPreset =
   | "30d"
   | "90d"
@@ -272,25 +274,55 @@ export function PeriodSelector({
 
       {value.preset === "custom" && (
         <div className="ml-1 flex items-center gap-1 border-l border-line-soft pl-2">
-          <input
-            type={inputType}
-            aria-label="Date de début"
-            value={value.from}
-            onChange={(e) =>
-              onChange({ ...value, from: e.target.value, preset: "custom" })
-            }
-            className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-accent/40"
-          />
-          <span className="text-[12.5px] text-muted-foreground">→</span>
-          <input
-            type={inputType}
-            aria-label="Date de fin"
-            value={value.to}
-            onChange={(e) =>
-              onChange({ ...value, to: e.target.value, preset: "custom" })
-            }
-            className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-accent/40"
-          />
+          {isMonthInput ? (
+            // Granularité mois (Prévisionnel) : input natif pour l'instant.
+            // Le DatePicker custom ne gère que les dates jour pour le moment.
+            <>
+              <input
+                type="month"
+                aria-label="Mois de début"
+                value={value.from}
+                onChange={(e) =>
+                  onChange({ ...value, from: e.target.value, preset: "custom" })
+                }
+                className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+              />
+              <span className="text-[12.5px] text-muted-foreground">→</span>
+              <input
+                type="month"
+                aria-label="Mois de fin"
+                value={value.to}
+                onChange={(e) =>
+                  onChange({ ...value, to: e.target.value, preset: "custom" })
+                }
+                className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+              />
+            </>
+          ) : (
+            <>
+              <div className="w-[140px]">
+                <DatePicker
+                  value={value.from}
+                  onChange={(v) =>
+                    onChange({ ...value, from: v, preset: "custom" })
+                  }
+                  aria-label="Date de début"
+                  placeholder="Du"
+                />
+              </div>
+              <span className="text-[12.5px] text-muted-foreground">→</span>
+              <div className="w-[140px]">
+                <DatePicker
+                  value={value.to}
+                  onChange={(v) =>
+                    onChange({ ...value, to: v, preset: "custom" })
+                  }
+                  aria-label="Date de fin"
+                  placeholder="Au"
+                />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

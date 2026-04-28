@@ -59,6 +59,21 @@
     box-shadow: none;
   }
 
+  /* Caret de saisie (la barre verticale clignotante) : par défaut, on le
+     cache partout, puis on le ré-active uniquement sur les zones de saisie.
+     Sans cette règle, certains éléments cliquables (cellules de tableau,
+     contenteditable hérités, etc.) affichent un caret après un clic souris,
+     ce qui est inhabituel et déroutant. */
+  body {
+    caret-color: transparent;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    caret-color: auto;
+  }
+
   html {
     font-feature-settings: 'cv11', 'ss01';
   }

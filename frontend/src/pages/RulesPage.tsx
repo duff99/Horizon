@@ -1,12 +1,9 @@
 import { useState } from "react";
+import { X } from "lucide-react";
+import { Drawer as DrawerPrimitive } from "vaul";
+
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+import { cn } from "@/lib/utils";
 import { SortableRulesTable } from "@/components/SortableRulesTable";
 import { RuleForm } from "@/components/RuleForm";
 import {
@@ -95,35 +92,64 @@ export function RulesPage() {
         </div>
         <div className="flex items-center gap-2">
           <EntitySelector />
-          {/* modal={false} : sinon vaul désactive les pointer-events sur
-              tout le body, y compris le PopoverContent (porté ailleurs dans
-              le DOM) du CategoryCombobox utilisé dans RuleForm — le combobox
-              apparaissait grisé et impossible à scroller. */}
-          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} modal={false}>
-          <DrawerTrigger asChild>
-            <Button onClick={() => setEditing(null)}>
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-1.5 h-3.5 w-3.5"
-              >
-                <path d="M5 12h14M12 5v14" />
-              </svg>
-              Nouvelle règle
-            </Button>
-          </DrawerTrigger>
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setDrawerOpen(true);
+            }}
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mr-1.5 h-3.5 w-3.5"
+            >
+              <path d="M5 12h14M12 5v14" />
+            </svg>
+            Nouvelle règle
+          </Button>
+        </div>
+      </div>
+
+      {/* Drawer custom direction=right (pattern HelpDrawer / BulkCategorizationDrawer).
+          modal={false} + pas d'overlay, pour que les Popover Radix portés
+          dans le body (CategoryCombobox dans RuleForm) restent cliquables. */}
+      <DrawerPrimitive.Root
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        direction="right"
+        modal={false}
+        shouldScaleBackground={false}
+      >
+        <DrawerPrimitive.Portal>
+          <DrawerPrimitive.Content
+            aria-describedby={undefined}
+            className={cn(
+              "fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[640px] flex-col bg-panel shadow-xl outline-none",
+              "border-l border-line-soft",
+            )}
+          >
+            <header className="flex items-start justify-between gap-2 border-b border-line-soft px-5 py-4">
+              <DrawerPrimitive.Title className="text-[15px] font-semibold text-ink">
                 {editing ? "Modifier la règle" : "Nouvelle règle"}
-              </DrawerTitle>
-            </DrawerHeader>
-            <div className="max-w-2xl p-6">
+              </DrawerPrimitive.Title>
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setEditing(null);
+                }}
+                aria-label="Fermer"
+                className="rounded-md p-1.5 text-ink-2 hover:bg-panel-2 hover:text-ink"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </header>
+            <div className="flex-1 overflow-y-auto p-6">
               <RuleForm
                 categories={categories}
                 entities={entities}
@@ -137,10 +163,9 @@ export function RulesPage() {
                 }}
               />
             </div>
-          </DrawerContent>
-          </Drawer>
-        </div>
-      </div>
+          </DrawerPrimitive.Content>
+        </DrawerPrimitive.Portal>
+      </DrawerPrimitive.Root>
 
       {isLoading ? (
         <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
