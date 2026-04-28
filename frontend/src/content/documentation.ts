@@ -17,6 +17,20 @@ export interface DocSectionData {
   sees: string[];
   does: string[];
   tips?: string[];
+  /**
+   * Override optionnel pour le panneau d'aide contextuel.
+   * Si absent, le panneau réutilise subtitle / sees / does / tips.
+   * Si présent : `summary` remplace subtitle, et `sees/does/tips` (s'ils sont
+   * définis) remplacent leurs équivalents. `hide` permet de masquer un bloc
+   * entier dans le panneau sans le retirer de la doc complète.
+   */
+  panel?: {
+    summary?: string;
+    sees?: string[];
+    does?: string[];
+    tips?: string[];
+    hide?: ("sees" | "does" | "tips")[];
+  };
 }
 
 export const DOC_SECTIONS: DocSectionData[] = [
