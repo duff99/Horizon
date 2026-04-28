@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# backup-db.sh — pg_dump Postgres Horizon + manifest + entrée DB + rétention.
+# backup-db.sh — pg_dump Postgres Horizon + tar volume imports + manifest + DB + rétention.
 #
 # Contexte : incident 2026-04-21 (Astreos) = perte de données suite à un
 # `docker compose stop` sans backup. Ce script est invoqué soit par cron,
 # soit manuellement, soit par `safe-stop.sh --pre-op` avant toute opération
 # docker potentiellement destructive.
 #
-# Sortie : ./backups/horizon-<ISO>.dump (+ .sha256 + .manifest.json)
+# Sortie :
+#   ./backups/horizon-<ISO>.dump            (pg_dump custom)
+#   ./backups/horizon-<ISO>.dump.sha256
+#   ./backups/horizon-<ISO>.imports.tar.gz  (volume horizon_import_storage)
+#   ./backups/horizon-<ISO>.imports.tar.gz.sha256
+#   ./backups/horizon-<ISO>.dump.manifest.json (référence les 2 fichiers)
 # DB : insère une ligne dans `backup_history` (running -> success/failed).
 # Logs : stdout + ./logs/backup/backup-<ISO>.log (rétention 14j).
 #
@@ -32,6 +37,7 @@ LOG_DIR="$ROOT_DIR/logs/backup"
 DB_CONTAINER="horizon-db-1"
 DB_USER="tresorerie"
 DB_NAME="tresorerie"
+IMPORTS_VOLUME="horizon_import_storage"
 RETENTION_DAYS=30
 LOG_RETENTION_DAYS=14
 KEY_TABLES=(users entities transactions bank_accounts forecast_lines)
@@ -55,6 +61,8 @@ done
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 DUMP_PATH="$BACKUP_DIR/horizon-$TS.dump"
 SHA_PATH="$DUMP_PATH.sha256"
+IMPORTS_PATH="$BACKUP_DIR/horizon-$TS.imports.tar.gz"
+IMPORTS_SHA_PATH="$IMPORTS_PATH.sha256"
 MANIFEST_PATH="$DUMP_PATH.manifest.json"
 LOG_PATH="$LOG_DIR/backup-$TS.log"
 
@@ -111,6 +119,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
   log "[dry-run] Actions prévues :"
   log "  - docker exec $DB_CONTAINER pg_dump ... > $DUMP_PATH"
   log "  - sha256sum $DUMP_PATH > $SHA_PATH"
+  log "  - tar -czf $IMPORTS_PATH (volume $IMPORTS_VOLUME)"
+  log "  - sha256sum $IMPORTS_PATH > $IMPORTS_SHA_PATH"
   log "  - write manifest $MANIFEST_PATH"
   log "  - insert backup_history row"
   log "  - find $BACKUP_DIR -mtime +$RETENTION_DAYS -delete"
@@ -204,7 +214,49 @@ log "-- row_counts=$ROW_COUNTS_JSON"
 # 5. Version Postgres.
 PG_VERSION="$(psql_exec -c "SELECT current_setting('server_version');" | tr -d '[:space:]')"
 
-# 6. Écrire le manifest JSON.
+# 5bis. Tar du volume Docker `horizon_import_storage` (PDF/CSV importés).
+# Le volume est monté en lecture par root sous /var/lib/docker/volumes/<vol>/_data.
+# On tar via `docker run --rm -v <vol>:/src` pour éviter d'avoir à élever les
+# privilèges sur le host (le script tourne déjà en root via cron, mais ça
+# permet aussi un usage manuel sans sudo si le user est dans le groupe docker).
+log "-- tar volume $IMPORTS_VOLUME"
+if ! docker volume inspect "$IMPORTS_VOLUME" >/dev/null 2>&1; then
+  mark_failed "Volume $IMPORTS_VOLUME introuvable"
+  err "Volume $IMPORTS_VOLUME absent"
+  exit 1
+fi
+if ! docker run --rm \
+    -v "$IMPORTS_VOLUME":/src:ro \
+    -v "$BACKUP_DIR":/dst \
+    alpine:3.20 \
+    tar -czf "/dst/$(basename "$IMPORTS_PATH")" -C /src . 2>>"$LOG_PATH"; then
+  mark_failed "tar volume imports a échoué"
+  err "tar imports KO"
+  exit 1
+fi
+if [[ ! -s "$IMPORTS_PATH" ]]; then
+  mark_failed "Tar imports vide"
+  err "Tar imports vide"
+  exit 1
+fi
+IMPORTS_SIZE_BYTES="$(stat -c%s "$IMPORTS_PATH")"
+log "-- imports size=$IMPORTS_SIZE_BYTES bytes"
+
+log "-- sha256 imports"
+if ! (cd "$BACKUP_DIR" && sha256sum "$(basename "$IMPORTS_PATH")" > "$(basename "$IMPORTS_SHA_PATH")"); then
+  mark_failed "sha256 imports write failed"
+  err "sha256sum imports KO"
+  exit 2
+fi
+IMPORTS_SHA256_HEX="$(awk '{print $1; exit}' "$IMPORTS_SHA_PATH")"
+if [[ ${#IMPORTS_SHA256_HEX} -ne 64 ]]; then
+  mark_failed "sha256 imports format invalide"
+  err "SHA256 imports invalide: $IMPORTS_SHA256_HEX"
+  exit 2
+fi
+log "-- sha256 imports=$IMPORTS_SHA256_HEX"
+
+# 6. Écrire le manifest JSON (référence DB dump + imports tar).
 log "-- write manifest"
 cat > "$MANIFEST_PATH" <<EOF
 {
@@ -214,6 +266,10 @@ cat > "$MANIFEST_PATH" <<EOF
   "sha256": "$SHA256_HEX",
   "postgres_version": "$PG_VERSION",
   "row_counts": $ROW_COUNTS_JSON,
+  "imports_file": "$IMPORTS_PATH",
+  "imports_size_bytes": $IMPORTS_SIZE_BYTES,
+  "imports_sha256": "$IMPORTS_SHA256_HEX",
+  "imports_volume": "$IMPORTS_VOLUME",
   "backup_history_id": "$BACKUP_ROW_ID"
 }
 EOF
@@ -236,7 +292,11 @@ fi
 # 8. Rétention 30j sur les fichiers backup + 14j sur les logs.
 log "-- cleanup (>$RETENTION_DAYS jours)"
 find "$BACKUP_DIR" -maxdepth 1 -type f \
-  \( -name 'horizon-*.dump' -o -name 'horizon-*.dump.sha256' -o -name 'horizon-*.dump.manifest.json' \) \
+  \( -name 'horizon-*.dump' \
+   -o -name 'horizon-*.dump.sha256' \
+   -o -name 'horizon-*.dump.manifest.json' \
+   -o -name 'horizon-*.imports.tar.gz' \
+   -o -name 'horizon-*.imports.tar.gz.sha256' \) \
   -mtime +$RETENTION_DAYS -print -delete || true
 find "$LOG_DIR" -maxdepth 1 -type f -name 'backup-*.log' \
   -mtime +$LOG_RETENTION_DAYS -print -delete || true

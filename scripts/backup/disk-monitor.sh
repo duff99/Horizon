@@ -12,7 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKUP_DIR="$ROOT_DIR/backups"
 
-THRESHOLD=85
+# Seuil (%) configurable via /etc/horizon-backup.env (chargé par cron BASH_ENV).
+THRESHOLD="${HORIZON_DISK_THRESHOLD:-85}"
 
 # df sur le dossier backups ; prend la partition qui l'héberge.
 # -BG = en GB ; on parse la 2e ligne.

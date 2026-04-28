@@ -48,11 +48,44 @@ if [[ ! -f "$MANIFEST" || ! -f "$SHA_FILE" ]]; then
 fi
 log "Dump: $LATEST_DUMP"
 
-# 2. Vérifier SHA256.
-log "Vérif SHA256"
+# 2. Vérifier SHA256 du dump DB.
+log "Vérif SHA256 dump"
 if ! (cd "$BACKUP_DIR" && sha256sum -c "$(basename "$SHA_FILE")" >/dev/null); then
   err "SHA256 mismatch sur $LATEST_DUMP"
   exit 2
+fi
+
+# 2bis. Vérifier le tar imports si présent (manifest le référence).
+IMPORTS_FILE="$(python3 -c "
+import json
+m = json.load(open('$MANIFEST'))
+print(m.get('imports_file', ''))
+" 2>/dev/null || echo "")"
+IMPORTS_SHA="$(python3 -c "
+import json
+m = json.load(open('$MANIFEST'))
+print(m.get('imports_sha256', ''))
+" 2>/dev/null || echo "")"
+if [[ -n "$IMPORTS_FILE" && -f "$IMPORTS_FILE" ]]; then
+  log "Vérif SHA256 imports"
+  IMPORTS_SHA_PATH="$IMPORTS_FILE.sha256"
+  if [[ ! -f "$IMPORTS_SHA_PATH" ]]; then
+    err "Fichier sha256 imports absent : $IMPORTS_SHA_PATH"
+    exit 2
+  fi
+  if ! (cd "$BACKUP_DIR" && sha256sum -c "$(basename "$IMPORTS_SHA_PATH")" >/dev/null); then
+    err "SHA256 mismatch sur $IMPORTS_FILE"
+    exit 2
+  fi
+  log "Vérif tar list (intégrité archive)"
+  if ! tar -tzf "$IMPORTS_FILE" >/dev/null 2>&1; then
+    err "Archive imports corrompue (tar -tzf KO)"
+    exit 2
+  fi
+  ENTRIES_COUNT="$(tar -tzf "$IMPORTS_FILE" | wc -l)"
+  log "  imports archive : $ENTRIES_COUNT entrées OK"
+else
+  log "(pas de tar imports dans le manifest — ancien backup ?)"
 fi
 
 # 3. Extraire backup_history_id + row_counts du manifest (sans jq pour simplicité).

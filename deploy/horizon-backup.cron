@@ -1,14 +1,20 @@
 # Horizon backups — template crontab (à installer manuellement par root).
 #
-# Installation :
+# Installation : voir deploy/install-backup-system.sh (préférable) ou :
 #   sudo cp deploy/horizon-backup.cron /etc/cron.d/horizon-backup
 #   sudo chmod 644 /etc/cron.d/horizon-backup
 #   sudo chown root:root /etc/cron.d/horizon-backup
 #
 # Ce fichier doit être dans /etc/cron.d/ (pas dans un crontab utilisateur)
 # pour que la colonne utilisateur soit respectée.
+#
+# Les variables d'env (off-site, seuils) sont chargées depuis
+# /etc/horizon-backup.env via BASH_ENV. Ce fichier doit exister (cf
+# deploy/horizon-backup.env.example) ; s'il est absent, BASH_ENV échoue
+# silencieusement et les scripts utilisent leurs valeurs par défaut.
 
 SHELL=/bin/bash
+BASH_ENV=/etc/horizon-backup.env
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 MAILTO=tdufr01@gmail.com
 

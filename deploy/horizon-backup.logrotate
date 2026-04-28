@@ -1,0 +1,12 @@
+/var/log/horizon-backup.log
+/var/log/horizon-verify.log
+/var/log/horizon-disk.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    su root syslog
+}
