@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EntitySelector } from "@/components/EntitySelector";
 import {
   PeriodSelector,
@@ -23,16 +23,24 @@ interface DrawerState {
 
 export function ForecastV2Page() {
   const entityId = useEntityFilter((s) => s.entityId);
+  const setEntityId = useEntityFilter((s) => s.setEntityId);
   const scenarioId = useForecastUi((s) => s.scenarioId);
   const accountIds = useForecastUi((s) => s.accountIds);
 
   const entitiesQuery = useEntities();
-  // If no entity chosen globally but user has exactly 1 accessible, pick it
-  const effectiveEntityId = useMemo(() => {
-    if (entityId != null) return entityId;
-    const entities = entitiesQuery.data ?? [];
-    return entities.length === 1 ? entities[0].id : null;
-  }, [entityId, entitiesQuery.data]);
+  const entities = entitiesQuery.data ?? [];
+
+  // Politique 2026-04 (cohérente avec AnalysePage) : pas de vue "Toutes les
+  // sociétés" sur Prévisionnel — chaque entité a son scénario propre, agréger
+  // n'a pas de sens financier. On auto-sélectionne la 1ère entité accessible
+  // (ordre alphabétique côté API) si rien n'est sélectionné.
+  useEffect(() => {
+    if (entityId === null && entities.length > 0) {
+      setEntityId(entities[0].id);
+    }
+  }, [entityId, entities, setEntityId]);
+
+  const effectiveEntityId = entityId;
 
   const scenariosQuery = useScenarios(effectiveEntityId);
 
@@ -68,6 +76,9 @@ export function ForecastV2Page() {
     !scenariosQuery.isLoading &&
     (scenariosQuery.data?.length ?? 0) === 0 &&
     !noEntity;
+  // Reader sans aucune entité accordée → message explicite (cf. AnalysePage)
+  const noEntityAtAll =
+    entitiesQuery.isSuccess && entities.length === 0;
 
   return (
     <section className="space-y-6">
@@ -82,7 +93,7 @@ export function ForecastV2Page() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <EntitySelector />
+          <EntitySelector allowAll={false} />
           <ScenarioSelector entityId={effectiveEntityId} />
           <ConsolidatedAccountsPopover entityId={effectiveEntityId} />
           <PeriodSelector
@@ -93,9 +104,19 @@ export function ForecastV2Page() {
         </div>
       </div>
 
-      {noEntity && (
+      {noEntityAtAll && (
+        <div
+          role="alert"
+          className="rounded-md bg-amber-50 px-4 py-3 text-[13px] text-amber-900"
+        >
+          Tu n'as accès à aucune société pour le moment. Demande à un
+          administrateur de t'accorder un accès.
+        </div>
+      )}
+
+      {!noEntityAtAll && noEntity && (
         <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
-          Sélectionnez une société pour afficher le prévisionnel.
+          Chargement de votre société par défaut…
         </div>
       )}
 
