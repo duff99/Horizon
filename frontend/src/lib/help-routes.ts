@@ -3,6 +3,11 @@ import { DOC_SECTIONS, type DocSectionData } from "@/content/documentation";
 /**
  * Mapping route → sectionId. L'ordre est significatif : le premier match gagne.
  * `/administration/audit` doit précéder `/administration` car c'est plus spécifique.
+ *
+ * INVARIANT : chaque `sectionId` listé ici DOIT exister dans `DOC_SECTIONS`
+ * ET être rendu comme ancre `id=` par `DocumentationPage` (sinon le lien
+ * "Voir le guide complet →" du panneau aboutira sur une page sans cible).
+ * Si tu ajoutes une route ici, vérifie ces deux conditions.
  */
 const HELP_ROUTES: { match: RegExp; sectionId: string }[] = [
   { match: /^\/tableau-de-bord/, sectionId: "tableau-de-bord" },

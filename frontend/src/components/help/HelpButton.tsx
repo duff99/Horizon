@@ -58,7 +58,6 @@ export function HelpButton() {
         type="button"
         onClick={toggle}
         aria-expanded={isOpen}
-        aria-controls="help-drawer"
         aria-label={`Aide sur cette page (${section.title})`}
         className={cn(
           "fixed right-6 top-6 z-40 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5",
