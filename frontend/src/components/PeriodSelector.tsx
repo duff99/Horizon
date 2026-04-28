@@ -239,7 +239,6 @@ export function PeriodSelector({
   };
 
   const isMonthInput = granularity === "month";
-  const inputType = isMonthInput ? "month" : "date";
 
   return (
     <div

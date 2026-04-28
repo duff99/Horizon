@@ -71,41 +71,95 @@ export function RuleForm(props: Props) {
   }
 
   return (
-    <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
-      <div>
-        <Label htmlFor="rule-name">Nom</Label>
-        <Input id="rule-name" value={name} onChange={(e) => setName(e.target.value)} />
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSubmit(false);
+      }}
+    >
+      {/* Ligne 1 : Nom + Priorité côte à côte */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 space-y-1">
+          <Label htmlFor="rule-name" className="text-[12.5px] text-ink-2">
+            Nom de la règle
+          </Label>
+          <Input
+            id="rule-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="ex. Loyer"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="rule-priority" className="text-[12.5px] text-ink-2">
+            Priorité
+          </Label>
+          <Input
+            id="rule-priority"
+            type="number"
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value))}
+          />
+        </div>
       </div>
 
-      <div>
-        <Label htmlFor="rule-priority">Priorité</Label>
-        <Input
-          id="rule-priority" type="number"
-          value={priority}
-          onChange={(e) => setPriority(Number(e.target.value))}
-        />
+      {/* Ligne 2 : Scope + Sens côte à côte */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-[12.5px] text-ink-2">
+            S'applique à
+          </Label>
+          <Select
+            value={entityId != null ? String(entityId) : "__global__"}
+            onValueChange={(v) =>
+              setEntityId(v === "__global__" ? null : Number(v))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Globale" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__global__">
+                Toutes les sociétés
+              </SelectItem>
+              {props.entities.map((e) => (
+                <SelectItem key={e.id} value={String(e.id)}>
+                  {e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[12.5px] text-ink-2">Type d'opération</Label>
+          <Select
+            value={direction}
+            onValueChange={(v) => setDirection(v as RuleDirection)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ANY">Toutes</SelectItem>
+              <SelectItem value="CREDIT">Encaissements (crédits)</SelectItem>
+              <SelectItem value="DEBIT">Décaissements (débits)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div>
-        <Label>Scope</Label>
-        <Select value={entityId != null ? String(entityId) : "__global__"} onValueChange={(v) =>
-          setEntityId(v === "__global__" ? null : Number(v))
-        }>
-          <SelectTrigger><SelectValue placeholder="Globale" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__global__">Globale (toutes entités)</SelectItem>
-            {props.entities.map((e) => (
-              <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <fieldset className="border p-3 rounded">
-        <legend className="px-2 text-sm">Filtre libellé</legend>
+      {/* Ligne 3 : filtre libellé (opérateur + valeur) */}
+      <div className="space-y-1">
+        <Label className="text-[12.5px] text-ink-2">Filtre sur le libellé</Label>
         <div className="flex gap-2">
-          <Select value={labelOp} onValueChange={(v) => setLabelOp(v as RuleLabelOperator)}>
-            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <Select
+            value={labelOp}
+            onValueChange={(v) => setLabelOp(v as RuleLabelOperator)}
+          >
+            <SelectTrigger className="w-[150px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="CONTAINS">contient</SelectItem>
               <SelectItem value="STARTS_WITH">commence par</SelectItem>
@@ -114,28 +168,17 @@ export function RuleForm(props: Props) {
             </SelectContent>
           </Select>
           <Input
-            aria-label="Libellé contient"
+            aria-label="Texte du filtre"
             placeholder="ex. URSSAF (sera normalisé)"
             value={labelValue}
             onChange={(e) => setLabelValue(e.target.value)}
           />
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="border p-3 rounded">
-        <legend className="px-2 text-sm">Sens</legend>
-        <Select value={direction} onValueChange={(v) => setDirection(v as RuleDirection)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ANY">Tous</SelectItem>
-            <SelectItem value="CREDIT">Crédits uniquement</SelectItem>
-            <SelectItem value="DEBIT">Débits uniquement</SelectItem>
-          </SelectContent>
-        </Select>
-      </fieldset>
-
-      <div>
-        <Label>Catégorie cible</Label>
+      {/* Ligne 4 : catégorie cible (sur toute la largeur) */}
+      <div className="space-y-1">
+        <Label className="text-[12.5px] text-ink-2">Catégorie à appliquer</Label>
         <CategoryCombobox
           categories={props.categories}
           value={categoryId}
@@ -143,13 +186,38 @@ export function RuleForm(props: Props) {
         />
       </div>
 
-      <RulePreviewPanel preview={preview} />
+      {/* Aperçu : compact si pas encore demandé */}
+      {preview ? (
+        <RulePreviewPanel preview={preview} />
+      ) : (
+        <p className="text-[11.5px] text-muted-foreground">
+          Cliquez sur Aperçu pour voir combien de transactions existantes
+          seraient capturées par cette règle.
+        </p>
+      )}
 
-      <div className="flex gap-2 justify-end">
-        <Button variant="ghost" type="button" onClick={props.onCancel}>Annuler</Button>
-        <Button variant="outline" type="button" onClick={handlePreview}>Aperçu</Button>
-        <Button type="button" onClick={() => handleSubmit(false)}>Créer</Button>
-        <Button type="button" onClick={() => handleSubmit(true)}>Créer et appliquer</Button>
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line-soft pt-3">
+        <Button variant="ghost" type="button" onClick={props.onCancel}>
+          Annuler
+        </Button>
+        <Button variant="outline" type="button" onClick={handlePreview}>
+          Aperçu
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => handleSubmit(false)}
+          disabled={!categoryId}
+        >
+          Créer
+        </Button>
+        <Button
+          type="button"
+          onClick={() => handleSubmit(true)}
+          disabled={!categoryId}
+        >
+          Créer et appliquer
+        </Button>
       </div>
     </form>
   );

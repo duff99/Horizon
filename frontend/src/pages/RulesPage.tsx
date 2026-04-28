@@ -129,7 +129,7 @@ export function RulesPage() {
           <DrawerPrimitive.Content
             aria-describedby={undefined}
             className={cn(
-              "fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[640px] flex-col bg-panel shadow-xl outline-none",
+              "fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[520px] flex-col bg-panel shadow-xl outline-none",
               "border-l border-line-soft",
             )}
           >
