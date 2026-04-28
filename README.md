@@ -24,6 +24,15 @@ docker compose -f docker-compose.dev.yml up -d
 
 Python 3.12 + FastAPI + SQLAlchemy + PostgreSQL 16 + React 18 + TypeScript + Vite + Tailwind + Docker + Caddy.
 
+## Discipline éditoriale
+
+Le fichier `frontend/src/content/documentation.ts` est la **source unique** pour le contenu d'aide affiché à deux endroits :
+
+- la page `/documentation` (guide complet)
+- le panneau d'aide latéral (bouton « Aide » en haut à droite, sur chaque page)
+
+**Toute PR qui modifie le comportement d'une page doit mettre à jour la section correspondante de `documentation.ts`** — sinon l'aide affichera une description périmée. Pour raccourcir le contenu dans le panneau sans toucher la doc complète, utiliser le champ optionnel `panel` (cf `DocSectionData`).
+
 ## Licence
 
 Propriétaire — utilisation interne uniquement.
