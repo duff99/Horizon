@@ -26,3 +26,6 @@ MAILTO=tdufr01@gmail.com
 
 # Monitoring disque chaque heure.
 0 * * * * root cd /srv/prod/tools/horizon && ./scripts/backup/disk-monitor.sh >> /var/log/horizon-disk.log 2>&1
+
+# Cleanup client_errors > 30j (rétention validée 2026-04-28). Tous les jours à 3h.
+0 3 * * * root cd /srv/prod/tools/horizon && ./scripts/backup/cleanup-client-errors.sh >> /var/log/horizon-backup.log 2>&1
