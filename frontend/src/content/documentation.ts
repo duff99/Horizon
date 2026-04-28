@@ -209,7 +209,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Un tableau avec : case à cocher, date, société (uniquement en vue consolidée), Tiers / Libellé (le tiers s'il est connu, sinon le libellé brut), Catégorie (badge gris si catégorisée, badge orange « Non catégorisée » sinon), Montant (vert avec « + » pour les crédits, rouge pour les débits).",
       "Une case à cocher en en-tête pour tout sélectionner sur la page.",
       "Une barre d'actions verte qui apparaît dès qu'au moins une ligne est cochée : « N sélectionnée(s) », une combobox catégorie, les boutons Catégoriser, Suggérer une règle, Désélectionner.",
-      "Un pied de tableau avec le nombre total de résultats, la page courante, et les boutons Précédent / Suivant (50 lignes par page).",
+      "Un pied de tableau avec une pagination complète : récapitulatif (« Affichage 51 à 100 sur 1234 · Page 2 sur 25 »), sélecteur Lignes (25 / 50 / 100 / 200), boutons « (première), ‹ (précédente), numéros de page directement cliquables avec ellipsis intelligente, › (suivante), » (dernière). Au-delà de 5 pages, un champ Aller à : permet de saisir un numéro et valider avec Entrée.",
     ],
     does: [
       "Pour rechercher une opération : saisissez un fragment de libellé, un nom de tiers ou un montant exact dans le champ de recherche (ex. : tapez « 500 » pour ne voir que les opérations contenant ce montant, ou « URSSAF » pour cibler un tiers).",
@@ -217,7 +217,8 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour transformer la sélection en règle automatique : cliquez sur Suggérer une règle. Horizon analyse les libellés communs et ouvre le tiroir de création de règle pré-rempli (opérateur de libellé, valeur, sens, compte, catégorie).",
       "Pour vider la sélection sans agir : cliquez sur Désélectionner.",
       "Pour ne voir que les opérations à traiter : activez le toggle « Non catégorisées uniquement ». Toggle désactivé = liste complète.",
-      "Pour naviguer dans la liste : utilisez les boutons Précédent / Suivant en bas. La page courante est affichée à gauche.",
+      "Pour naviguer rapidement dans la liste : la barre de pagination en bas du tableau propose plusieurs raccourcis. Cliquez directement sur un numéro de page, ou utilisez « (début), ‹ (précédente), › (suivante), » (fin). Au-delà de 5 pages, le champ Aller à : permet de sauter à une page précise (validez avec Entrée).",
+      "Pour afficher plus de transactions par écran : changez le sélecteur Lignes : (25 / 50 / 100 / 200) dans la barre de pagination. À 200, vous parcourez plus vite un gros volume sans recharger.",
     ],
     tips: [
       "Les opérations agrégées (lignes parents qui regroupent plusieurs sous-écritures) apparaissent sur fond gris plus dense pour les distinguer des lignes unitaires.",

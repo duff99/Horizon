@@ -5,6 +5,7 @@ import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
 import { CategoryCombobox } from "../components/CategoryCombobox";
+import { Pagination, type PageSize } from "@/components/Pagination";
 import { RuleForm } from "../components/RuleForm";
 import {
   Drawer,
@@ -348,32 +349,17 @@ export function TransactionsPage() {
           </table>
         </div>
 
-        {/* Footer / pagination */}
+        {/* Footer / pagination — composant Pagination réutilisable */}
         {data && data.total > 0 && (
-          <div className="flex items-center justify-between border-t border-line-soft bg-panel-2 px-5 py-3 text-[12.5px] text-muted-foreground">
-            <span>
-              {data.total.toLocaleString("fr-FR")} résultat
-              {data.total > 1 ? "s" : ""} — page {data.page}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={data.page <= 1}
-                onClick={() => setFilters({ ...filters, page: data.page - 1 })}
-              >
-                Précédent
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={data.page * data.per_page >= data.total}
-                onClick={() => setFilters({ ...filters, page: data.page + 1 })}
-              >
-                Suivant
-              </Button>
-            </div>
-          </div>
+          <Pagination
+            page={data.page}
+            perPage={data.per_page}
+            total={data.total}
+            onPageChange={(p) => setFilters({ ...filters, page: p })}
+            onPerPageChange={(per) =>
+              setFilters({ ...filters, per_page: per as PageSize, page: 1 })
+            }
+          />
         )}
       </div>
 
