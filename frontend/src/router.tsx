@@ -9,6 +9,9 @@ import { LoginPage } from '@/pages/LoginPage';
 const AdminAuditLogPage = lazy(() =>
   import('@/pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })),
 );
+const AdminBackupsPage = lazy(() =>
+  import('@/pages/AdminBackupsPage').then((m) => ({ default: m.AdminBackupsPage })),
+);
 const AdminBankAccountsPage = lazy(() =>
   import('@/pages/AdminBankAccountsPage').then((m) => ({ default: m.AdminBankAccountsPage })),
 );
@@ -181,6 +184,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <AdminBankAccountsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/sauvegardes',
+        element: (
+          <LazyPage>
+            <AdminBackupsPage />
           </LazyPage>
         ),
       },

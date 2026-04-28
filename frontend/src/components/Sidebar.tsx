@@ -169,6 +169,18 @@ const admin: Item[] = [
     adminOnly: true,
   },
   {
+    to: '/administration/sauvegardes',
+    label: 'Sauvegardes',
+    icon: icon(
+      <>
+        <path d="M21 8v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
+        <path d="M1 3h22v5H1z" />
+        <path d="M10 12h4" />
+      </>,
+    ),
+    adminOnly: true,
+  },
+  {
     to: '/administration/audit',
     label: "Journal d'audit",
     icon: icon(
