@@ -263,10 +263,35 @@ export function Sidebar() {
   return (
     <aside className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col gap-1 bg-sidebar px-3.5 py-5 text-sidebar-fg">
       <div className="flex items-center gap-2.5 px-2 pb-5 pt-1 text-white">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-teal-700 text-[14px] font-bold text-[#042f2e]">
-          H
-        </div>
-        <div className="text-[15px] font-bold tracking-tight">horizon</div>
+        {/* Même pictogramme que /favicon.svg : ligne ascendante évoquant la
+            croissance / le pilotage de trésorerie. Cohérence onglet web ↔ menu. */}
+        <svg
+          aria-hidden
+          viewBox="0 0 32 32"
+          className="h-7 w-7 shrink-0"
+        >
+          <rect width="32" height="32" rx="7" fill="#0f1419" />
+          <path
+            d="M6 22 L12 14 L17 18 L26 8"
+            stroke="#14b8a6"
+            strokeWidth="2.5"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="26" cy="8" r="2.2" fill="#14b8a6" />
+          <line
+            x1="6"
+            y1="26"
+            x2="26"
+            y2="26"
+            stroke="#14b8a6"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            opacity="0.5"
+          />
+        </svg>
+        <div className="text-[15px] font-bold tracking-tight">Horizon</div>
       </div>
 
       <NavGroup label="Pilotage" items={pilotage} isAdmin={isAdmin} />

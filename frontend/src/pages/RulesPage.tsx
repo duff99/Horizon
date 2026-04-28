@@ -95,7 +95,11 @@ export function RulesPage() {
         </div>
         <div className="flex items-center gap-2">
           <EntitySelector />
-          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+          {/* modal={false} : sinon vaul désactive les pointer-events sur
+              tout le body, y compris le PopoverContent (porté ailleurs dans
+              le DOM) du CategoryCombobox utilisé dans RuleForm — le combobox
+              apparaissait grisé et impossible à scroller. */}
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} modal={false}>
           <DrawerTrigger asChild>
             <Button onClick={() => setEditing(null)}>
               <svg

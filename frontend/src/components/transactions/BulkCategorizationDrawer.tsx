@@ -12,16 +12,18 @@
 import { X } from "lucide-react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
-import { CategoryCombobox } from "@/components/CategoryCombobox";
+import {
+  CategoryCombobox,
+  type CategoryOption,
+} from "@/components/CategoryCombobox";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Category } from "@/types/api";
 
 interface Props {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   selectedCount: number;
-  categories: Category[];
+  categories: CategoryOption[];
   bulkCategoryId: number | null;
   onBulkCategoryChange: (id: number | null) => void;
   onCategorize: () => void;
