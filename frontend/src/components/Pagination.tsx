@@ -110,10 +110,10 @@ export function Pagination({
               value={perPage}
               onChange={(e) => {
                 const next = Number(e.target.value) as PageSize;
+                // Un seul appel — le caller gère page=1 dans le même
+                // setFilters pour éviter une race entre deux setState
+                // consécutifs (closure React qui écrase l'un l'autre).
                 onPerPageChange(next);
-                // Revenir à la page 1 quand on change la taille pour ne
-                // pas se retrouver hors-bornes.
-                if (next !== perPage) onPageChange(1);
               }}
               className="rounded-sm border border-line-soft bg-panel px-2 py-1 text-[12.5px] text-ink hover:bg-panel-2"
             >
