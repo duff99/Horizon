@@ -72,14 +72,14 @@ function EntitiesComparisonTableInner({ months = 1 }: Props) {
     },
     {
       key: "burn",
-      label: "Burn rate",
+      label: "Consommation (Burn rate)",
       render: (e) => formatSigned(e.burn_rate_cents),
       className: (e) =>
         e.burn_rate_cents < 0 ? "text-rose-600" : "text-ink-2",
     },
     {
       key: "runway",
-      label: "Runway",
+      label: "Autonomie (Runway)",
       render: (e) =>
         e.runway_months == null
           ? "∞"

@@ -1,5 +1,6 @@
 /**
- * RunwayCard — KPI "mois de runway" + burn rate + solde + sparkline 6m projection.
+ * RunwayCard — autonomie de trésorerie (Runway) + consommation mensuelle
+ * (Burn rate) + solde + projection sur 6 mois.
  */
 import { memo, useMemo } from "react";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
@@ -77,9 +78,14 @@ function RunwayCardInner({ entityId }: Props) {
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <div className="text-[15px] font-semibold text-ink">Runway</div>
+          <div className="text-[15px] font-semibold text-ink">
+            Autonomie de trésorerie{" "}
+            <span className="text-[12px] font-normal text-muted-foreground">
+              (Runway)
+            </span>
+          </div>
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Durée de vie estimée au rythme actuel
+            Nombre de mois de trésorerie restants au rythme actuel
           </div>
         </div>
         {data && (
@@ -101,7 +107,7 @@ function RunwayCardInner({ entityId }: Props) {
           role="alert"
           className="rounded-md bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900"
         >
-          Impossible de calculer le runway.
+          Impossible de calculer l'autonomie de trésorerie.
         </div>
       ) : (
         <>
@@ -110,13 +116,18 @@ function RunwayCardInner({ entityId }: Props) {
               {runwayDisplay}
             </div>
             <div className="text-[13px] text-muted-foreground">
-              {runwayDisplay === "∞" ? "pas de burn" : "mois"}
+              {runwayDisplay === "∞"
+                ? "trésorerie stable"
+                : "mois"}
             </div>
           </div>
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-[12.5px]">
             <div>
-              <dt className="text-muted-foreground">Burn rate mensuel</dt>
+              <dt className="text-muted-foreground">
+                Consommation mensuelle{" "}
+                <span className="text-[11px]">(Burn rate)</span>
+              </dt>
               <dd
                 className={cn(
                   "mt-0.5 font-mono tabular-nums",

@@ -129,10 +129,13 @@ function YoYChartInner({ entityId }: Props) {
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
       <div className="mb-4">
         <div className="text-[15px] font-semibold text-ink">
-          Comparaison année / année
+          Comparaison année sur année{" "}
+          <span className="text-[12px] font-normal text-muted-foreground">
+            (YoY)
+          </span>
         </div>
         <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-          Revenus et dépenses sur 12 mois glissants vs année précédente
+          Revenus et dépenses sur 12 mois glissants comparés à l'année précédente
         </div>
       </div>
 
@@ -143,7 +146,7 @@ function YoYChartInner({ entityId }: Props) {
           role="alert"
           className="rounded-md bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900"
         >
-          Impossible de charger la comparaison Y/Y.
+          Impossible de charger la comparaison année sur année (YoY).
         </div>
       ) : rows.length === 0 ? (
         <div className="flex h-[220px] items-center justify-center text-[13px] text-muted-foreground">

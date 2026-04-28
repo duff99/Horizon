@@ -149,8 +149,11 @@ function ClientConcentrationCardInner({ entityId, months = 12 }: Props) {
               <div className="font-mono text-[20px] font-semibold tabular-nums text-ink">
                 {Math.round(data.hhi)}
               </div>
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-                HHI
+              <div
+                className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"
+                title="Indice Herfindahl-Hirschman — mesure standard de la concentration. < 1500 = faible, > 2500 = élevée."
+              >
+                Indice (HHI)
               </div>
               <div className={cn("mt-0.5 text-[11.5px] font-medium", risk.className)}>
                 {risk.label}
