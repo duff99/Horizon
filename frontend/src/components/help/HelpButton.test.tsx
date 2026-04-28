@@ -40,8 +40,13 @@ describe("HelpButton", () => {
     const btn = screen.getByRole("button", { name: /Aide/i });
     await userEvent.click(btn);
     expect(btn).toHaveAttribute("aria-expanded", "true");
+    // Use exact-string match to disambiguate from the sr-only DrawerPrimitive.Title
+    // which renders "Aide — Règles de catégorisation" alongside the visible h2.
     expect(
-      screen.getByRole("heading", { level: 2, name: /Règles/i }),
+      screen.getByRole("heading", {
+        level: 2,
+        name: "Règles de catégorisation",
+      }),
     ).toBeInTheDocument();
   });
 

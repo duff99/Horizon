@@ -41,7 +41,7 @@ export function HelpDrawer({ section, isOpen, onOpenChange }: HelpDrawerProps) {
             "border-l border-line-soft",
           )}
         >
-          <DrawerPrimitive.Title className="sr-only" aria-hidden>
+          <DrawerPrimitive.Title className="sr-only">
             Aide — {section.title}
           </DrawerPrimitive.Title>
           <button
