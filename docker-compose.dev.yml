@@ -21,3 +21,8 @@ services:
 
 volumes:
   pg_data_dev:
+
+networks:
+  default:
+    name: acreed-prod
+    external: true

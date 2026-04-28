@@ -13,10 +13,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 MAILTO=tdufr01@gmail.com
 
 # Backup quotidien DB à 2h00 locale.
-0 2 * * * root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/backup-db.sh >> /var/log/horizon-backup.log 2>&1
+0 2 * * * root cd /srv/prod/tools/horizon && ./scripts/backup/backup-db.sh >> /var/log/horizon-backup.log 2>&1
 
 # Verify-restore hebdomadaire le dimanche 4h00.
-0 4 * * 0 root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/verify-restore.sh >> /var/log/horizon-verify.log 2>&1
+0 4 * * 0 root cd /srv/prod/tools/horizon && ./scripts/backup/verify-restore.sh >> /var/log/horizon-verify.log 2>&1
 
 # Monitoring disque chaque heure.
-0 * * * * root cd /home/kierangauthier/claude-secure/horizon && ./scripts/backup/disk-monitor.sh >> /var/log/horizon-disk.log 2>&1
+0 * * * * root cd /srv/prod/tools/horizon && ./scripts/backup/disk-monitor.sh >> /var/log/horizon-disk.log 2>&1
