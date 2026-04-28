@@ -1,0 +1,19 @@
+[Unit]
+Description=Horizon backup trigger watcher (option B — isolation backend↔hôte)
+Documentation=https://github.com/anthropics/claude-code (interne)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/srv/prod/tools/horizon/scripts/backup/trigger-watcher.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=append:/var/log/horizon-backup-trigger.log
+StandardError=append:/var/log/horizon-backup-trigger.log
+# Empêche le service de manger trop de CPU si bug en boucle
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

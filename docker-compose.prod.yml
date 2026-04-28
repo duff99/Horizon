@@ -29,8 +29,14 @@ services:
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
       BACKEND_COOKIE_SECURE: "true"
       IMPORT_STORAGE_PATH: /data/imports
+      HORIZON_TRIGGER_DIR: /data/triggers
     volumes:
       - import_storage:/data/imports
+      # Bind mount partagé avec le service systemd horizon-backup-trigger qui
+      # tourne sur l'hôte (option B — isolation backend↔hôte). Le backend
+      # écrit ici un fichier <uuid>.json par opération demandée depuis l'UI ;
+      # le watcher l'observe et lance le script approprié en root.
+      - /var/lib/horizon-backup-triggers:/data/triggers:rw
     ports:
       - "127.0.0.1:8101:8000"
     depends_on:

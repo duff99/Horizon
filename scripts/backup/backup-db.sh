@@ -45,10 +45,16 @@ KEY_TABLES=(users entities transactions bank_accounts forecast_lines)
 # ===== FLAGS =====
 PRE_OP=false
 DRY_RUN=false
+ROW_ID=""              # si fourni : adopte une row pending au lieu d'en créer une
+TYPE="scheduled"       # défaut : cron quotidien. Autres : manual, pre-op, restore-test
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --pre-op) PRE_OP=true; shift ;;
+    --pre-op) PRE_OP=true; TYPE="pre-op"; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --row-id) ROW_ID="$2"; shift 2 ;;
+    --row-id=*) ROW_ID="${1#*=}"; shift ;;
+    --type) TYPE="$2"; shift 2 ;;
+    --type=*) TYPE="${1#*=}"; shift ;;
     -h|--help)
       grep -E '^# ' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -56,6 +62,12 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
 done
+
+# Validation type (en sync avec ck_backup_history_type)
+case "$TYPE" in
+  scheduled|manual|pre-op|restore-test) ;;
+  *) echo "Invalid --type: $TYPE (expected: scheduled|manual|pre-op|restore-test)" >&2; exit 1 ;;
+esac
 
 # ===== TIMESTAMP + PATHS =====
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -90,17 +102,23 @@ BACKUP_ROW_ID=""
 
 mark_failed() {
   local reason="$1"
-  local reason_esc
+  local step="${CURRENT_STEP:-}"
+  local reason_esc step_esc
   reason_esc="$(sql_quote "$reason")"
+  step_esc="$(sql_quote "$step")"
   if [[ -n "$BACKUP_ROW_ID" ]]; then
     psql_exec -c "UPDATE backup_history
         SET status='failed',
             completed_at=now(),
-            error_message='$reason_esc'
+            error_message='$reason_esc',
+            error_step='$step_esc'
         WHERE id='$BACKUP_ROW_ID';" >/dev/null 2>&1 || \
       err "Impossible de marquer la ligne $BACKUP_ROW_ID en failed"
   fi
 }
+
+# CURRENT_STEP : tracker pour l'étape qui plante (lu par mark_failed).
+CURRENT_STEP="init"
 
 # ===== PRÉ-CHECK CONTAINER =====
 precheck() {
@@ -138,19 +156,34 @@ fi
 log "== Backup Horizon DB (TS=$TS) =="
 precheck || exit 1
 
-# 1. Insert row backup_history (status=running).
-log "-- Insert backup_history (running)"
+# 1. Soit on adopte une row pré-créée (déclenchement UI via trigger watcher),
+#    soit on en crée une nouvelle (cron quotidien, manuel CLI).
+CURRENT_STEP="register"
 DUMP_PATH_ESC="$(sql_quote "$DUMP_PATH")"
-INSERT_SQL="INSERT INTO backup_history (status, file_path)
-  VALUES ('running', '$DUMP_PATH_ESC')
-  RETURNING id;"
-if ! BACKUP_ROW_ID="$(psql_exec -c "$INSERT_SQL" | awk 'NR==1{print; exit}' | tr -d '[:space:]')"; then
-  err "Insert backup_history a échoué"
-  exit 3
-fi
-if [[ -z "$BACKUP_ROW_ID" ]]; then
-  err "backup_history.id vide après insert — la table existe-t-elle ?"
-  exit 3
+TYPE_ESC="$(sql_quote "$TYPE")"
+if [[ -n "$ROW_ID" ]]; then
+  log "-- Adopte row pending $ROW_ID (running, type=$TYPE)"
+  ROW_ID_ESC="$(sql_quote "$ROW_ID")"
+  if ! psql_exec -c "UPDATE backup_history
+      SET status='running', started_at=now(), file_path='$DUMP_PATH_ESC'
+      WHERE id='$ROW_ID_ESC' AND status='pending';" >/dev/null; then
+    err "Update backup_history (adopt) a échoué"
+    exit 3
+  fi
+  BACKUP_ROW_ID="$ROW_ID"
+else
+  log "-- Insert backup_history (running, type=$TYPE)"
+  INSERT_SQL="INSERT INTO backup_history (status, type, file_path)
+    VALUES ('running', '$TYPE_ESC', '$DUMP_PATH_ESC')
+    RETURNING id;"
+  if ! BACKUP_ROW_ID="$(psql_exec -c "$INSERT_SQL" | awk 'NR==1{print; exit}' | tr -d '[:space:]')"; then
+    err "Insert backup_history a échoué"
+    exit 3
+  fi
+  if [[ -z "$BACKUP_ROW_ID" ]]; then
+    err "backup_history.id vide après insert — la table existe-t-elle ?"
+    exit 3
+  fi
 fi
 log "-- row_id=$BACKUP_ROW_ID"
 
@@ -158,6 +191,7 @@ log "-- row_id=$BACKUP_ROW_ID"
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then mark_failed "Exit $rc (step unknown)"; err "Abort exit=$rc"; fi' EXIT
 
 # 2. pg_dump → fichier local.
+CURRENT_STEP="pg_dump"
 log "-- pg_dump vers $DUMP_PATH"
 if ! docker exec "$DB_CONTAINER" pg_dump \
     -U "$DB_USER" -d "$DB_NAME" \
@@ -175,6 +209,7 @@ SIZE_BYTES="$(stat -c%s "$DUMP_PATH")"
 log "-- dump size=$SIZE_BYTES bytes"
 
 # 3. Checksum SHA256.
+CURRENT_STEP="sha256_dump"
 log "-- sha256sum"
 if ! (cd "$BACKUP_DIR" && sha256sum "$(basename "$DUMP_PATH")" > "$(basename "$SHA_PATH")"); then
   mark_failed "sha256 write failed"
@@ -190,6 +225,7 @@ fi
 log "-- sha256=$SHA256_HEX"
 
 # 4. Row counts sur tables clés.
+CURRENT_STEP="row_counts"
 log "-- row counts"
 ROW_COUNTS_JSON="{"
 first=true
@@ -219,6 +255,7 @@ PG_VERSION="$(psql_exec -c "SELECT current_setting('server_version');" | tr -d '
 # On tar via `docker run --rm -v <vol>:/src` pour éviter d'avoir à élever les
 # privilèges sur le host (le script tourne déjà en root via cron, mais ça
 # permet aussi un usage manuel sans sudo si le user est dans le groupe docker).
+CURRENT_STEP="tar_imports"
 log "-- tar volume $IMPORTS_VOLUME"
 if ! docker volume inspect "$IMPORTS_VOLUME" >/dev/null 2>&1; then
   mark_failed "Volume $IMPORTS_VOLUME introuvable"
@@ -242,6 +279,7 @@ fi
 IMPORTS_SIZE_BYTES="$(stat -c%s "$IMPORTS_PATH")"
 log "-- imports size=$IMPORTS_SIZE_BYTES bytes"
 
+CURRENT_STEP="sha256_imports"
 log "-- sha256 imports"
 if ! (cd "$BACKUP_DIR" && sha256sum "$(basename "$IMPORTS_PATH")" > "$(basename "$IMPORTS_SHA_PATH")"); then
   mark_failed "sha256 imports write failed"
@@ -257,6 +295,7 @@ fi
 log "-- sha256 imports=$IMPORTS_SHA256_HEX"
 
 # 6. Écrire le manifest JSON (référence DB dump + imports tar).
+CURRENT_STEP="manifest"
 log "-- write manifest"
 cat > "$MANIFEST_PATH" <<EOF
 {
@@ -275,6 +314,7 @@ cat > "$MANIFEST_PATH" <<EOF
 EOF
 
 # 7. Update backup_history en success.
+CURRENT_STEP="update_row_success"
 log "-- Update backup_history (success)"
 ROW_COUNTS_ESC="$(sql_quote "$ROW_COUNTS_JSON")"
 UPDATE_SQL="UPDATE backup_history
@@ -282,6 +322,8 @@ UPDATE_SQL="UPDATE backup_history
       completed_at=now(),
       size_bytes=$SIZE_BYTES,
       sha256='$SHA256_HEX',
+      imports_size_bytes=$IMPORTS_SIZE_BYTES,
+      imports_sha256='$IMPORTS_SHA256_HEX',
       row_counts_json='$ROW_COUNTS_ESC'::jsonb
   WHERE id='$BACKUP_ROW_ID';"
 if ! psql_exec -c "$UPDATE_SQL" >/dev/null; then

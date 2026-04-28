@@ -21,8 +21,52 @@ VERIFY_CONTAINER="horizon-verify-$$"
 VERIFY_PASSWORD="verify-$(date +%s)"
 PG_IMAGE="postgres:16-alpine"
 
+# Flag --row-id : si fourni, on met à jour cette row (au lieu de créer/chercher
+# par manifest) → utilisé par le trigger watcher quand l'UI demande "Lancer un
+# test de restore". Cette row est de type 'restore-test' (créée pending par
+# l'API, adoptée running ici, success/failed à la fin).
+ROW_ID=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --row-id) ROW_ID="$2"; shift 2 ;;
+    --row-id=*) ROW_ID="${1#*=}"; shift ;;
+    -h|--help)
+      grep -E '^# ' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) echo "Unknown flag: $1" >&2; exit 1 ;;
+  esac
+done
+
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 err() { log "ERROR: $*" >&2; }
+
+# Si on a un ROW_ID, on l'adopte en running au démarrage et on marque
+# l'issue à la sortie (success ou failed) — pour que l'UI voie le statut
+# se mettre à jour.
+mark_test_failed() {
+  local reason="$1"
+  local reason_esc step_esc
+  reason_esc="$(printf "%s" "$reason" | sed "s/'/''/g")"
+  step_esc="$(printf "%s" "${CURRENT_STEP:-}" | sed "s/'/''/g")"
+  if [[ -n "$ROW_ID" ]]; then
+    docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -At -c \
+      "UPDATE backup_history
+       SET status='failed', completed_at=now(),
+           error_message='$reason_esc', error_step='$step_esc'
+       WHERE id='$ROW_ID';" >/dev/null 2>&1 || true
+  fi
+}
+CURRENT_STEP="init"
+
+if [[ -n "$ROW_ID" ]]; then
+  ROW_ID_ESC="$(printf "%s" "$ROW_ID" | sed "s/'/''/g")"
+  docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -At -c \
+    "UPDATE backup_history SET status='running', started_at=now()
+     WHERE id='$ROW_ID_ESC' AND status='pending';" >/dev/null 2>&1 || \
+    err "Adopt row $ROW_ID en running KO (non-fatal)"
+  trap 'rc=$?; if [[ $rc -ne 0 ]]; then mark_test_failed "Exit $rc à étape ${CURRENT_STEP:-?}"; fi; docker rm -f "$VERIFY_CONTAINER" >/dev/null 2>&1 || true' EXIT
+fi
 
 cleanup() {
   docker rm -f "$VERIFY_CONTAINER" >/dev/null 2>&1 || true
@@ -159,13 +203,25 @@ if [[ "$verify_ok" != "true" ]]; then
   exit 4
 fi
 
-# 8. Update backup_history (status=verified + verified_at=now()) sur la prod.
+# 8. Update backup_history (status=verified + verified_at=now()) sur la prod
+#    pour la row du backup vérifié (issue du manifest).
 if [[ -n "$BACKUP_ROW_ID" ]]; then
   log "Update backup_history $BACKUP_ROW_ID en verified"
   ID_ESC="$(sql_quote "$BACKUP_ROW_ID")"
   docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c \
     "UPDATE backup_history SET status='verified', verified_at=now() WHERE id='$ID_ESC';" \
     >/dev/null || err "Impossible de marquer verified en DB prod (non-fatal)"
+fi
+
+# 9. Si on a une row de type 'restore-test' déclenchée par UI, on la marque
+#    success (le verify a réussi). C'est cette row qui est observée par l'UI
+#    pour informer l'utilisateur "test de restore terminé avec succès".
+if [[ -n "$ROW_ID" ]]; then
+  ROW_ID_ESC="$(sql_quote "$ROW_ID")"
+  docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c \
+    "UPDATE backup_history SET status='success', completed_at=now()
+     WHERE id='$ROW_ID_ESC';" \
+    >/dev/null || err "Impossible de marquer la row UI en success (non-fatal)"
 fi
 
 log "== VERIFY OK =="

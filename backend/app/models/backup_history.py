@@ -29,8 +29,12 @@ class BackupHistory(Base):
     __tablename__ = "backup_history"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('running', 'success', 'failed', 'verified')",
+            "status IN ('pending', 'running', 'success', 'failed', 'verified')",
             name="ck_backup_history_status",
+        ),
+        CheckConstraint(
+            "type IN ('scheduled', 'manual', 'pre-op', 'restore-test')",
+            name="ck_backup_history_type",
         ),
     )
 
@@ -46,13 +50,19 @@ class BackupHistory(Base):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     sha256: Mapped[Optional[str]] = mapped_column(CHAR(64), nullable=True)
+    imports_size_bytes: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
+    imports_sha256: Mapped[Optional[str]] = mapped_column(CHAR(64), nullable=True)
     row_counts_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSONB, nullable=True
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
