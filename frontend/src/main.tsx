@@ -4,7 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import './index.css';
+import { initErrorReporter } from './lib/errorReporter';
 import { router } from './router';
+
+// Capture window.onerror, unhandledrejection et console.error → backend.
+// Doit être appelé avant le render pour ne rien rater au boot.
+initErrorReporter();
 
 const queryClient = new QueryClient({
   defaultOptions: {
