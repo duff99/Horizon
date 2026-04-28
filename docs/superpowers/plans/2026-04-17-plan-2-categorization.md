@@ -4931,7 +4931,7 @@ docker compose -f docker-compose.prod.yml exec -T db \
 Puis merge :
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon
+cd /srv/prod/tools/horizon
 git checkout main
 git merge --no-ff plan-2-categorization -m "feat: Plan 2 — module catégorisation (moteur + UI + 30 règles Delubac)"
 git tag plan-2-done

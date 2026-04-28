@@ -14,7 +14,7 @@
 ## Backup manuel
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon
+cd /srv/prod/tools/horizon
 ./scripts/backup/backup-db.sh
 ```
 

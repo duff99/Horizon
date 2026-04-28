@@ -153,7 +153,7 @@ Le plan est découpé en **8 sections** :
 - [ ] **Étape 1 : Vérifier l'état actuel de `pyproject.toml`**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 grep -A 30 'dependencies' pyproject.toml
 ```
 
@@ -203,7 +203,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 - [ ] **Étape 5 : Installer les dépendances en local**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 python3 -m pip install -e '.[dev]'
 python3 -c "import pdfplumber, rapidfuzz, magic; print('ok')"
 ```
@@ -582,11 +582,11 @@ if __name__ == "__main__":
 - [ ] **Étape 2 : Exécuter le script pour produire les PDF et JSON**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 python -m tests.fixtures.delubac.build_fixtures
 ```
 
-Expected: `Fixtures générées dans /home/kierangauthier/claude-secure/horizon/backend/tests/fixtures/delubac`
+Expected: `Fixtures générées dans /srv/prod/tools/horizon/backend/tests/fixtures/delubac`
 puis `ls tests/fixtures/delubac/` doit lister 3 `.pdf` + 3 `.ground_truth.json` + `build_fixtures.py` + `exemple_Delubac.pdf` (ignoré par git).
 
 - [ ] **Étape 3 : Vérifier que git ne suit que les fichiers synthétiques**
@@ -655,7 +655,7 @@ def test_fixture_pdf_readable(pdf_name: str, gt_name: str) -> None:
 - [ ] **Étape 2 : Lancer les tests**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 pytest tests/test_fixtures_delubac.py -v
 ```
 
@@ -790,7 +790,7 @@ def test_other_entity_bank_account_is_inaccessible(
 - [ ] **Étape 2 : Vérifier l'échec**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 pytest tests/test_conftest_fixtures.py -v
 ```
 
@@ -1599,7 +1599,7 @@ git commit -m "feat(models): Transaction — central table with dedup_key and pa
 - [ ] **Étape 1 : Générer la migration via Alembic autogenerate**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/backend
+cd /srv/prod/tools/horizon/backend
 # Lancer la base de dev en local (si pas déjà faite)
 docker compose -f ../docker-compose.dev.yml up -d
 export DATABASE_URL="postgresql+psycopg://tresorerie:tresorerie@localhost:5432/tresorerie"
@@ -5530,7 +5530,7 @@ describe("API clients Plan 1", () => {
 - [ ] **Étape 2 : Vérifier l'échec**
 
 ```bash
-cd /home/kierangauthier/claude-secure/horizon/frontend
+cd /srv/prod/tools/horizon/frontend
 pnpm test src/test/api_clients.test.ts
 ```
 
