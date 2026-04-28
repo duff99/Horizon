@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTransactions, useBulkCategorize } from "../api/transactions";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
-import { CategoryCombobox } from "../components/CategoryCombobox";
 import { Pagination, type PageSize } from "@/components/Pagination";
 import { RuleForm } from "../components/RuleForm";
+import { BulkCategorizationDrawer } from "@/components/transactions/BulkCategorizationDrawer";
 import {
   Drawer,
   DrawerContent,
@@ -43,6 +43,7 @@ export function TransactionsPage() {
   const [filters, setFilters] = useState<TransactionFilter>({ page: 1, per_page: 50 });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState<number | null>(null);
+  const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
   const [ruleDrawerOpen, setRuleDrawerOpen] = useState(false);
   const [ruleInitialValue, setRuleInitialValue] = useState<RuleSuggestion | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -103,6 +104,18 @@ export function TransactionsPage() {
     setFilters({ ...filters, uncategorized: checked || undefined, page: 1 });
     setSelectedIds(new Set());
   }
+
+  // Ouvre auto le drawer dès qu'il y a des sélections, le ferme quand 0.
+  // Évite à l'utilisateur de remonter en haut de la page : il garde sa
+  // position et le drawer apparaît à côté.
+  useEffect(() => {
+    if (selectedIds.size > 0) {
+      setBulkDrawerOpen(true);
+    } else {
+      setBulkDrawerOpen(false);
+      setSuggestError(null);
+    }
+  }, [selectedIds.size]);
 
   async function handleBulkCategorize() {
     if (!bulkCategoryId) return;
@@ -199,36 +212,35 @@ export function TransactionsPage() {
           </label>
         </div>
 
-        {/* Bulk toolbar */}
+        {/* Mini-bandeau de sélection : visible quand 1+ sélection ; les
+            actions complètes sont dans le drawer à droite (BulkCategorizationDrawer)
+            qui s'ouvre automatiquement. Ce bandeau permet juste de voir le
+            compteur sans quitter la liste, et de rouvrir le panneau si
+            l'utilisateur l'a fermé. */}
         {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-5 py-2.5 text-[13px]">
-            <span className="font-semibold text-emerald-800">
-              {selectedIds.size} sélectionnée{selectedIds.size > 1 ? "s" : ""}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-5 py-2 text-[12.5px] text-emerald-900">
+            <span className="font-semibold">
+              {selectedIds.size} opération{selectedIds.size > 1 ? "s" : ""}{" "}
+              sélectionnée{selectedIds.size > 1 ? "s" : ""}
             </span>
-            <div className="flex-1" />
-            <div className="w-56">
-              <CategoryCombobox
-                categories={categories}
-                value={bulkCategoryId}
-                onChange={setBulkCategoryId}
-              />
+            <div className="flex items-center gap-2">
+              {!bulkDrawerOpen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkDrawerOpen(true)}
+                >
+                  Rouvrir le panneau
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Désélectionner
+              </Button>
             </div>
-            <Button
-              size="sm"
-              disabled={!bulkCategoryId || bulkMut.isPending}
-              onClick={handleBulkCategorize}
-            >
-              Catégoriser
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleSuggestRule}>
-              Suggérer une règle
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-              Désélectionner
-            </Button>
-            {suggestError && (
-              <span className="w-full text-[12.5px] text-debit">{suggestError}</span>
-            )}
           </div>
         )}
 
@@ -362,6 +374,20 @@ export function TransactionsPage() {
           />
         )}
       </div>
+
+      <BulkCategorizationDrawer
+        isOpen={bulkDrawerOpen}
+        onOpenChange={setBulkDrawerOpen}
+        selectedCount={selectedIds.size}
+        categories={categories}
+        bulkCategoryId={bulkCategoryId}
+        onBulkCategoryChange={setBulkCategoryId}
+        onCategorize={handleBulkCategorize}
+        onSuggestRule={handleSuggestRule}
+        onDeselectAll={() => setSelectedIds(new Set())}
+        isCategorizing={bulkMut.isPending}
+        suggestError={suggestError}
+      />
 
       <Drawer open={ruleDrawerOpen} onOpenChange={setRuleDrawerOpen}>
         <DrawerContent>

@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react';
 
 import { listAuditLog } from '@/api/auditLog';
 import { listUsers } from '@/api/users';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   computeRange,
   type PeriodValue,
@@ -340,27 +341,31 @@ export function AdminAuditLogPage() {
               Période
             </label>
             <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={period.from}
-                onChange={(e) =>
-                  updateFilter(() =>
-                    setPeriod({ ...period, from: e.target.value, preset: 'custom' }),
-                  )
-                }
-                className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-[13px] text-ink focus:border-accent focus:outline-none"
-              />
+              <div className="flex-1">
+                <DatePicker
+                  value={period.from}
+                  onChange={(v) =>
+                    updateFilter(() =>
+                      setPeriod({ ...period, from: v, preset: 'custom' }),
+                    )
+                  }
+                  aria-label="Date de début"
+                  placeholder="—"
+                />
+              </div>
               <span className="text-slate-400">—</span>
-              <input
-                type="date"
-                value={period.to}
-                onChange={(e) =>
-                  updateFilter(() =>
-                    setPeriod({ ...period, to: e.target.value, preset: 'custom' }),
-                  )
-                }
-                className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-[13px] text-ink focus:border-accent focus:outline-none"
-              />
+              <div className="flex-1">
+                <DatePicker
+                  value={period.to}
+                  onChange={(v) =>
+                    updateFilter(() =>
+                      setPeriod({ ...period, to: v, preset: 'custom' }),
+                    )
+                  }
+                  aria-label="Date de fin"
+                  placeholder="—"
+                />
+              </div>
             </div>
           </div>
         </div>

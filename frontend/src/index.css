@@ -42,6 +42,23 @@
     @apply border-line;
   }
 
+  /* Focus visible : on retire l'anneau bleu/le contour qui reste après
+     un clic souris sur un élément interactif (button, tr, summary, a),
+     sauf quand la navigation se fait au clavier (:focus-visible reste OK).
+     Les champs de saisie (input, textarea, select) gardent leur indicateur
+     pour signaler la zone active de saisie. */
+  button:focus:not(:focus-visible),
+  [role="button"]:focus:not(:focus-visible),
+  a:focus:not(:focus-visible),
+  summary:focus:not(:focus-visible),
+  tr:focus:not(:focus-visible),
+  td:focus:not(:focus-visible),
+  th:focus:not(:focus-visible),
+  [tabindex]:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
   html {
     font-feature-settings: 'cv11', 'ss01';
   }

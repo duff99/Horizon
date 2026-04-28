@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { EntitySelector } from "@/components/EntitySelector";
 import { useEntityFilter } from "../stores/entityFilter";
 import {
@@ -214,21 +215,25 @@ export function CommitmentsPage() {
         <div className="flex items-center gap-1.5 text-[12px] text-ink-2">
           <label className="flex items-center gap-1">
             Du
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="rounded-md border border-line-soft bg-panel px-2 py-1 text-[12.5px] text-ink"
-            />
+            <div className="w-[140px]">
+              <DatePicker
+                value={from}
+                onChange={setFrom}
+                placeholder="—"
+                aria-label="Date de début"
+              />
+            </div>
           </label>
           <label className="flex items-center gap-1">
             au
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="rounded-md border border-line-soft bg-panel px-2 py-1 text-[12.5px] text-ink"
-            />
+            <div className="w-[140px]">
+              <DatePicker
+                value={to}
+                onChange={setTo}
+                placeholder="—"
+                aria-label="Date de fin"
+              />
+            </div>
           </label>
           {(from || to) && (
             <button

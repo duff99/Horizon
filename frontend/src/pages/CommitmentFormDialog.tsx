@@ -12,6 +12,7 @@ import {
 } from "@/api/commitments";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEntityFilter } from "@/stores/entityFilter";
@@ -313,14 +314,11 @@ export function CommitmentFormDialog({ open, onClose, commitment }: Props) {
                 >
                   Date d'émission
                 </Label>
-                <Input
+                <DatePicker
                   id="commitment-issue-date"
-                  type="date"
-                  required
                   value={form.issue_date}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, issue_date: e.target.value }))
-                  }
+                  onChange={(v) => setForm((f) => ({ ...f, issue_date: v }))}
+                  aria-label="Date d'émission"
                 />
               </div>
               <div className="space-y-1.5">
@@ -330,14 +328,12 @@ export function CommitmentFormDialog({ open, onClose, commitment }: Props) {
                 >
                   Date prévue
                 </Label>
-                <Input
+                <DatePicker
                   id="commitment-expected-date"
-                  type="date"
-                  required
                   value={form.expected_date}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, expected_date: e.target.value }))
-                  }
+                  onChange={(v) => setForm((f) => ({ ...f, expected_date: v }))}
+                  aria-label="Date prévue"
+                  min={form.issue_date || undefined}
                 />
               </div>
             </div>
