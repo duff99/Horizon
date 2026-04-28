@@ -103,6 +103,56 @@ export function AnalysePage() {
           <EntitiesComparisonTable />
         </div>
       </div>
+
+      <details className="rounded-md border border-line-soft bg-panel/40 p-4 text-[12.5px] text-muted-foreground">
+        <summary className="cursor-pointer font-medium text-ink">
+          Lexique des sigles utilisés sur cette page
+        </summary>
+        <dl className="mt-3 space-y-2.5">
+          <div>
+            <dt className="font-semibold text-ink">
+              Runway (autonomie de trésorerie)
+            </dt>
+            <dd>
+              Nombre de mois pendant lesquels la société peut tenir à son
+              rythme actuel de consommation de cash. Plus c'est élevé, plus
+              la société est à l'aise. Rouge si moins de 6 mois.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              Burn rate (consommation mensuelle)
+            </dt>
+            <dd>
+              Différence moyenne entre les sorties et les entrées de cash
+              sur les 3 derniers mois. Un burn rate négatif signifie que la
+              société consomme sa trésorerie chaque mois.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              YoY (Year over Year, année sur année)
+            </dt>
+            <dd>
+              Comparaison d'un indicateur entre une période et la même
+              période l'année précédente. Permet d'isoler la tendance de
+              fond des effets saisonniers.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">
+              HHI (Herfindahl-Hirschman Index)
+            </dt>
+            <dd>
+              Mesure standard de concentration. Somme des carrés des parts
+              de chaque client dans le chiffre d'affaires. Varie de 0
+              (parfaitement diversifié) à 10 000 (un seul client). Repères :
+              moins de 1500 = faible, 1500 à 2500 = modérée, plus de 2500 =
+              forte.
+            </dd>
+          </div>
+        </dl>
+      </details>
     </section>
   );
 }

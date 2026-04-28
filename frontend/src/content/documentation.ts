@@ -57,7 +57,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     does: [
       "Pour vous connecter : saisissez votre email, votre mot de passe, puis cliquez sur Se connecter. La session reste active jusqu'à la déconnexion manuelle ou l'expiration du cookie de session.",
-      "Pour changer de société : cliquez sur le sélecteur en haut à droite, puis choisissez une entité dans la liste, ou Toutes les sociétés pour une vue consolidée. Le filtre s'applique immédiatement à toute l'application.",
+      "Pour changer de société : cliquez sur le sélecteur en haut à droite, puis choisissez une entité dans la liste. L'option Toutes les sociétés est disponible sur les pages où une vue consolidée a du sens (Tableau de bord, Transactions, Imports, Engagements, Tiers, Règles). Sur les pages Analyse et Prévisionnel, qui calculent des KPI ou un plan de trésorerie par société, vous devez choisir une société unique : la première société accessible est sélectionnée automatiquement à votre arrivée. Le filtre s'applique immédiatement à toute l'application.",
       "Pour changer de période : cliquez sur l'un des presets (30 j, 90 j, 12 m, Année, Mois-1) ou sur Perso. pour saisir deux dates manuellement (du... au...).",
       "Pour ouvrir l'aide d'une page : cliquez sur le bouton Aide en haut à droite, ou utilisez le raccourci clavier « ? » (sauf si vous êtes en train de saisir du texte dans un champ).",
       "Pour ouvrir votre profil : cliquez sur votre avatar en bas de la sidebar. Pour vous déconnecter : cliquez sur l'icône à droite de votre nom.",
@@ -133,7 +133,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Comparaison des sociétés : pour chaque entité accessible, revenus, dépenses, variation nette, solde, burn et runway.",
     ],
     does: [
-      "Pour analyser une seule société : sélectionnez-la dans l'EntitySelector. Sinon, tous les widgets sont consolidés sur l'ensemble des sociétés accessibles.",
+      "L'analyse se fait toujours sur une société à la fois : à votre arrivée, la première société accessible est sélectionnée automatiquement (ordre alphabétique). Pour basculer sur une autre société, utilisez l'EntitySelector en haut à droite. La page n'a pas de mode « Toutes les sociétés » car un agrégat cross-entité n'a pas de sens financier (chaque société a son propre business et ses propres tendances).",
       "Pour ajuster visuellement la période d'en-tête : utilisez le PeriodSelector. Attention : chaque widget garde son propre horizon métier (mois courant, 3 mois, 6 mois, 12 mois) ; le PeriodSelector ici n'a qu'un rôle de cohérence visuelle avec les autres pages.",
       "Pour identifier en un coup d'œil les postes qui décalent votre résultat : lisez la colonne « Dérive » du tableau Dérives par catégorie, puis le widget Top mouvements pour confirmer la tendance.",
       "Pour évaluer un risque commercial : ouvrez Concentration clients ; un indice HHI supérieur à 2500 signale une dépendance forte à quelques clients (le marché américain considère 2500 comme le seuil d'alerte antitrust).",
@@ -141,7 +141,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     tips: [
       "Le widget Comparaison des sociétés se masque automatiquement si une seule société est accessible (sinon il n'aurait rien à comparer).",
-      "Un runway inférieur à six mois passe en rouge pour signaler une urgence de trésorerie ; entre 6 et 12 mois, il est marqué en orange.",
+      "Une autonomie (Runway) inférieure à six mois passe en rouge pour signaler une urgence de trésorerie ; entre 6 et 12 mois, elle est marquée en orange.",
       "La sparkline du widget Top mouvements montre la tendance brute, pas un cumul : un pic isolé n'indique pas forcément une dérive durable.",
       "L'indice HHI varie de 0 (parfaitement diversifié) à 10 000 (un seul client). Repères usuels : <1500 = faible, 1500-2500 = modérée, >2500 = élevée.",
       "Voir aussi Tableau de bord pour la vue immédiate, et Prévisionnel pour la projection détaillée mois par mois.",
@@ -150,9 +150,9 @@ export const DOC_SECTIONS: DocSectionData[] = [
       summary:
         "Indicateurs clés : dérives par catégorie, top mouvements, runway, comparaison année/année, concentration clients, comparaison des sociétés.",
       does: [
-        "Filtrez par société pour isoler une entité, ou consolidez toutes les sociétés.",
+        "Choisissez la société analysée dans l'EntitySelector (la première accessible est pré-sélectionnée).",
         "Lisez Dérives + Top mouvements pour repérer ce qui décale votre résultat.",
-        "Surveillez Runway (rouge < 6 mois) et HHI (> 2500 = concentration forte).",
+        "Surveillez Autonomie de trésorerie (Runway, rouge < 6 mois) et l'indice HHI de concentration clients (> 2500 = forte).",
       ],
       hide: ["tips"],
     },
@@ -166,7 +166,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Un graphique en barres Encaissements vs. décaissements par mois, avec hachures sur les mois prévisionnels et une ligne représentant le solde projeté. Une mention « Hachures = prévisionnel · ligne = solde projeté » au-dessus le rappelle.",
       "Un tableau pivot catégorie × mois : chaque cellule contient le montant réel, prévu, ou un mix des deux pour cette catégorie sur ce mois.",
       "En haut à droite : EntitySelector, ScenarioSelector (sélection ou création d'un scénario), popover Comptes consolidés (choix des comptes bancaires inclus dans le pivot), PeriodSelector au mois.",
-      "Si vous n'avez pas sélectionné de société : un message « Sélectionnez une société pour afficher le prévisionnel ».",
+      "À votre arrivée sur la page, la première société accessible est sélectionnée automatiquement (l'agrégat « Toutes les sociétés » n'est pas proposé sur le Prévisionnel : chaque société a son propre scénario indépendant).",
       "Si la société n'a aucun scénario : un message « Créez votre premier scénario dans le menu ci-dessus pour démarrer ».",
     ],
     does: [
@@ -181,7 +181,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Un scénario est lié à une société : changer de société dans l'EntitySelector ouvre l'autre jeu de scénarios. Vous ne pouvez pas comparer deux scénarios de sociétés différentes côte à côte.",
       "Si vous n'avez accès qu'à une seule société, elle est utilisée automatiquement même sans sélection explicite.",
       "Si vous changez de scénario en cours de saisie, le tiroir se referme : enregistrez avant de basculer.",
-      "Voir aussi la section Engagements pour saisir une facture précise à venir, et la section Analyse pour le runway calculé à partir du burn récent.",
+      "Voir aussi la section Engagements pour saisir une facture précise à venir, et la section Analyse pour l'autonomie de trésorerie (Runway) calculée à partir de la consommation récente (Burn rate).",
     ],
     panel: {
       summary:
@@ -456,6 +456,42 @@ export const DOC_SECTIONS: DocSectionData[] = [
     },
   },
   {
+    id: "sauvegardes",
+    title: "Sauvegardes",
+    subtitle:
+      "Supervision et déclenchement manuel des sauvegardes de l'application (réservée aux administrateurs).",
+    sees: [
+      "Quatre cartes de synthèse en haut de page : Dernier backup réussi (avec sa date relative et la taille DB + Imports), Dernier verify-restore (test de restauration), Dernier échec (vide si aucun problème récent), Espace disque (pourcentage utilisé sur le serveur, seuil d'alerte 85 %).",
+      "Un bandeau d'alerte rouge si la situation est anormale : pas de backup réussi depuis plus de 26 heures, pas de test de restauration depuis plus de 8 jours, ou plusieurs échecs récents.",
+      "Un tableau Historique listant les 50 dernières opérations : date, type (Automatique, Manuel, Pré-opération, Test restore), statut (En attente, En cours, Réussi, Vérifié, Échec), taille DB, taille Imports, date du dernier verify, résumé. Cliquez sur une ligne pour voir les détails (lignes capturées par table, chemin du fichier dump, hash SHA256, message d'erreur complet le cas échéant).",
+      "Deux boutons d'action en haut à droite : Lancer un backup (crée immédiatement une sauvegarde DB + tar des PDF importés) et Tester un restore (restaure le dernier backup dans un container Postgres jetable pour vérifier qu'il est intact).",
+      "Un accordéon Aide & dépannage en bas de page avec les questions courantes.",
+    ],
+    does: [
+      "Pour déclencher un backup manuel : cliquez sur Lancer un backup. Une ligne « En attente » apparaît dans le tableau, puis bascule sur « En cours » au bout d'environ 2 secondes, puis « Réussi » au bout de quelques secondes. La page se rafraîchit automatiquement (toutes les 3 secondes pendant qu'une opération tourne, 30 secondes sinon).",
+      "Pour tester qu'un backup est restaurable : cliquez sur Tester un restore. Le dernier backup réussi est restauré dans un container Postgres éphémère, les comptages de lignes sont vérifiés, puis le container est détruit. Aucun impact sur la production.",
+      "Pour rafraîchir manuellement la liste : cliquez sur Rafraîchir.",
+      "Pour consulter le détail d'une opération (notamment en cas d'échec) : cliquez sur la ligne correspondante du tableau.",
+    ],
+    tips: [
+      "Une seule opération à la fois est autorisée : les boutons Lancer un backup et Tester un restore sont désactivés tant qu'une opération est En attente ou En cours, pour éviter de saturer le serveur. Le tooltip indique pourquoi.",
+      "Le backup automatique tourne tous les jours à 2h du matin (heure du serveur). Le test de restauration automatique tourne tous les dimanches à 4h. Les deux sont indépendants des opérations manuelles.",
+      "Le verify-restore prouve qu'un backup est techniquement restaurable : c'est ce qui distingue Horizon d'une simple sauvegarde « espérons que ça marche ».",
+      "Les sauvegardes sont conservées localement 30 jours, avec rotation automatique des plus anciennes.",
+      "Voir aussi la section Sécurité et sauvegardes pour la stratégie globale, et le Journal d'audit pour l'historique général des modifications.",
+    ],
+    panel: {
+      summary:
+        "Supervision des sauvegardes (admins). Déclenchement manuel d'un backup ou d'un test de restauration. Une seule opération à la fois.",
+      does: [
+        "Cliquez sur Lancer un backup pour créer une sauvegarde immédiate.",
+        "Cliquez sur Tester un restore pour vérifier que le dernier backup est restaurable.",
+        "Cliquez sur une ligne du tableau pour voir les détails (notamment en cas d'échec).",
+      ],
+      hide: ["tips"],
+    },
+  },
+  {
     id: "audit",
     title: "Journal d'audit",
     subtitle:
@@ -497,11 +533,11 @@ export const DOC_SECTIONS: DocSectionData[] = [
     sees: [
       "Une politique de sauvegarde automatique : un dump complet de la base PostgreSQL est exécuté chaque nuit à 2h du matin (heure du serveur).",
       "Une rotation locale : les sauvegardes sont conservées sur le serveur avec une rotation pour limiter l'espace disque.",
-      "Une API dédiée /api/admin/backups (administrateurs uniquement) qui liste les sauvegardes disponibles avec leurs métadonnées (date, taille, statut).",
+      "Une page d'administration dédiée Sauvegardes (groupe Administration de la sidebar, réservée aux administrateurs) qui liste les sauvegardes disponibles avec leurs métadonnées (date, taille, statut, hash) et permet de déclencher manuellement un backup ou un test de restauration.",
       "Des en-têtes HTTP de sécurité renforcés appliqués par nginx : HSTS (force HTTPS), X-Frame-Options (anti-clickjacking), X-Content-Type-Options, Referrer-Policy, Permissions-Policy.",
     ],
     does: [
-      "Pour vérifier la santé des sauvegardes : un administrateur peut consulter régulièrement /api/admin/backups pour s'assurer que les snapshots récents sont présents et complets.",
+      "Pour vérifier la santé des sauvegardes : un administrateur ouvre la page Sauvegardes (groupe Administration) et lit les 4 cartes en haut. Si la dernière sauvegarde réussie a plus de 26h ou que le dernier test de restauration a plus de 8 jours, un bandeau rouge s'affiche.",
       "Pour déclencher une restauration en cas d'incident : demandez à l'administrateur technique. La restauration se fait à partir du dump le plus récent (perte maximale = activité depuis le dernier snapshot nocturne).",
       "Pour réagir à une compromission soupçonnée de votre compte : changez immédiatement votre mot de passe depuis la page Profil, puis prévenez un administrateur qui pourra forcer une invalidation des sessions actives si nécessaire.",
     ],
@@ -516,10 +552,34 @@ export const DOC_SECTIONS: DocSectionData[] = [
       summary:
         "Sauvegarde nocturne automatique de la base, en-têtes HTTP de sécurité renforcés, sessions par cookie HTTP-only.",
       does: [
-        "Vérifiez régulièrement /api/admin/backups (admin) pour la santé des snapshots.",
-        "Demandez à l'administrateur technique pour toute restauration.",
+        "Vérifiez régulièrement la page Sauvegardes (groupe Administration) pour la santé des snapshots.",
+        "Lancez un test de restore régulièrement depuis la page Sauvegardes pour vous assurer qu'un backup est exploitable.",
         "Changez votre mot de passe depuis Profil au moindre doute.",
       ],
+      hide: ["tips"],
+    },
+  },
+  {
+    id: "lexique",
+    title: "Lexique des sigles",
+    subtitle:
+      "Glossaire des termes techniques et financiers utilisés dans l'application.",
+    sees: [
+      "Cette section regroupe les sigles et acronymes que vous pouvez croiser dans l'application, classés par catégorie. Quand un sigle est utilisé dans une page, il est suivi de sa traduction française entre parenthèses (ex. « Autonomie de trésorerie (Runway) »).",
+    ],
+    does: [
+      "Termes financiers — Runway (autonomie de trésorerie) : nombre de mois pendant lesquels la société peut tenir à son rythme actuel de consommation de cash. Burn rate (consommation mensuelle) : différence moyenne entre les sorties et les entrées de cash sur la période récente. YoY (Year over Year, année sur année) : comparaison d'un indicateur entre l'année courante et la même période l'année précédente. KPI (Key Performance Indicator, indicateur clé de performance) : chiffre synthétique mesurant la santé d'un aspect de l'activité.",
+      "Concentration et risque — HHI (Herfindahl-Hirschman Index, indice de concentration de Herfindahl-Hirschman) : somme des carrés des parts de marché. Varie de 0 (parfaitement diversifié) à 10 000 (un seul acteur). Repères : moins de 1500 = concentration faible, 1500 à 2500 = modérée, plus de 2500 = forte (seuil d'alerte antitrust américain).",
+      "Identifiants bancaires — IBAN (International Bank Account Number, numéro de compte bancaire international) : identifiant standardisé d'un compte bancaire. BIC (Bank Identifier Code, code identifiant bancaire) : identifie l'établissement bancaire à l'échelle internationale. SIREN (Système d'Identification du Répertoire des Entreprises) : identifiant à 9 chiffres d'une entreprise française. SIRET (Système d'Identification du Répertoire des Établissements) : identifiant à 14 chiffres d'un établissement (SIREN + 5 chiffres NIC).",
+      "Technique — SHA256 : empreinte cryptographique de 64 caractères qui prouve qu'un fichier n'a pas été modifié. RGPD (Règlement Général sur la Protection des Données) : réglementation européenne sur la confidentialité des données personnelles. HTTP (HyperText Transfer Protocol) / HTTPS (HTTP Secure) : protocoles de communication web, le second chiffré.",
+    ],
+    tips: [
+      "Si vous croisez un terme non listé ici, signalez-le à un administrateur — il sera ajouté au lexique pour les autres utilisateurs.",
+      "Les acronymes anglais conservés (Runway, Burn rate, YoY, HHI) sont des standards de la finance d'entreprise : les rapports d'audit, les analystes financiers et les outils tiers (Agicap, Pennylane, etc.) utilisent les mêmes termes. Connaître la version anglaise vous évite d'être perdu dans ces contextes.",
+    ],
+    panel: {
+      summary:
+        "Glossaire des sigles utilisés dans l'application (financiers, bancaires, techniques).",
       hide: ["tips"],
     },
   },

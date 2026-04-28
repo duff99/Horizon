@@ -69,22 +69,6 @@ export function DocumentationPage() {
             )}
           </div>
 
-          <footer className="mt-16 border-t border-line-soft pt-6 text-[12.5px] text-muted-foreground">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>
-                Contact&nbsp;:{" "}
-                <a
-                  href="mailto:tdufr01@gmail.com"
-                  className="text-ink-2 underline underline-offset-2 hover:text-ink"
-                >
-                  tdufr01@gmail.com
-                </a>
-              </span>
-              <span className="font-mono text-[11.5px] tabular-nums text-muted-foreground/80">
-                Version plan-5d · 2026-04-23
-              </span>
-            </div>
-          </footer>
         </div>
       </div>
     </section>
