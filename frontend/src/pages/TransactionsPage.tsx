@@ -332,14 +332,30 @@ export function TransactionsPage() {
                       </td>
                       <td className="px-4 py-2.5 text-[13px]">
                         {tx.category ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-panel-2 px-2 py-0.5 text-[12px] font-medium text-ink-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!selected) setSelectedIds(new Set([tx.id]));
+                              setBulkDrawerOpen(true);
+                            }}
+                            title="Modifier la catégorie"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-panel-2 px-2 py-0.5 text-[12px] font-medium text-ink-2 transition-colors hover:border-ink-2 hover:bg-panel"
+                          >
                             <span className="h-2 w-2 rounded-sm bg-slate-400" />
                             {tx.category.name}
-                          </span>
+                          </button>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!selected) setSelectedIds(new Set([tx.id]));
+                              setBulkDrawerOpen(true);
+                            }}
+                            title="Catégoriser cette transaction"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-800 transition-colors hover:border-amber-400 hover:bg-amber-100"
+                          >
                             ⚠ Non catégorisée
-                          </span>
+                          </button>
                         )}
                       </td>
                       <td
