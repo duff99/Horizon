@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 FIXTURES = Path(__file__).parent / "fixtures" / "delubac"
 
 
-def test_list_counterparties_includes_pending(
+def test_list_counterparties_returns_imported_tiers(
     client: TestClient, auth_user_with_bank_account,
 ) -> None:
     ba = auth_user_with_bank_account["bank_account"]
@@ -16,9 +16,12 @@ def test_list_counterparties_includes_pending(
         data={"bank_account_id": str(ba.id)},
         files={"file": ("x.pdf", pdf, "application/pdf")},
     )
-    resp = client.get("/api/counterparties", params={"status": "pending"})
+    resp = client.get("/api/counterparties")
     assert resp.status_code == 200
-    assert len(resp.json()) >= 1
+    body = resp.json()
+    assert len(body) >= 1
+    assert "transaction_count" in body[0]
+    assert "volume_cumulated" in body[0]
 
 
 def test_patch_counterparty_activates_it(
@@ -31,7 +34,7 @@ def test_patch_counterparty_activates_it(
         data={"bank_account_id": str(ba.id)},
         files={"file": ("x.pdf", pdf, "application/pdf")},
     )
-    cp = client.get("/api/counterparties", params={"status": "pending"}).json()[0]
+    cp = client.get("/api/counterparties").json()[0]
     resp = client.patch(
         f"/api/counterparties/{cp['id']}",
         json={"status": "active", "name": "ACME SAS Validé"},

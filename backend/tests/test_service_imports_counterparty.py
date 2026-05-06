@@ -66,6 +66,30 @@ def test_match_creates_distinct_pending_when_fuzzy_below_threshold(db_session: S
     assert created is True
 
 
+def test_match_returns_existing_ignored_does_not_create_duplicate(
+    db_session: Session,
+) -> None:
+    """Un tiers IGNORED matchant doit être réutilisé, pas dupliqué en PENDING."""
+    e = _make_entity(db_session)
+    ignored = Counterparty(
+        entity_id=e.id, name="SPAM SARL", normalized_name="SPAM SARL",
+        status=CounterpartyStatus.IGNORED,
+    )
+    db_session.add(ignored)
+    db_session.flush()
+
+    cp, created = match_or_create_counterparty(
+        db_session, entity_id=e.id, hint="SPAM SARL"
+    )
+
+    assert cp is not None
+    assert cp.id == ignored.id
+    assert cp.status == CounterpartyStatus.IGNORED
+    assert created is False
+    all_cp = db_session.query(Counterparty).filter_by(entity_id=e.id).all()
+    assert len(all_cp) == 1
+
+
 def test_match_returns_existing_pending_not_created_flag(db_session: Session) -> None:
     """Une pending existante matchée par fuzzy ne doit PAS être comptée comme créée."""
     e = _make_entity(db_session)

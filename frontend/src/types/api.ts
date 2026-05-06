@@ -107,6 +107,29 @@ export interface Counterparty {
   status: "pending" | "active" | "ignored";
 }
 
+export interface CounterpartyWithAggregates extends Counterparty {
+  transaction_count: number;
+  volume_cumulated: number;
+  last_operation_date: string | null;
+  pending_commitment_count: number;
+}
+
+export interface MergePreview {
+  source_id: number;
+  source_name: string;
+  target_id: number;
+  target_name: string;
+  transaction_count: number;
+  forecast_entry_count: number;
+  rules: { id: number; label: string | null; category_id: number | null }[];
+  commitments: {
+    id: number;
+    direction: "in" | "out";
+    amount: number;
+    expected_date: string;
+  }[];
+}
+
 export type DashboardPeriod =
   | "current_month"
   | "previous_month"

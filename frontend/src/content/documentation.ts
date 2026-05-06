@@ -19,6 +19,20 @@
  *    (summary court + does limité aux essentiels + hide des tips si possible).
  */
 
+/**
+ * Documentation d'impact pour une action UI à effet (création, modification,
+ * suppression d'état, déclenchement de workflow). Voir CLAUDE.md → section
+ * "Documentation d'impact obligatoire".
+ */
+export type FeatureDoc = {
+  id: string;
+  title: string;
+  whatItDoes: string;
+  whatItChanges: string[];
+  whatItDoesNotChange: string[];
+  whenToUse: string[];
+};
+
 export interface DocSectionData {
   id: string;
   title: string;
@@ -325,34 +339,42 @@ export const DOC_SECTIONS: DocSectionData[] = [
   },
   {
     id: "tiers",
-    title: "Tiers",
+    title: "Clients & fournisseurs",
     subtitle:
-      "Validation des clients et fournisseurs (« tiers ») détectés automatiquement lors des imports.",
+      "Annuaire des tiers (clients, fournisseurs, salariés, organismes) détectés à partir de tes imports bancaires. Renommage, fusion de doublons, filtrage des bruits.",
     sees: [
-      "Trois onglets en haut : À valider, Actives, Ignorées (le compteur réel se voit sur l'effectif affiché).",
-      "Un tableau avec deux colonnes : Nom du tiers, et une colonne Actions à droite.",
-      "Pour les tiers À valider uniquement : deux boutons Valider (vert) et Ignorer (variant ghost).",
-      "Pour les onglets Actives et Ignorées : aucun bouton d'action en l'état actuel — la liste est en lecture seule (le statut a été figé après validation).",
-      "Si la liste est vide pour le filtre courant : un message « Aucun tiers à valider / actives / ignorées ».",
+      "Un bandeau bleuté qui rappelle l'objet de la page : « Cette page liste tous les tiers détectés à partir de tes imports bancaires. ».",
+      "En haut à droite : le sélecteur de société (EntitySelector) et un bouton Nouveau tiers.",
+      "Une barre de recherche libre et une case à cocher Inclure les tiers ignorés.",
+      "Un tableau avec sept colonnes : Nom (cliquable, ouvre la liste des transactions du tiers), Volume cumulé (somme des |montants| en EUR), # Tx (nombre de transactions), Dernière opé (date la plus récente), Engagts en cours (nombre d'engagements pending), Statut (badge Actif vert ou Ignoré ambré), Actions.",
+      "Sur chaque ligne, dans Actions : Renommer (édition inline), Fusionner… (ouvre le dialog), Ignorer ou Réactiver selon le statut courant.",
+      "Le tableau est trié par défaut par volume décroissant : les tiers à plus fort enjeu remontent en haut.",
     ],
     does: [
-      "Pour valider un nouveau tiers : ouvrez l'onglet À valider, puis cliquez sur Valider sur la ligne. Le tiers passe en Active et devient utilisable dans les règles, les engagements et les analyses de concentration.",
-      "Pour ignorer un tiers que vous ne voulez pas suivre individuellement (frais bancaires récurrents, virements internes, bruit) : cliquez sur Ignorer sur la ligne. Le tiers passe en Ignorée et n'apparaîtra plus dans les listes par défaut.",
-      "Pour filtrer par société : utilisez l'EntitySelector en haut à droite afin de ne voir que les tiers associés à une entité donnée.",
+      "Pour rechercher un tiers : tapez une fraction de nom dans la barre, le filtrage est immédiat (côté serveur, ILIKE).",
+      "Pour inclure les tiers ignorés dans la liste : cochez Inclure les tiers ignorés (par défaut décochée).",
+      "Pour ouvrir la liste des transactions d'un tiers : cliquez sur son nom (lien vers la page Transactions filtrée).",
+      "Pour renommer un tiers : cliquez sur Renommer, modifiez le nom, validez par Entrée ou cliquez ailleurs (Échap pour annuler). Le nouveau nom s'applique partout (transactions liées, engagements, règles).",
+      "Pour fusionner deux tiers : cliquez sur Fusionner… sur la ligne du tiers source. Choisissez le tiers cible dans la liste déroulante (les candidats sont les autres tiers de la même société). Une preview détaille les éléments réattachés (transactions, engagements, règles, lignes de prévisionnel). Cliquez sur Confirmer la fusion. Le tiers source est supprimé.",
+      "Pour ignorer un tiers : cliquez sur Ignorer. Une confirmation rappelle l'effet exact. Le tiers reste en base mais disparaît des sélecteurs et des prédictions de récurrence.",
+      "Pour réactiver un tiers ignoré : cochez Inclure les tiers ignorés, puis cliquez sur Réactiver sur la ligne.",
+      "Pour créer un tiers manuellement : cliquez sur Nouveau tiers, saisissez un nom, validez. Utile pour préparer un client/fournisseur avant le premier import.",
     ],
     tips: [
-      "Les nouveaux tiers apparaissent dans À valider dès le premier import qui les détecte, à condition que l'extracteur identifie un libellé suffisamment net.",
-      "Une fois validé ou ignoré, le statut d'un tiers ne se rebascule pas depuis cette page : pour un changement de statut, contactez l'administrateur (qui peut intervenir en base).",
-      "Valider un tiers ne crée pas automatiquement de règle : vous restez maître du lien tiers ↔ catégorie via la page Règles.",
-      "Voir aussi la section Imports (origine des tiers détectés) et Règles de catégorisation (utiliser un tiers comme condition).",
+      "Les tiers sont créés automatiquement à chaque import bancaire. Le matching utilise un fuzzy (token_set_ratio ≥ 90 %) sur le nom normalisé : un tiers existant est réutilisé même s'il était Ignoré (statut préservé), ce qui évite les doublons silencieux.",
+      "Fusionner est irréversible : tout est réattaché atomiquement vers la cible (47 transactions + 3 engagements + 2 règles passent en une opération), puis le tiers source est supprimé. Une entrée audit dédiée action=merge est posée dans le journal.",
+      "Ignorer ne supprime PAS les transactions liées. Elles restent visibles dans la page Transactions et comptent toujours dans le dashboard, l'analyse, les indicateurs financiers.",
+      "Le statut Actif/Ignoré n'influence ni la catégorisation par règles, ni le matching d'engagement.",
+      "Un libellé bancaire pourri non récurrent qui pollue les sélecteurs est typiquement un candidat à Ignorer. Pour un fournisseur récurrent mal nommé, préfère Renommer.",
     ],
     panel: {
       summary:
-        "Validez ou ignorez les clients/fournisseurs détectés lors des imports. Trois onglets : À valider, Actives, Ignorées.",
+        "Annuaire des tiers détectés. Renomme, fusionne les doublons, ignore les bruits. Volume / nb tx / dernière opé / engagts en cours visibles dans le tableau.",
       does: [
-        "Onglet À valider : cliquez sur Valider pour activer un tiers, ou Ignorer pour l'écarter.",
-        "Onglets Actives et Ignorées : lecture seule (les statuts y sont figés).",
-        "Filtrez par société via l'EntitySelector pour ne voir que les tiers d'une entité.",
+        "Renommer un tiers (inline, propage partout).",
+        "Fusionner deux tiers (réattache transactions, engagements, règles, prévisionnel — irréversible).",
+        "Ignorer / Réactiver (le tiers reste en base, sort/entre dans les sélecteurs).",
+        "Créer un tiers manuellement via Nouveau tiers (utile avant un premier import).",
       ],
       hide: ["tips"],
     },
