@@ -15,6 +15,9 @@ const AdminBackupsPage = lazy(() =>
 const AdminBankAccountsPage = lazy(() =>
   import('@/pages/AdminBankAccountsPage').then((m) => ({ default: m.AdminBankAccountsPage })),
 );
+const AdminCategoriesPage = lazy(() =>
+  import('@/pages/AdminCategoriesPage').then((m) => ({ default: m.AdminCategoriesPage })),
+);
 const AdminEntitiesPage = lazy(() =>
   import('@/pages/AdminEntitiesPage').then((m) => ({ default: m.AdminEntitiesPage })),
 );
@@ -184,6 +187,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <AdminBankAccountsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/administration/categories',
+        element: (
+          <LazyPage>
+            <AdminCategoriesPage />
           </LazyPage>
         ),
       },

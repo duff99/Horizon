@@ -169,6 +169,18 @@ const admin: Item[] = [
     adminOnly: true,
   },
   {
+    to: '/administration/categories',
+    label: 'Catégories',
+    icon: icon(
+      <>
+        <path d="M3 7h18" />
+        <path d="M6 12h12" />
+        <path d="M9 17h6" />
+      </>,
+    ),
+    adminOnly: true,
+  },
+  {
     to: '/administration/sauvegardes',
     label: 'Sauvegardes',
     icon: icon(
