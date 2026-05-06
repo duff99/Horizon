@@ -1,7 +1,7 @@
 """Endpoints /api/commitments : CRUD + match/unmatch/suggest."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -20,6 +20,8 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.commitment import (
     CommitmentCreate,
+    CommitmentDirectionKpis,
+    CommitmentKpis,
     CommitmentListResponse,
     CommitmentMatchRequest,
     CommitmentRead,
@@ -47,6 +49,76 @@ def _get_or_404_with_access(
         raise HTTPException(status_code=404, detail="Engagement introuvable")
     require_entity_access(session=session, user=user, entity_id=c.entity_id)
     return c
+
+
+@router.get("/aggregates", response_model=CommitmentKpis, response_model_by_alias=True)
+def aggregates(
+    entity_id: int | None = Query(default=None),
+    direction: Literal["in", "out"] | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> CommitmentKpis:
+    accessible = _accessible_entity_ids(session, user)
+    if entity_id is not None:
+        if entity_id not in accessible:
+            raise HTTPException(status_code=403, detail="Entité non accessible")
+        scope = [Commitment.entity_id == entity_id]
+    else:
+        scope = [Commitment.entity_id.in_(accessible)]
+
+    today = date.today()
+    h30 = today + timedelta(days=30)
+    phantom_cutoff = today - timedelta(days=7)
+
+    def _kpi_for(d: CommitmentDirection) -> CommitmentDirectionKpis:
+        base = and_(
+            *scope,
+            Commitment.direction == d,
+            Commitment.status == CommitmentStatus.PENDING,
+        )
+        total_30d = session.scalar(
+            select(func.coalesce(func.sum(Commitment.amount_cents), 0)).where(
+                and_(
+                    base,
+                    Commitment.expected_date >= today,
+                    Commitment.expected_date <= h30,
+                )
+            )
+        ) or 0
+        overdue_total = session.scalar(
+            select(func.coalesce(func.sum(Commitment.amount_cents), 0)).where(
+                and_(base, Commitment.expected_date < today)
+            )
+        ) or 0
+        overdue_count = session.scalar(
+            select(func.count(Commitment.id)).where(
+                and_(base, Commitment.expected_date < today)
+            )
+        ) or 0
+        phantom_count = session.scalar(
+            select(func.count(Commitment.id)).where(
+                and_(
+                    base,
+                    Commitment.matched_transaction_id.is_(None),
+                    Commitment.expected_date < phantom_cutoff,
+                )
+            )
+        ) or 0
+        return CommitmentDirectionKpis(
+            total_30d_cents=int(total_30d),
+            overdue_total_cents=int(overdue_total),
+            overdue_count=int(overdue_count),
+            phantom_count=int(phantom_count),
+        )
+
+    if direction == "in":
+        return CommitmentKpis(in_=_kpi_for(CommitmentDirection.IN))
+    if direction == "out":
+        return CommitmentKpis(out=_kpi_for(CommitmentDirection.OUT))
+    return CommitmentKpis(
+        in_=_kpi_for(CommitmentDirection.IN),
+        out=_kpi_for(CommitmentDirection.OUT),
+    )
 
 
 @router.get("", response_model=CommitmentListResponse)

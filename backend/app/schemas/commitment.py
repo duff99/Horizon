@@ -129,3 +129,19 @@ class TransactionBrief(BaseModel):
 
 class CommitmentSuggestionResponse(BaseModel):
     candidates: list[TransactionBrief]
+
+
+class CommitmentDirectionKpis(BaseModel):
+    total_30d_cents: int
+    overdue_total_cents: int
+    overdue_count: int
+    phantom_count: int
+
+
+class CommitmentKpis(BaseModel):
+    in_: CommitmentDirectionKpis | None = Field(
+        default=None, alias="in", serialization_alias="in",
+    )
+    out: CommitmentDirectionKpis | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
