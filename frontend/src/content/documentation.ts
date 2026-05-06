@@ -19,6 +19,20 @@
  *    (summary court + does limité aux essentiels + hide des tips si possible).
  */
 
+/**
+ * Documentation d'impact pour une action UI à effet (création, modification,
+ * suppression d'état, déclenchement de workflow). Voir CLAUDE.md → section
+ * "Documentation d'impact obligatoire".
+ */
+export type FeatureDoc = {
+  id: string;
+  title: string;
+  whatItDoes: string;
+  whatItChanges: string[];
+  whatItDoesNotChange: string[];
+  whenToUse: string[];
+};
+
 export interface DocSectionData {
   id: string;
   title: string;
