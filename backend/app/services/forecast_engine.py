@@ -401,6 +401,15 @@ def _evaluate_line(
     if method == ForecastLineMethod.RECURRING_FIXED:
         return int(line.amount_cents or 0)
 
+    if method == ForecastLineMethod.SINGLE_MONTH_FIXED:
+        # Montant ponctuel : appliqué uniquement au mois `start_month`
+        # (premier jour du mois). Tous les autres mois retournent 0.
+        if line.start_month is None or line.amount_cents is None:
+            return 0
+        line_month = date(line.start_month.year, line.start_month.month, 1)
+        target_month = date(month.year, month.month, 1)
+        return int(line.amount_cents) if line_month == target_month else 0
+
     if method == ForecastLineMethod.AVG_3M:
         return _avg_transactions_n_months(
             session, entity_id, line.category_id, month, 3, preloaded=preloaded

@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiError } from "@/api/client";
 import { useCategories } from "@/api/categories";
-import { useUpsertLine, useValidateFormula } from "@/api/forecastLines";
+import {
+  useDeleteLine,
+  useUpsertLine,
+  useValidateFormula,
+} from "@/api/forecastLines";
 import type {
   ForecastLine,
   ForecastMethod,
@@ -13,6 +18,12 @@ import { cn } from "@/lib/utils";
 interface Props {
   scenarioId: number;
   categoryId: number;
+  /**
+   * Mois (format "YYYY-MM") de la cellule cliquée dans le pivot. Sert de
+   * valeur initiale pour la méthode SINGLE_MONTH_FIXED — l'utilisateur
+   * vient de cliquer sur ce mois précis, on pré-remplit donc le sélecteur.
+   */
+  cellMonth?: string;
   line?: ForecastLine | null;
   onSave: () => void;
 }
@@ -28,6 +39,12 @@ const METHODS: MethodOption[] = [
     value: "RECURRING_FIXED",
     title: "Récurrent à montant fixe",
     description: "Un montant fixe qui se répète chaque mois.",
+  },
+  {
+    value: "SINGLE_MONTH_FIXED",
+    title: "Montant ponctuel — un seul mois",
+    description:
+      "Un montant fixe appliqué une seule fois sur le mois choisi (ex : encaissement client exceptionnel).",
   },
   {
     value: "AVG_3M",
@@ -67,15 +84,32 @@ const METHODS: MethodOption[] = [
   },
 ];
 
-export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
+export function MethodForm({
+  scenarioId,
+  categoryId,
+  cellMonth,
+  line,
+  onSave,
+}: Props) {
   const [method, setMethod] = useState<ForecastMethod>(
     line?.method ?? "RECURRING_FIXED",
   );
   const [amountStr, setAmountStr] = useState<string>(() => {
-    if (line?.method === "RECURRING_FIXED" && line?.amount_cents != null) {
+    if (
+      (line?.method === "RECURRING_FIXED" || line?.method === "SINGLE_MONTH_FIXED") &&
+      line?.amount_cents != null
+    ) {
       return String(line.amount_cents / 100);
     }
     return "";
+  });
+  // Mois cible pour SINGLE_MONTH_FIXED : initialisé depuis la ligne existante
+  // si elle est en single-month, sinon depuis la cellule cliquée. Format "YYYY-MM".
+  const [singleMonth, setSingleMonth] = useState<string>(() => {
+    if (line?.method === "SINGLE_MONTH_FIXED" && line.start_month) {
+      return line.start_month.slice(0, 7);
+    }
+    return cellMonth ?? "";
   });
   const [baseCategoryId, setBaseCategoryId] = useState<number | null>(
     line?.base_category_id ?? null,
@@ -95,12 +129,14 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
     | { kind: "error"; message: string }
   >({ kind: "idle" });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const categoriesQuery = useCategories();
   const categories = useMemo(() => categoriesQuery.data ?? [], [
     categoriesQuery.data,
   ]);
   const upsertMut = useUpsertLine();
+  const deleteMut = useDeleteLine();
   const validateMut = useValidateFormula();
 
   // Reset method-local state when switching methods
@@ -108,6 +144,39 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
     setFormulaStatus({ kind: "idle" });
     setSubmitError(null);
   }, [method]);
+
+  /**
+   * Normalise une saisie utilisateur en nombre. Gère :
+   *  - virgule décimale française ("10,5" → 10.5)
+   *  - séparateurs de milliers (espace fine, espace insécable, espace
+   *    standard, point comme séparateur de milliers anglo-saxon n'est PAS
+   *    supporté pour éviter les ambiguïtés avec la décimale française).
+   *  - symbole € éventuel collé au montant ("10 000 €" → 10000).
+   *
+   * Plus robuste que `parseFloat(str.replace(",", "."))` qui sautait
+   * silencieusement à NaN dès qu'un espace de milliers traînait.
+   */
+  function parseAmount(raw: string): number {
+    const cleaned = raw
+      .replace(/ /g, "") // espace insécable
+      .replace(/ /g, "") // espace fine insécable
+      .replace(/\s+/g, "") // tous les espaces classiques
+      .replace(/€/g, "")
+      .replace(",", ".");
+    return parseFloat(cleaned);
+  }
+
+  // Aperçu en clair du montant saisi pour rassurer l'utilisateur (en
+  // particulier sur SINGLE_MONTH_FIXED où une saisie acceptée à 0 ne
+  // pose aucune erreur mais ne sert à rien).
+  const previewAmount =
+    amountStr.trim().length > 0 ? parseAmount(amountStr) : NaN;
+  const previewLabel = Number.isFinite(previewAmount)
+    ? new Intl.NumberFormat("fr-FR", {
+        style: "currency",
+        currency: "EUR",
+      }).format(previewAmount)
+    : null;
 
   async function handleValidate() {
     if (!formulaExpr.trim()) return;
@@ -129,6 +198,29 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
     }
   }
 
+  async function handleDeleteConfirmed() {
+    if (!line) return;
+    setSubmitError(null);
+    try {
+      await deleteMut.mutateAsync({
+        id: line.id,
+        categoryId: line.category_id,
+        scenarioId: line.scenario_id,
+      });
+      setConfirmDeleteOpen(false);
+      onSave();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : "Erreur serveur";
+      setSubmitError(msg);
+      setConfirmDeleteOpen(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
@@ -139,12 +231,36 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
     };
     try {
       if (method === "RECURRING_FIXED") {
-        const parsed = parseFloat(amountStr.replace(",", "."));
+        const parsed = parseAmount(amountStr);
         if (!Number.isFinite(parsed)) {
-          setSubmitError("Montant invalide");
+          setSubmitError(
+            "Montant invalide. Saisissez un nombre, ex : 1500 ou -1500,50.",
+          );
           return;
         }
         payload.amount_cents = Math.round(parsed * 100);
+      } else if (method === "SINGLE_MONTH_FIXED") {
+        const parsed = parseAmount(amountStr);
+        if (!Number.isFinite(parsed)) {
+          setSubmitError(
+            "Montant invalide. Saisissez un nombre, ex : 10000 ou -10000,50.",
+          );
+          return;
+        }
+        if (parsed === 0) {
+          setSubmitError(
+            "Le montant ne peut pas être 0. Saisissez un montant positif (encaissement) ou négatif (décaissement).",
+          );
+          return;
+        }
+        if (!/^\d{4}-\d{2}$/.test(singleMonth)) {
+          setSubmitError("Choisissez un mois cible (format YYYY-MM).");
+          return;
+        }
+        payload.amount_cents = Math.round(parsed * 100);
+        // Le backend stocke en `date` ; on prend le 1er du mois.
+        payload.start_month = `${singleMonth}-01`;
+        payload.end_month = `${singleMonth}-01`;
       } else if (method === "BASED_ON_CATEGORY") {
         if (baseCategoryId == null) {
           setSubmitError("Choisissez une catégorie de référence");
@@ -222,13 +338,56 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
             Montant (€) — saisissez un négatif pour un décaissement
           </label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
             className="w-full rounded-md border border-line-soft bg-panel px-2.5 py-1.5 text-right font-mono text-[13px] tabular-nums text-ink"
-            placeholder="1500.00"
+            placeholder="1500"
           />
+          {previewLabel && (
+            <p className="text-[11px] text-muted-foreground">
+              Soit {previewLabel}.
+            </p>
+          )}
+        </div>
+      )}
+
+      {method === "SINGLE_MONTH_FIXED" && (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="block text-[11.5px] text-ink-2">
+              Montant (€) — négatif pour un décaissement
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amountStr}
+              onChange={(e) => setAmountStr(e.target.value)}
+              className="w-full rounded-md border border-line-soft bg-panel px-2.5 py-1.5 text-right font-mono text-[13px] tabular-nums text-ink"
+              placeholder="10000"
+            />
+            {previewLabel && (
+              <p className="text-[11px] text-muted-foreground">
+                Soit {previewLabel}.
+              </p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[11.5px] text-ink-2">
+              Mois d'application (un seul)
+            </label>
+            <input
+              type="month"
+              value={singleMonth}
+              onChange={(e) => setSingleMonth(e.target.value)}
+              className="w-full rounded-md border border-line-soft bg-panel px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-ink"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Le montant ne s'appliquera que sur ce mois — les autres mois
+              du pivot affichent 0.
+            </p>
+          </div>
         </div>
       )}
 
@@ -319,15 +478,45 @@ export function MethodForm({ scenarioId, categoryId, line, onSave }: Props) {
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
+        {line ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={deleteMut.isPending || upsertMut.isPending}
+            className="h-9 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+          >
+            {deleteMut.isPending ? "Suppression…" : "Supprimer la ligne"}
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button
           type="submit"
-          disabled={upsertMut.isPending}
+          disabled={upsertMut.isPending || deleteMut.isPending}
           className="h-9"
         >
           {upsertMut.isPending ? "Enregistrement…" : "Enregistrer"}
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Supprimer la ligne prévisionnelle ?"
+        description={
+          <>
+            La cellule retombera sur le calcul par défaut (souvent 0) tant
+            qu'aucune autre méthode n'est définie pour cette catégorie.
+            Cette action est irréversible.
+          </>
+        }
+        confirmLabel="Supprimer"
+        tone="danger"
+        busy={deleteMut.isPending}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </form>
   );
 }

@@ -1,5 +1,6 @@
 export type ForecastMethod =
   | "RECURRING_FIXED"
+  | "SINGLE_MONTH_FIXED"
   | "AVG_3M"
   | "AVG_6M"
   | "AVG_12M"

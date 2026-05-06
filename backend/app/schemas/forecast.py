@@ -96,6 +96,7 @@ class ForecastMethod(str, enum.Enum):
     """
 
     RECURRING_FIXED = "RECURRING_FIXED"
+    SINGLE_MONTH_FIXED = "SINGLE_MONTH_FIXED"
     AVG_3M = "AVG_3M"
     AVG_6M = "AVG_6M"
     AVG_12M = "AVG_12M"
@@ -161,6 +162,12 @@ class LineUpsert(BaseModel):
     def check_method_params(self) -> "LineUpsert":
         if self.method == ForecastMethod.RECURRING_FIXED and self.amount_cents is None:
             raise ValueError("RECURRING_FIXED requires amount_cents")
+        if self.method == ForecastMethod.SINGLE_MONTH_FIXED and (
+            self.amount_cents is None or self.start_month is None
+        ):
+            raise ValueError(
+                "SINGLE_MONTH_FIXED requires amount_cents and start_month"
+            )
         if self.method == ForecastMethod.BASED_ON_CATEGORY and (
             self.base_category_id is None or self.ratio is None
         ):

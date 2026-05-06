@@ -182,6 +182,7 @@ export function CellEditorDrawer({
             <MethodForm
               scenarioId={scenarioId}
               categoryId={categoryId}
+              cellMonth={month}
               line={currentLine}
               onSave={onClose}
             />

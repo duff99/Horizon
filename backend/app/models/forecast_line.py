@@ -24,6 +24,7 @@ from app.models.base import Base
 
 class ForecastLineMethod(str, enum.Enum):
     RECURRING_FIXED = "RECURRING_FIXED"
+    SINGLE_MONTH_FIXED = "SINGLE_MONTH_FIXED"
     AVG_3M = "AVG_3M"
     AVG_6M = "AVG_6M"
     AVG_12M = "AVG_12M"
