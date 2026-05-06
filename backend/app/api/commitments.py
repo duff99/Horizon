@@ -25,6 +25,7 @@ from app.schemas.commitment import (
     CommitmentListResponse,
     CommitmentMatchRequest,
     CommitmentRead,
+    CommitmentScoreBreakdown,
     CommitmentSuggestionResponse,
     CommitmentUpdate,
     TransactionBrief,
@@ -371,6 +372,19 @@ def suggest_matches_endpoint(
             )
         ):
             ba_map[row[0]] = row[1]
+    def _breakdown(tx: Transaction) -> CommitmentScoreBreakdown:
+        cp_match = (
+            c.counterparty_id is not None
+            and tx.counterparty_id is not None
+            and tx.counterparty_id == c.counterparty_id
+        )
+        commitment_eur = c.amount_cents / 100.0
+        return CommitmentScoreBreakdown(
+            amount_diff_eur=float(commitment_eur - float(abs(tx.amount))),
+            date_diff_days=(tx.operation_date - c.expected_date).days,
+            counterparty_match=bool(cp_match),
+        )
+
     items = [
         TransactionBrief(
             id=tx.id,
@@ -378,7 +392,9 @@ def suggest_matches_endpoint(
             label=tx.label,
             amount=tx.amount,
             bank_account_label=ba_map.get(tx.bank_account_id),
+            score=score,
+            score_breakdown=_breakdown(tx),
         )
-        for tx, _score in candidates
+        for tx, score in candidates
     ]
     return CommitmentSuggestionResponse(candidates=items)

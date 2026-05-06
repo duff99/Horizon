@@ -117,6 +117,12 @@ class CommitmentMatchRequest(BaseModel):
     transaction_id: int
 
 
+class CommitmentScoreBreakdown(BaseModel):
+    amount_diff_eur: float
+    date_diff_days: int
+    counterparty_match: bool
+
+
 class TransactionBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -125,6 +131,8 @@ class TransactionBrief(BaseModel):
     label: str
     amount: Decimal
     bank_account_label: str | None = None
+    score: int | None = None
+    score_breakdown: CommitmentScoreBreakdown | None = None
 
 
 class CommitmentSuggestionResponse(BaseModel):
