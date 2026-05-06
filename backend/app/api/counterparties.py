@@ -19,10 +19,12 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.counterparty import (
     CounterpartyCreate,
+    CounterpartyMergePreview,
     CounterpartyRead,
     CounterpartyUpdate,
     CounterpartyWithAggregates,
 )
+from app.services.counterparty_merge import build_merge_preview
 from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(prefix="/api/counterparties", tags=["counterparties"])
@@ -147,6 +149,28 @@ def create_counterparty(
     session.commit()
     session.refresh(cp)
     return CounterpartyRead.model_validate(cp)
+
+
+@router.get(
+    "/{counterparty_id}/merge-preview",
+    response_model=CounterpartyMergePreview,
+)
+def merge_preview(
+    counterparty_id: int,
+    target_id: int = Query(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> CounterpartyMergePreview:
+    src = session.get(Counterparty, counterparty_id)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Source introuvable")
+    require_entity_access(session=session, user=user, entity_id=src.entity_id)
+    try:
+        return build_merge_preview(
+            session, source_id=counterparty_id, target_id=target_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.patch("/{counterparty_id}", response_model=CounterpartyRead)
