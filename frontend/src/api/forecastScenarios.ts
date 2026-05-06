@@ -10,6 +10,12 @@ export function useScenarios(entityId: number | null | undefined) {
       return apiFetch<Scenario[]>(`/api/forecast/scenarios${q}`);
     },
     enabled: entityId != null,
+    // Scénarios : changement rare (création/renommage manuels). On
+    // coupe le refetch organique pour éviter la rafale observée toutes
+    // les 1-2 secondes sur la page Prévisionnel. Les mutations
+    // create/update/delete invalident la query explicitement.
+    staleTime: Infinity,
+    refetchOnMount: false,
   });
 }
 

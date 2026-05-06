@@ -9,6 +9,11 @@ export function useMe() {
   return useQuery({
     queryKey: ['me'],
     queryFn: getMe,
+    // L'identité utilisateur ne change pas pendant la session : pas de
+    // refetch organique. Les invalidations explicites (login/logout)
+    // restent évidemment honorées.
+    staleTime: Infinity,
+    refetchOnMount: false,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.status === 401) return false;
       return failureCount < 2;

@@ -90,5 +90,12 @@ export async function updateBankAccount(
 }
 
 export function useBankAccounts() {
-  return useQuery({ queryKey: ['bankAccounts'], queryFn: listBankAccounts });
+  return useQuery({
+    queryKey: ['bankAccounts'],
+    queryFn: listBankAccounts,
+    // Comptes bancaires : changement rare, on coupe le refetch organique
+    // (les mutations admin invalident la query). Idem entities/scenarios.
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
 }

@@ -67,5 +67,14 @@ export async function deleteEntity(id: number): Promise<void> {
 }
 
 export function useEntities() {
-  return useQuery({ queryKey: ['entities'], queryFn: listEntities });
+  return useQuery({
+    queryKey: ['entities'],
+    queryFn: listEntities,
+    // Liste des sociétés : rare changement, pas de refetch organique
+    // pour éviter les rafales de requêtes en boucle observées sur la
+    // page Prévisionnel (cf. enquête perf 2026-05-06). Les mutations
+    // CRUD entité côté admin invalident la query explicitement.
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
 }

@@ -34,6 +34,5 @@ export function usePivot(params: PivotQueryParams) {
       return apiFetch<PivotResult>(`/api/forecast/pivot?${qp.toString()}`);
     },
     enabled,
-    staleTime: 30_000,
   });
 }
