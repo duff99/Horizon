@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import status as http_status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -16,6 +18,7 @@ from app.models.counterparty import Counterparty, CounterpartyStatus
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.counterparty import (
+    CounterpartyCreate,
     CounterpartyRead,
     CounterpartyUpdate,
     CounterpartyWithAggregates,
@@ -105,6 +108,45 @@ def list_counterparties(
         )
         for r in rows
     ]
+
+
+@router.post(
+    "",
+    response_model=CounterpartyRead,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def create_counterparty(
+    payload: CounterpartyCreate,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> CounterpartyRead:
+    require_entity_access(session=session, user=user, entity_id=payload.entity_id)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nom requis")
+    from app.services.imports import _normalize_counterparty_name
+    cp = Counterparty(
+        entity_id=payload.entity_id,
+        name=name,
+        normalized_name=_normalize_counterparty_name(name),
+        status=CounterpartyStatus.ACTIVE,
+    )
+    session.add(cp)
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Un tiers avec ce nom existe déjà"
+        )
+    record_audit(
+        session, user=user, action="create", entity=cp,
+        before=None, after=to_dict_for_audit(cp), request=request,
+    )
+    session.commit()
+    session.refresh(cp)
+    return CounterpartyRead.model_validate(cp)
 
 
 @router.patch("/{counterparty_id}", response_model=CounterpartyRead)
