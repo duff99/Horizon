@@ -153,3 +153,11 @@ class CommitmentKpis(BaseModel):
     out: CommitmentDirectionKpis | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class BulkCancelRequest(BaseModel):
+    ids: list[int]
+
+
+class BulkCancelResponse(BaseModel):
+    cancelled: int

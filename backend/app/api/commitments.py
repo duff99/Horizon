@@ -19,6 +19,8 @@ from app.models.commitment import Commitment, CommitmentDirection, CommitmentSta
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.commitment import (
+    BulkCancelRequest,
+    BulkCancelResponse,
     CommitmentCreate,
     CommitmentDirectionKpis,
     CommitmentKpis,
@@ -120,6 +122,37 @@ def aggregates(
         in_=_kpi_for(CommitmentDirection.IN),
         out=_kpi_for(CommitmentDirection.OUT),
     )
+
+
+@router.post("/bulk-cancel", response_model=BulkCancelResponse)
+def bulk_cancel(
+    payload: BulkCancelRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> BulkCancelResponse:
+    if not payload.ids:
+        return BulkCancelResponse(cancelled=0)
+    accessible = set(_accessible_entity_ids(session, user))
+    rows = session.execute(
+        select(Commitment).where(Commitment.id.in_(payload.ids))
+    ).scalars().all()
+    if any(c.entity_id not in accessible for c in rows):
+        raise HTTPException(status_code=403, detail="Engagement hors périmètre")
+    cancelled = 0
+    for c in rows:
+        if c.status == CommitmentStatus.CANCELLED:
+            continue
+        before = to_dict_for_audit(c)
+        c.status = CommitmentStatus.CANCELLED
+        session.flush()
+        record_audit(
+            session, user=user, action="update", entity=c,
+            before=before, after=to_dict_for_audit(c), request=request,
+        )
+        cancelled += 1
+    session.commit()
+    return BulkCancelResponse(cancelled=cancelled)
 
 
 @router.get("", response_model=CommitmentListResponse)
