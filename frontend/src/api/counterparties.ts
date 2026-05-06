@@ -1,15 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Counterparty } from "../types/api";
+import type {
+  Counterparty,
+  CounterpartyWithAggregates,
+  MergePreview,
+} from "../types/api";
+
+export type ListParams = {
+  entityId?: number | null;
+  includeIgnored?: boolean;
+  search?: string;
+};
 
 export async function fetchCounterparties(
-  args: {
-    status?: "pending" | "active" | "ignored";
-    entityId?: number | null;
-  } = {},
-): Promise<Counterparty[]> {
+  args: ListParams = {},
+): Promise<CounterpartyWithAggregates[]> {
   const params = new URLSearchParams();
-  if (args.status) params.set("status", args.status);
   if (args.entityId != null) params.set("entity_id", String(args.entityId));
+  if (args.includeIgnored) params.set("include_ignored", "true");
+  if (args.search) params.set("search", args.search);
   const qs = params.toString() ? `?${params}` : "";
   const resp = await fetch(`/api/counterparties${qs}`, { credentials: "include" });
   if (!resp.ok) throw new Error(`GET /api/counterparties → ${resp.status}`);
@@ -30,12 +38,49 @@ export async function updateCounterparty(
   return resp.json();
 }
 
-export function useCounterparties(
-  filters: {
-    status?: "pending" | "active" | "ignored";
-    entityId?: number | null;
-  } = {},
-) {
+export async function createCounterparty(payload: {
+  entity_id: number;
+  name: string;
+}): Promise<Counterparty> {
+  const resp = await fetch(`/api/counterparties`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`POST /api/counterparties → ${resp.status} ${txt}`);
+  }
+  return resp.json();
+}
+
+export async function fetchMergePreview(
+  sourceId: number,
+  targetId: number,
+): Promise<MergePreview> {
+  const resp = await fetch(
+    `/api/counterparties/${sourceId}/merge-preview?target_id=${targetId}`,
+    { credentials: "include" },
+  );
+  if (!resp.ok) throw new Error(`merge-preview → ${resp.status}`);
+  return resp.json();
+}
+
+export async function executeMerge(
+  sourceId: number,
+  targetId: number,
+): Promise<void> {
+  const resp = await fetch(`/api/counterparties/${sourceId}/merge`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_id: targetId }),
+  });
+  if (!resp.ok) throw new Error(`merge → ${resp.status}`);
+}
+
+export function useCounterparties(filters: ListParams = {}) {
   return useQuery({
     queryKey: ["counterparties", filters],
     queryFn: () => fetchCounterparties(filters),
