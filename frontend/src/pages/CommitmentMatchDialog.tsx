@@ -9,6 +9,7 @@ import {
   type CommitmentTransactionBrief,
 } from "@/api/commitments";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Props = {
   commitmentId: number | null;
@@ -106,42 +107,68 @@ export function CommitmentMatchDialog({ commitmentId, onClose }: Props) {
             </div>
           ) : (
             <ul className="divide-y divide-line-soft rounded-md border border-line-soft bg-panel-2">
-              {candidates.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
-                >
-                  <div className="w-[84px] shrink-0 font-mono text-[12.5px] tabular-nums text-ink-2">
-                    {formatDate(tx.operation_date)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] text-ink">
-                      {tx.label}
+              {candidates.map((tx) => {
+                const isStrong = (tx.score ?? 0) >= 80;
+                return (
+                  <li
+                    key={tx.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 transition-colors",
+                      isStrong &&
+                        "border-l-2 border-emerald-500 bg-emerald-50/40",
+                    )}
+                  >
+                    <div className="w-[84px] shrink-0 font-mono text-[12.5px] tabular-nums text-ink-2">
+                      {formatDate(tx.operation_date)}
                     </div>
-                    {tx.bank_account_label && (
-                      <div className="truncate text-[11.5px] text-muted-foreground">
-                        {tx.bank_account_label}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] text-ink">
+                        {tx.label}
+                      </div>
+                      {tx.bank_account_label && (
+                        <div className="truncate text-[11.5px] text-muted-foreground">
+                          {tx.bank_account_label}
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className={
+                        "w-[96px] shrink-0 text-right font-mono text-[13px] tabular-nums " +
+                        (Number(tx.amount) < 0 ? "text-debit" : "text-credit")
+                      }
+                    >
+                      {formatAmount(tx.amount)}
+                    </div>
+                    {tx.score != null && tx.score_breakdown && (
+                      <div className="w-[180px] shrink-0 text-right">
+                        <div
+                          className={cn(
+                            "text-[12.5px] font-semibold tabular-nums",
+                            isStrong ? "text-emerald-700" : "text-ink-2",
+                          )}
+                        >
+                          Score {tx.score}
+                        </div>
+                        <div className="text-[11px] leading-tight text-muted-foreground">
+                          Montant ±{Math.abs(tx.score_breakdown.amount_diff_eur).toFixed(0)} €,
+                          date ±{Math.abs(tx.score_breakdown.date_diff_days)} j
+                          {tx.score_breakdown.counterparty_match &&
+                            " · tiers identique +20"}
+                        </div>
                       </div>
                     )}
-                  </div>
-                  <div
-                    className={
-                      "w-[110px] shrink-0 text-right font-mono text-[13px] tabular-nums " +
-                      (Number(tx.amount) < 0 ? "text-debit" : "text-credit")
-                    }
-                  >
-                    {formatAmount(tx.amount)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleLink(tx)}
-                    disabled={linkingId === tx.id}
-                    className="shrink-0 rounded-md border border-line px-2.5 py-1 text-[11.5px] text-ink-2 hover:border-ink-2 hover:text-ink disabled:opacity-60"
-                  >
-                    {linkingId === tx.id ? "Liaison…" : "Lier"}
-                  </button>
-                </li>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => handleLink(tx)}
+                      disabled={linkingId === tx.id}
+                      title="Lie cet engagement à cette transaction. L'engagement passe en 'Payé' et sort du prévisionnel."
+                      className="shrink-0 rounded-md border border-line px-2.5 py-1 text-[11.5px] text-ink-2 hover:border-ink-2 hover:text-ink disabled:opacity-60"
+                    >
+                      {linkingId === tx.id ? "Liaison…" : "Lier"}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
