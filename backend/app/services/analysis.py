@@ -94,12 +94,20 @@ def _accessible_entity_ids(session: Session, user: User) -> list[int]:
 def compute_category_drift(
     session: Session, *, entity_id: int, seuil_pct: float,
 ) -> CategoryDriftResponse:
-    """Compare chaque catégorie : mois courant vs moyenne 3 mois précédents."""
+    """Compare chaque catégorie : M-1 (dernier mois complet) vs moyenne
+    des 3 mois antérieurs (M-2, M-3, M-4).
+
+    Le mois en cours est exclu volontairement : les utilisateurs importent
+    les relevés bancaires une fois le mois terminé, donc le mois courant
+    est toujours partiellement vide et fausserait la comparaison. M-1 est
+    pris comme référence "fraîche complète" et comparé aux 3 mois précédents
+    pour repérer les dérives.
+    """
     today = date.today()
     current_first = _first_of_month(today)
-    prev1 = _add_months(current_first, -1)
-    earliest = _add_months(current_first, -3)
-    latest = _add_months(current_first, 1)  # exclusive
+    target_first = _add_months(current_first, -1)  # M-1 (mois de référence)
+    earliest = _add_months(current_first, -4)  # M-4 (borne basse incluse)
+    latest = current_first  # exclusive : on n'inclut pas le mois en cours
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     if not ba_ids:
@@ -136,8 +144,8 @@ def compute_category_drift(
         by_cat[int(cat_id)][key] = _eur_to_cents(Decimal(total))
         labels[int(cat_id)] = name
 
-    current_key = _month_key(current_first)
-    prev_keys = [_month_key(_add_months(prev1, -i)) for i in range(0, 3)]
+    current_key = _month_key(target_first)
+    prev_keys = [_month_key(_add_months(target_first, -i)) for i in range(1, 4)]
 
     out: list[CategoryDriftRow] = []
     for cat_id, months_map in by_cat.items():
@@ -186,7 +194,10 @@ def compute_category_drift_detail(
 
     today = date.today()
     current_first = _first_of_month(today)
-    next_first = _add_months(current_first, 1)
+    # On affiche les transactions de M-1 (mois de référence du widget Dérive),
+    # pas du mois en cours qui est partiellement importé.
+    target_first = _add_months(current_first, -1)
+    next_first = current_first  # borne haute exclusive = 1er du mois courant
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     cat = session.get(Category, category_id)
@@ -196,7 +207,7 @@ def compute_category_drift_detail(
         return CategoryDriftDetailResponse(
             category_id=category_id,
             category_label=label,
-            month=_month_key(current_first),
+            month=_month_key(target_first),
             total_cents=0,
             transactions=[],
         )
@@ -214,7 +225,7 @@ def compute_category_drift_detail(
             and_(
                 Transaction.bank_account_id.in_(ba_ids),
                 Transaction.category_id == category_id,
-                Transaction.operation_date >= current_first,
+                Transaction.operation_date >= target_first,
                 Transaction.operation_date < next_first,
                 Transaction.is_aggregation_parent.is_(False),
             )
@@ -237,7 +248,7 @@ def compute_category_drift_detail(
     return CategoryDriftDetailResponse(
         category_id=category_id,
         category_label=label,
-        month=_month_key(current_first),
+        month=_month_key(target_first),
         total_cents=total,
         transactions=transactions,
     )

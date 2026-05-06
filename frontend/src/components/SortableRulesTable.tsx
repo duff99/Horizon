@@ -11,6 +11,12 @@ import type { CategoryOption } from "./CategoryCombobox";
 interface Props {
   rules: Rule[];
   categories: CategoryOption[];
+  /**
+   * Liste des sociétés accessibles, pour afficher "Société : Acreed" ou
+   * "Toutes les sociétés" sur chaque règle. Si vide ou non fournie, la
+   * colonne montre l'id brut.
+   */
+  entities?: { id: number; name: string }[];
   onReorder: (reordered: Array<{ id: number; priority: number }>) => void;
   onEdit: (rule: Rule) => void;
   onDelete: (rule: Rule) => void;
@@ -29,9 +35,10 @@ function operatorLabel(op: string) {
 }
 
 function SortableRow({
-  rule, categories, onEdit, onDelete, canDelete,
+  rule, categories, entities, onEdit, onDelete, canDelete,
 }: {
   rule: Rule; categories: CategoryOption[];
+  entities?: { id: number; name: string }[];
   onEdit: (r: Rule) => void; onDelete: (r: Rule) => void; canDelete: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -42,6 +49,12 @@ function SortableRow({
     opacity: isDragging ? 0.5 : 1,
   };
   const cat = categories.find((c) => c.id === rule.category_id);
+  const scopeLabel =
+    rule.entity_id == null
+      ? "Toutes les sociétés"
+      : (entities?.find((e) => e.id === rule.entity_id)?.name ??
+          `Société #${rule.entity_id}`);
+  const isGlobal = rule.entity_id == null;
   return (
     <tr
       ref={setNodeRef}
@@ -82,9 +95,31 @@ function SortableRow({
           {cat?.name ?? `#${rule.category_id}`}
         </span>
       </td>
+      <td className="px-3 py-3 text-[12px]">
+        <span
+          className={
+            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium " +
+            (isGlobal
+              ? "bg-slate-100 text-slate-700"
+              : "bg-emerald-50 text-emerald-800")
+          }
+          title={
+            isGlobal
+              ? "Cette règle s'applique à toutes les sociétés"
+              : `Cette règle ne s'applique qu'à ${scopeLabel}`
+          }
+        >
+          {scopeLabel}
+        </span>
+      </td>
       <td className="px-3 py-3 text-right">
         <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => onEdit(rule)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onEdit(rule)}
+            title="Modifier la règle (nom, priorité, société)"
+          >
             Éditer
           </Button>
           {canDelete && !rule.is_system && (
@@ -136,6 +171,9 @@ export function SortableRulesTable(props: Props) {
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Catégorie
               </th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Société
+              </th>
               <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Actions
               </th>
@@ -148,7 +186,7 @@ export function SortableRulesTable(props: Props) {
             <tbody>
               {props.rules.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={7} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
                     Aucune règle. Cliquez sur « Nouvelle règle » pour commencer.
                   </td>
                 </tr>
@@ -158,6 +196,7 @@ export function SortableRulesTable(props: Props) {
                     key={rule.id}
                     rule={rule}
                     categories={props.categories}
+                    entities={props.entities}
                     onEdit={props.onEdit}
                     onDelete={props.onDelete}
                     canDelete={props.canDelete}

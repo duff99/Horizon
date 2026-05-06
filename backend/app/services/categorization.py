@@ -22,15 +22,22 @@ def build_rule_filter(rule: CategorizationRule) -> ColumnElement[bool]:
     clauses: list[ColumnElement[bool]] = []
 
     if rule.label_operator is not None and rule.label_value is not None:
-        pattern = rule.label_value
-        if rule.label_operator == RuleLabelOperator.CONTAINS:
-            clauses.append(Transaction.normalized_label.ilike(f"%{pattern}%"))
-        elif rule.label_operator == RuleLabelOperator.STARTS_WITH:
-            clauses.append(Transaction.normalized_label.ilike(f"{pattern}%"))
-        elif rule.label_operator == RuleLabelOperator.ENDS_WITH:
-            clauses.append(Transaction.normalized_label.ilike(f"%{pattern}"))
-        elif rule.label_operator == RuleLabelOperator.EQUALS:
-            clauses.append(Transaction.normalized_label == pattern)
+        # Multi-valeurs : "DGFIP, TVA" → match si le libellé contient l'un OU l'autre.
+        # Espaces autour des virgules ignorés ; valeurs vides ignorées ; si une seule
+        # valeur, comportement identique à l'ancien (un seul pattern).
+        patterns = [p.strip() for p in rule.label_value.split(",") if p.strip()]
+        if patterns:
+            sub_clauses: list[ColumnElement[bool]] = []
+            for pattern in patterns:
+                if rule.label_operator == RuleLabelOperator.CONTAINS:
+                    sub_clauses.append(Transaction.normalized_label.ilike(f"%{pattern}%"))
+                elif rule.label_operator == RuleLabelOperator.STARTS_WITH:
+                    sub_clauses.append(Transaction.normalized_label.ilike(f"{pattern}%"))
+                elif rule.label_operator == RuleLabelOperator.ENDS_WITH:
+                    sub_clauses.append(Transaction.normalized_label.ilike(f"%{pattern}"))
+                elif rule.label_operator == RuleLabelOperator.EQUALS:
+                    sub_clauses.append(Transaction.normalized_label == pattern)
+            clauses.append(or_(*sub_clauses) if len(sub_clauses) > 1 else sub_clauses[0])
 
     if rule.direction == RuleDirection.CREDIT:
         clauses.append(Transaction.amount > 0)
@@ -64,16 +71,21 @@ def build_rule_filter(rule: CategorizationRule) -> ColumnElement[bool]:
 def matches_transaction(rule: CategorizationRule, tx: Transaction) -> bool:
     """Évalue une règle contre une Transaction chargée (en Python, sans SQL)."""
     if rule.label_operator is not None and rule.label_value:
-        nl = tx.normalized_label or ""
-        pat = rule.label_value
-        if rule.label_operator == RuleLabelOperator.CONTAINS and pat not in nl:
-            return False
-        if rule.label_operator == RuleLabelOperator.STARTS_WITH and not nl.startswith(pat):
-            return False
-        if rule.label_operator == RuleLabelOperator.ENDS_WITH and not nl.endswith(pat):
-            return False
-        if rule.label_operator == RuleLabelOperator.EQUALS and nl != pat:
-            return False
+        nl = (tx.normalized_label or "").upper()
+        patterns = [p.strip().upper() for p in rule.label_value.split(",") if p.strip()]
+        if patterns:
+            if rule.label_operator == RuleLabelOperator.CONTAINS:
+                if not any(p in nl for p in patterns):
+                    return False
+            elif rule.label_operator == RuleLabelOperator.STARTS_WITH:
+                if not any(nl.startswith(p) for p in patterns):
+                    return False
+            elif rule.label_operator == RuleLabelOperator.ENDS_WITH:
+                if not any(nl.endswith(p) for p in patterns):
+                    return False
+            elif rule.label_operator == RuleLabelOperator.EQUALS:
+                if not any(nl == p for p in patterns):
+                    return False
 
     if rule.direction == RuleDirection.CREDIT and tx.amount <= 0:
         return False
@@ -179,11 +191,28 @@ def preview_rule(
 ) -> RulePreviewResult:
     """Compte + échantillonne les transactions que la règle matcherait,
     en excluant les MANUAL. Ne mute rien.
+
+    Si la règle est scopée à une entité (`rule.entity_id` non NULL), le
+    comptage et l'échantillon sont restreints aux comptes bancaires de
+    cette entité — sinon l'aperçu remontait des transactions d'autres
+    sociétés et donnait un nombre inexact (cf. apply_rule qui faisait déjà
+    cette restriction).
     """
+    from app.models.bank_account import BankAccount
+
     base_filter = and_(
         build_rule_filter(rule),
         Transaction.categorized_by != TransactionCategorizationSource.MANUAL,
     )
+    if rule.entity_id is not None:
+        accessible_accounts = select(BankAccount.id).where(
+            BankAccount.entity_id == rule.entity_id
+        )
+        base_filter = and_(
+            base_filter,
+            Transaction.bank_account_id.in_(accessible_accounts),
+        )
+
     count = session.execute(
         select(func.count(Transaction.id)).where(base_filter)
     ).scalar_one()

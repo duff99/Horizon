@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
@@ -44,6 +44,7 @@ export function RulesPage() {
 
   const [editing, setEditing] = useState<Rule | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const isLoading =
     rulesQuery.isLoading ||
@@ -77,6 +78,28 @@ export function RulesPage() {
 
   const systemCount = rules.filter((r) => r.is_system).length;
   const customCount = rules.length - systemCount;
+
+  // Filtre texte : matche le nom, le label_value, ou le nom de la catégorie
+  // cible. Comparaison insensible à la casse et aux accents pour que
+  // "DGFIP" trouve aussi "dgfip" et "Énergie" trouve "energie".
+  const filteredRules = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase("fr-FR");
+    if (!q) return rules;
+    const norm = (s: string) =>
+      s
+        .normalize("NFKD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLocaleLowerCase("fr-FR");
+    const needle = norm(q);
+    const catById = new Map(categories.map((c) => [c.id, c.name] as const));
+    return rules.filter((r) => {
+      if (norm(r.name).includes(needle)) return true;
+      if (r.label_value && norm(r.label_value).includes(needle)) return true;
+      const catName = catById.get(r.category_id);
+      if (catName && norm(catName).includes(needle)) return true;
+      return false;
+    });
+  }, [rules, search, categories]);
 
   return (
     <section className="space-y-6">
@@ -172,19 +195,57 @@ export function RulesPage() {
           Chargement…
         </div>
       ) : (
-        <SortableRulesTable
-          rules={rules}
-          categories={categories}
-          onReorder={(items) => reorderMut.mutate(items)}
-          onEdit={(r) => {
-            setEditing(r);
-            setDrawerOpen(true);
-          }}
-          onDelete={(r) => {
-            if (confirm(`Supprimer la règle "${r.name}" ?`)) deleteMut.mutate(r.id);
-          }}
-          canDelete={meQuery.data?.role === "admin"}
-        />
+        <div className="space-y-3">
+          <div className="relative max-w-md">
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-none absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-muted-foreground"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une règle (nom, libellé, catégorie)…"
+              className="w-full rounded-md border border-line bg-panel py-1.5 pl-9 pr-3 text-[12.5px] text-ink outline-none placeholder:text-muted-foreground focus:border-ink-2"
+            />
+            {search && (
+              <p className="mt-1 text-[11.5px] text-muted-foreground">
+                {filteredRules.length} sur {rules.length} règle
+                {rules.length > 1 ? "s" : ""} affichée
+                {filteredRules.length > 1 ? "s" : ""}.
+              </p>
+            )}
+          </div>
+          {filteredRules.length === 0 ? (
+            <div className="rounded-xl border border-line-soft bg-panel p-10 text-center text-[13px] text-muted-foreground shadow-card">
+              Aucune règle ne correspond à « {search} ».
+            </div>
+          ) : (
+            <SortableRulesTable
+              rules={filteredRules}
+              categories={categories}
+              entities={entities}
+              onReorder={(items) => reorderMut.mutate(items)}
+              onEdit={(r) => {
+                setEditing(r);
+                setDrawerOpen(true);
+              }}
+              onDelete={(r) => {
+                if (confirm(`Supprimer la règle "${r.name}" ?`)) deleteMut.mutate(r.id);
+              }}
+              canDelete={meQuery.data?.role === "admin"}
+            />
+          )}
+        </div>
       )}
     </section>
   );

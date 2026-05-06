@@ -46,6 +46,7 @@ class TransactionFilter(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     counterparty_id: int | None = None
+    category_id: int | None = None
     search: str | None = None
     uncategorized: bool | None = None
     page: int = Field(default=1, ge=1)

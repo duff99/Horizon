@@ -82,6 +82,26 @@ export function TransactionsPage() {
   const allPageIds = items.map((tx) => tx.id);
   const allSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
 
+  // Direction des transactions sélectionnées : si toutes positives → CREDIT,
+  // toutes négatives → DEBIT, mélangées → MIXED. Sert à filtrer les catégories
+  // proposées dans le drawer (un encaissement ne peut pas être décaissement).
+  // Limite : on ne calcule qu'à partir des items chargés sur la page courante ;
+  // si l'utilisateur a sélectionné des tx d'une autre page (impossible
+  // actuellement car la sélection se vide au changement de page) on retombe
+  // sur "MIXED" par sécurité.
+  const directionHint: "CREDIT" | "DEBIT" | "MIXED" | undefined = (() => {
+    if (selectedIds.size === 0) return undefined;
+    const selectedAmounts = items
+      .filter((tx) => selectedIds.has(tx.id))
+      .map((tx) => parseFloat(tx.amount));
+    if (selectedAmounts.length === 0) return undefined;
+    const hasCredit = selectedAmounts.some((a) => a > 0);
+    const hasDebit = selectedAmounts.some((a) => a < 0);
+    if (hasCredit && hasDebit) return "MIXED";
+    if (hasCredit) return "CREDIT";
+    return "DEBIT";
+  })();
+
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds(new Set());
@@ -191,25 +211,61 @@ export function TransactionsPage() {
 
       {/* Card: filters + bulk + table */}
       <div className="overflow-hidden rounded-xl border border-line-soft bg-panel shadow-card">
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-line-soft bg-panel-2 px-5 py-3">
-          <TransactionFilters value={filters} onChange={setFilters} />
-          <label
-            className={cn(
-              "ml-auto flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors",
-              filters.uncategorized
-                ? "border-ink bg-ink text-white"
-                : "border-line bg-panel text-ink-2 hover:border-ink-2",
-            )}
-          >
-            <input
-              type="checkbox"
-              className="h-3.5 w-3.5 accent-accent"
-              checked={!!filters.uncategorized}
-              onChange={(e) => handleUncategorizedChange(e.target.checked)}
+        {/* Filters : layout 2 rangées pour éviter le wrap moche du toggle
+            "Non catégorisées" sous les filtres temporels.
+            Rangée 1 : recherche (flex-1) + toggle non catégorisées (à droite).
+            Rangée 2 : période + filtre catégorie (alignés à gauche). */}
+        <div className="space-y-2 border-b border-line-soft bg-panel-2 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[240px]">
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="pointer-events-none absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-muted-foreground"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Rechercher par libellé, tiers, montant…"
+                value={filters.search ?? ""}
+                onChange={(e) =>
+                  setFilters({ ...filters, search: e.target.value || undefined, page: 1 })
+                }
+                className="w-full rounded-md border border-line bg-panel py-1.5 pl-9 pr-3 text-[12.5px] text-ink outline-none placeholder:text-muted-foreground focus:border-ink-2"
+              />
+            </div>
+            <label
+              className={cn(
+                "shrink-0 flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors",
+                filters.uncategorized
+                  ? "border-ink bg-ink text-white"
+                  : "border-line bg-panel text-ink-2 hover:border-ink-2",
+              )}
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-accent"
+                checked={!!filters.uncategorized}
+                onChange={(e) => handleUncategorizedChange(e.target.checked)}
+              />
+              Non catégorisées uniquement
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <TransactionFilters
+              value={filters}
+              onChange={setFilters}
+              categories={categories}
+              hideSearch
             />
-            Non catégorisées uniquement
-          </label>
+          </div>
         </div>
 
         {/* Mini-bandeau de sélection : visible quand 1+ sélection ; les
@@ -403,6 +459,7 @@ export function TransactionsPage() {
         onDeselectAll={() => setSelectedIds(new Set())}
         isCategorizing={bulkMut.isPending}
         suggestError={suggestError}
+        directionHint={directionHint}
       />
 
       <Drawer open={ruleDrawerOpen} onOpenChange={setRuleDrawerOpen}>

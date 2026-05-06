@@ -53,6 +53,8 @@ def list_transactions(
         conditions.append(Transaction.operation_date <= filters.date_to)
     if filters.counterparty_id:
         conditions.append(Transaction.counterparty_id == filters.counterparty_id)
+    if filters.category_id is not None:
+        conditions.append(Transaction.category_id == filters.category_id)
     if filters.search:
         like = f"%{filters.search.lower()}%"
         conditions.append(

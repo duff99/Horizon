@@ -156,13 +156,20 @@ def update_rule(
 
     data = payload.model_dump(exclude_unset=True)
 
+    # Si l'utilisateur change le scope, vérifier qu'il a accès à la nouvelle
+    # entité cible. None = global (autorisé à tout utilisateur éditeur).
+    if "entity_id" in data and data["entity_id"] is not None:
+        require_entity_access(
+            session=session, user=user, entity_id=data["entity_id"]
+        )
+
     if rule.is_system:
         struct_touched = set(data.keys()) & _STRUCTURAL_FIELDS
         if struct_touched:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "RULE_SYSTEM_MUTATE",
-                        "message": "Règle système : seuls le nom et la priorité sont modifiables"},
+                        "message": "Règle système : seuls le nom, la priorité et le scope (société) sont modifiables"},
             )
 
     before_snapshot = to_dict_for_audit(rule)

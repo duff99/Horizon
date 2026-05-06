@@ -81,6 +81,10 @@ class RuleUpdate(BaseModel):
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     priority: Optional[int] = Field(default=None, ge=1)
+    # Scope : None = toutes les sociétés (global), un id = société précise.
+    # Permet de re-router une règle existante (ex. règle initialement globale
+    # qu'on veut spécialiser sur une société donnée).
+    entity_id: Optional[int] = None
     label_operator: Optional[
         Literal["CONTAINS", "STARTS_WITH", "ENDS_WITH", "EQUALS"]
     ] = None

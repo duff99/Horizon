@@ -93,6 +93,7 @@ export interface TransactionFilter {
   date_from?: string;
   date_to?: string;
   counterparty_id?: number;
+  category_id?: number;
   search?: string;
   page?: number;
   per_page?: number;

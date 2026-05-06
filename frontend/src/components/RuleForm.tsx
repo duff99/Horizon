@@ -65,8 +65,18 @@ export function RuleForm(props: Props) {
     setPreview(resp);
   }
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(applyAfter: boolean) {
-    if (!categoryId) return;
+    if (!categoryId) {
+      setSubmitError("Sélectionnez une catégorie à appliquer avant de créer la règle.");
+      return;
+    }
+    if (!labelValue && !counterpartyId && !bankAccountId && !amountOp && direction === "ANY") {
+      setSubmitError("Définissez au moins un filtre (libellé, montant, sens, tiers ou compte).");
+      return;
+    }
+    setSubmitError(null);
     await props.onSubmit(buildPayload(), applyAfter);
   }
 
@@ -104,11 +114,11 @@ export function RuleForm(props: Props) {
         </div>
       </div>
 
-      {/* Ligne 2 : Scope + Sens côte à côte */}
+      {/* Ligne 2 : Scope (société) + Sens côte à côte */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-[12.5px] text-ink-2">
-            S'applique à
+            Société concernée
           </Label>
           <Select
             value={entityId != null ? String(entityId) : "__global__"}
@@ -117,19 +127,24 @@ export function RuleForm(props: Props) {
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="Globale" />
+              <SelectValue placeholder="Toutes les sociétés" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__global__">
-                Toutes les sociétés
+                Toutes les sociétés (règle globale)
               </SelectItem>
               {props.entities.map((e) => (
                 <SelectItem key={e.id} value={String(e.id)}>
-                  {e.name}
+                  Uniquement {e.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Choisis « Toutes les sociétés » pour une règle qui s'applique
+            partout, ou une société précise pour la limiter à ses comptes
+            bancaires.
+          </p>
         </div>
         <div className="space-y-1">
           <Label className="text-[12.5px] text-ink-2">Type d'opération</Label>
@@ -196,6 +211,15 @@ export function RuleForm(props: Props) {
         </p>
       )}
 
+      {submitError && (
+        <div
+          role="alert"
+          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900"
+        >
+          {submitError}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line-soft pt-3">
         <Button variant="ghost" type="button" onClick={props.onCancel}>
           Annuler
@@ -207,15 +231,10 @@ export function RuleForm(props: Props) {
           type="button"
           variant="outline"
           onClick={() => handleSubmit(false)}
-          disabled={!categoryId}
         >
           Créer
         </Button>
-        <Button
-          type="button"
-          onClick={() => handleSubmit(true)}
-          disabled={!categoryId}
-        >
+        <Button type="button" onClick={() => handleSubmit(true)}>
           Créer et appliquer
         </Button>
       </div>

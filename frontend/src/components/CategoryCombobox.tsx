@@ -7,14 +7,39 @@ export interface CategoryOption {
   name: string;
   slug: string;
   parent_category_id: number | null;
+  is_system?: boolean;
 }
+
+export type CategoryDirectionHint = "CREDIT" | "DEBIT" | "MIXED";
 
 interface Props {
   categories: CategoryOption[];
   value: number | null;
   onChange: (id: number | null) => void;
   placeholder?: string;
+  /**
+   * Filtre les catégories proposées selon le sens des transactions concernées :
+   * - "CREDIT" (montant > 0) : masque les racines purement décaissement.
+   * - "DEBIT" (montant < 0) : masque la racine "Encaissements".
+   * - "MIXED" ou undefined : aucune restriction.
+   * Les racines "neutres" (Flux financiers, Autres, Non catégorisées) restent
+   * toujours visibles car elles peuvent contenir les deux sens.
+   */
+  directionHint?: CategoryDirectionHint;
 }
+
+// Racines toujours visibles (peuvent contenir des credits ET des debits) :
+// flux financiers (apports/emprunts/virements), autres, non catégorisées,
+// honoraires juridiques (legacy plan 1), flux intergroupe (legacy).
+const NEUTRAL_ROOT_SLUGS = new Set([
+  "flux-financiers",
+  "autres",
+  "non-categorisees",
+  "honoraires-juridiques",
+  "flux-intergroupe",
+]);
+
+const CREDIT_ROOT_SLUGS = new Set(["encaissements"]);
 
 function buildPath(cats: CategoryOption[], id: number): string {
   const byId = new Map(cats.map((c) => [c.id, c]));
@@ -27,7 +52,13 @@ function buildPath(cats: CategoryOption[], id: number): string {
   return parts.join(" › ");
 }
 
-export function CategoryCombobox({ categories, value, onChange, placeholder }: Props) {
+export function CategoryCombobox({
+  categories,
+  value,
+  onChange,
+  placeholder,
+  directionHint,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -61,7 +92,17 @@ export function CategoryCombobox({ categories, value, onChange, placeholder }: P
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const match = (name: string) => !q || name.toLowerCase().includes(q);
-    const roots = categories.filter((c) => c.parent_category_id === null);
+    const isRootAllowed = (slug: string): boolean => {
+      if (!directionHint || directionHint === "MIXED") return true;
+      if (NEUTRAL_ROOT_SLUGS.has(slug)) return true;
+      const isCreditRoot = CREDIT_ROOT_SLUGS.has(slug);
+      if (directionHint === "CREDIT") return isCreditRoot;
+      // DEBIT : masque la racine credit-only.
+      return !isCreditRoot;
+    };
+    const roots = categories.filter(
+      (c) => c.parent_category_id === null && isRootAllowed(c.slug),
+    );
     return roots
       .map((root) => {
         const children = categories.filter((c) => c.parent_category_id === root.id);
@@ -75,7 +116,7 @@ export function CategoryCombobox({ categories, value, onChange, placeholder }: P
         };
       })
       .filter((g) => g.rootVisible);
-  }, [categories, query]);
+  }, [categories, query, directionHint]);
 
   function handleSelect(id: number) {
     onChange(id);

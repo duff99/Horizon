@@ -61,8 +61,9 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
             Dérives par catégorie
           </div>
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Mois en cours vs moyenne des 3 mois précédents · seuil ±{threshold} %
-            · cliquez une ligne pour voir les transactions concernées
+            Mois précédent (M-1, dernier mois complet) vs moyenne des 3 mois
+            antérieurs (M-2 à M-4) · seuil ±{threshold} % · cliquez une ligne
+            pour voir les transactions concernées
           </div>
         </div>
         {alertCount > 0 && (
@@ -95,10 +96,10 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
                     Catégorie
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Mois courant
+                    Mois précédent (M-1)
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Moyenne 3 m
+                    Moyenne M-2 à M-4
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Écart €

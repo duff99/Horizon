@@ -7,11 +7,22 @@
  * pointerdown qui interféraient avec la propagation des clics vers la
  * liste de transactions (re-clic checkbox bloqué, popovers internes qui
  * ne se fermaient pas). Avec un panneau plain HTML, plus aucun conflit.
+ *
+ * Rendu via `createPortal` directement dans `document.body` : le `<main>`
+ * de Layout utilise `overflow-x-clip`, que Chrome implémente en
+ * paint-containment, ce qui crée un containing block pour les descendants
+ * `position: fixed`. Sans le portail, le drawer se positionnerait par
+ * rapport au `<main>` (qui commence sous le `py-6` du wrapper) et laisserait
+ * une bande blanche en haut. En passant par `document.body` on garantit
+ * que `top:0` réfère bien au viewport.
  */
+import { createPortal } from "react-dom";
+
 import { X } from "lucide-react";
 
 import {
   CategoryCombobox,
+  type CategoryDirectionHint,
   type CategoryOption,
 } from "@/components/CategoryCombobox";
 import { Button } from "@/components/ui/button";
@@ -29,6 +40,13 @@ interface Props {
   onDeselectAll: () => void;
   isCategorizing: boolean;
   suggestError: string | null;
+  /**
+   * Sens cumulé des transactions sélectionnées (calculé depuis le signe des
+   * montants par TransactionsPage). Sert à filtrer les catégories proposées :
+   * un encaissement (montant > 0) ne peut pas tomber dans une catégorie de
+   * décaissement, et inversement.
+   */
+  directionHint?: CategoryDirectionHint;
 }
 
 export function BulkCategorizationDrawer({
@@ -43,18 +61,45 @@ export function BulkCategorizationDrawer({
   onDeselectAll,
   isCategorizing,
   suggestError,
+  directionHint,
 }: Props) {
-  return (
-    <aside
-      aria-hidden={!isOpen}
-      aria-label="Catégorisation en masse"
-      className={cn(
-        "fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[400px] flex-col border-l border-line-soft bg-panel shadow-xl",
-        "transition-transform duration-200 ease-out",
-        isOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
-      )}
-    >
-      <header className="flex items-start justify-between gap-2 border-b border-line-soft px-5 py-4">
+  const directionLabel =
+    directionHint === "CREDIT"
+      ? "Encaissements uniquement"
+      : directionHint === "DEBIT"
+        ? "Décaissements uniquement"
+        : directionHint === "MIXED"
+          ? "Sélection mixte (encaissements + décaissements)"
+          : null;
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <>
+      {/* Backdrop semi-transparent : clic = fermeture. Animé en opacité
+          pour ne pas brutaliser la transition latérale du panneau. */}
+      <div
+        aria-hidden
+        onClick={() => onOpenChange(false)}
+        className={cn(
+          "fixed inset-0 z-40 bg-black/30 transition-opacity duration-200",
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      />
+      <aside
+        aria-hidden={!isOpen}
+        aria-label="Catégorisation en masse"
+        className={cn(
+          // `inset-y-0` (top:0 + bottom:0) impose la hauteur via les bords
+          // au lieu d'un `h-dvh` calculé : pas de dépendance au support
+          // dynamic-viewport-height (Safari ancien, certaines versions
+          // Firefox), donc plus de risque que le footer se retrouve clippé
+          // sous le bord bas, ni de bande blanche au-dessus quand la
+          // hauteur n'était pas correctement résolue.
+          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[400px] flex-col border-l border-line-soft bg-panel shadow-xl",
+          "transition-transform duration-200 ease-out",
+          isOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+        )}
+      >
+        <header className="flex items-start justify-between gap-2 border-b border-line-soft px-5 py-4">
         <div>
           <div className="text-[15px] font-semibold text-ink">
             Catégoriser la sélection
@@ -87,11 +132,25 @@ export function BulkCategorizationDrawer({
             opérations sélectionnées seront mises à jour, la sélection
             vidée et le panneau fermé.
           </p>
+          {directionLabel && (
+            <p
+              className={cn(
+                "mt-1.5 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
+                directionHint === "CREDIT" &&
+                  "bg-emerald-50 text-emerald-800",
+                directionHint === "DEBIT" && "bg-rose-50 text-rose-800",
+                directionHint === "MIXED" && "bg-amber-50 text-amber-800",
+              )}
+            >
+              {directionLabel}
+            </p>
+          )}
           <div className="mt-2">
             <CategoryCombobox
               categories={categories}
               value={bulkCategoryId}
               onChange={onBulkCategoryChange}
+              directionHint={directionHint}
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -139,11 +198,13 @@ export function BulkCategorizationDrawer({
         </section>
       </div>
 
-      <footer className="border-t border-line-soft bg-panel-2/30 px-5 py-3 text-[11.5px] text-muted-foreground">
+      <footer className="shrink-0 border-t border-line-soft bg-panel-2/30 px-5 py-3 text-[11.5px] text-muted-foreground">
         Astuce : sélectionnez plusieurs opérations à la fois (case à
         cocher d'en-tête, ou Maj+clic) pour les catégoriser en une seule
         action.
       </footer>
     </aside>
+    </>,
+    document.body,
   );
 }

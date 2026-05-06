@@ -65,7 +65,7 @@ export function CategoryDriftDetailModal({
               {query.data?.category_label ?? "Détails de la dérive"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              Transactions du mois courant — triées par impact décroissant
+              Transactions du mois précédent (M-1) — triées par impact décroissant
             </p>
           </div>
           <button
@@ -94,7 +94,7 @@ export function CategoryDriftDetailModal({
             </div>
           ) : !query.data || query.data.transactions.length === 0 ? (
             <div className="py-8 text-center text-[13px] text-muted-foreground">
-              Aucune transaction sur le mois courant pour cette catégorie.
+              Aucune transaction sur le mois précédent pour cette catégorie.
             </div>
           ) : (
             <>
