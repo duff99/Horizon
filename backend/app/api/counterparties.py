@@ -24,10 +24,17 @@ from app.schemas.counterparty import (
     CounterpartyUpdate,
     CounterpartyWithAggregates,
 )
-from app.services.counterparty_merge import build_merge_preview
+from app.services.counterparty_merge import build_merge_preview, execute_merge
 from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(prefix="/api/counterparties", tags=["counterparties"])
+
+
+from pydantic import BaseModel
+
+
+class MergeRequest(BaseModel):
+    target_id: int
 
 
 @router.get("", response_model=list[CounterpartyWithAggregates])
@@ -171,6 +178,37 @@ def merge_preview(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post(
+    "/{counterparty_id}/merge",
+    status_code=http_status.HTTP_204_NO_CONTENT,
+)
+def merge_counterparty(
+    counterparty_id: int,
+    payload: MergeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> None:
+    src = session.get(Counterparty, counterparty_id)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Source introuvable")
+    require_entity_access(session=session, user=user, entity_id=src.entity_id)
+    before = to_dict_for_audit(src)
+    try:
+        execute_merge(
+            session, source_id=counterparty_id, target_id=payload.target_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    record_audit(
+        session, user=user, action="merge", entity=src,
+        before=before,
+        after={"merged_into": payload.target_id},
+        request=request,
+    )
+    session.commit()
 
 
 @router.patch("/{counterparty_id}", response_model=CounterpartyRead)

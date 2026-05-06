@@ -108,6 +108,35 @@ def test_execute_merge_rejects_cross_entity(db_session: Session) -> None:
         execute_merge(db_session, source_id=src.id, target_id=tgt.id)
 
 
+def test_api_merge_execute_endpoint(
+    client: TestClient, db_session: Session, auth_user_with_bank_account,
+) -> None:
+    ba = auth_user_with_bank_account["bank_account"]
+    e_id = ba.entity_id
+    imp = _import(db_session, ba)
+    src = Counterparty(
+        entity_id=e_id, name="A", normalized_name="A",
+        status=CounterpartyStatus.ACTIVE,
+    )
+    tgt = Counterparty(
+        entity_id=e_id, name="B", normalized_name="B",
+        status=CounterpartyStatus.ACTIVE,
+    )
+    db_session.add_all([src, tgt]); db_session.flush()
+    db_session.add(_tx(ba, imp, src.id, "dkmerge"))
+    db_session.commit()
+    src_id = src.id
+
+    resp = client.post(
+        f"/api/counterparties/{src.id}/merge",
+        json={"target_id": tgt.id},
+    )
+    assert resp.status_code == 204
+    db_session.expire_all()
+    assert db_session.get(Counterparty, src_id) is None
+    assert db_session.query(Transaction).filter_by(counterparty_id=tgt.id).count() == 1
+
+
 def test_api_merge_preview_endpoint(
     client: TestClient, db_session: Session, auth_user_with_bank_account,
 ) -> None:
