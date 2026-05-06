@@ -10,6 +10,13 @@ _test_storage = Path(tempfile.gettempdir()) / "horizon_test_imports"
 _test_storage.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("IMPORT_STORAGE_PATH", str(_test_storage))
 
+# Le TestClient utilise http://testserver, donc un cookie marqué Secure
+# n'est jamais renvoyé sur les requêtes suivantes (tous les tests d'API
+# authentifiée tombent en 401). On force secure=False pour les tests,
+# y compris quand le container backend met BACKEND_COOKIE_SECURE=true
+# dans l'environnement (cas du docker-compose.prod.yml).
+os.environ["BACKEND_COOKIE_SECURE"] = "false"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -17,6 +24,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+
 from app.db import get_db
 from app.main import app
 from app.models import Base
