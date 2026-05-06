@@ -60,7 +60,7 @@ export function HelpButton() {
         aria-expanded={isOpen}
         aria-label={`Aide sur cette page (${section.title})`}
         className={cn(
-          "fixed right-6 top-6 z-40 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5",
+          "fixed right-6 top-6 z-30 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5",
           "border border-line-soft bg-panel text-[12.5px] font-medium text-ink-2 shadow-card",
           "transition-colors hover:bg-panel-2 hover:text-ink",
         )}

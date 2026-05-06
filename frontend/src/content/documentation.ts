@@ -50,7 +50,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Se connecter, choisir sa société, comprendre la barre latérale et les sélecteurs d'en-tête.",
     sees: [
       "Un écran de connexion à l'adresse /connexion : champ Email, champ Mot de passe, bouton Se connecter, et le logo « horizon ».",
-      "Une barre latérale sombre à gauche, organisée en trois groupes : Pilotage (Tableau de bord, Analyse, Prévisionnel, Transactions, Imports), Configuration (Engagements, Tiers, Règles), Administration (Utilisateurs, Sociétés, Comptes bancaires, Journal d'audit).",
+      "Une barre latérale sombre à gauche, organisée en trois groupes : Pilotage (Tableau de bord, Analyse, Prévisionnel, Transactions, Imports), Configuration (Engagements, Tiers, Règles), Administration (Utilisateurs, Sociétés, Comptes bancaires, Catégories, Sauvegardes, Journal d'audit).",
       "En haut à droite de la plupart des pages : un sélecteur de société (EntitySelector), souvent suivi d'un sélecteur de période (PeriodSelector).",
       "En haut à droite de chaque page de l'application, un bouton « Aide » avec une icône point d'interrogation, qui ouvre un panneau latéral contextuel décrivant la page courante.",
       "En bas de la sidebar : votre avatar (vos initiales), votre nom et votre rôle (Administrateur ou Lecture), et une icône de déconnexion à droite.",
@@ -128,7 +128,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Autonomie de trésorerie (Runway) : nombre de mois pendant lesquels la société peut tenir si elle continue à dépenser au rythme actuel. Phrase d'interprétation contextuelle (Stable / Vigilance / Critique), consommation mensuelle (Burn rate), trésorerie disponible aujourd'hui, courbe projetée sur 6 mois.",
       "Besoin en fonds de roulement (BFR) : trois métriques combinées — DSO (délai moyen de paiement client), DPO (délai moyen de paiement fournisseur), BFR (créances clients à encaisser moins dettes fournisseurs à payer). Le widget reste vide tant qu'aucun engagement n'a été saisi sur la page Engagements.",
       "Précision du prévisionnel : tableau des 6 derniers mois comparant le prévu (saisi sur la page Prévisionnel) au réalisé (transactions importées). L'écart est coloré (vert si fiable, ambre si attention, rouge si écart fort). Ce widget reste vide tant qu'aucune prévision n'a été saisie.",
-      "Dérives par catégorie : tableau qui compare le mois courant à la moyenne des trois derniers mois. Un badge « Dérive » apparaît au-delà de 20 % d'écart. Cliquez sur une ligne pour voir précisément les transactions du mois qui expliquent l'écart.",
+      "Dérives par catégorie : tableau qui compare le mois précédent (M-1, dernier mois complet) à la moyenne des trois mois antérieurs (M-2 à M-4). Le mois en cours est volontairement exclu, car les relevés bancaires sont importés une fois le mois terminé : son inclusion fausserait la comparaison. Un badge « Dérive » apparaît au-delà de 20 % d'écart. Cliquez sur une ligne pour voir les transactions de M-1 qui expliquent l'écart.",
       "Top mouvements : catégories en plus forte hausse et plus forte baisse sur les trois derniers mois, avec une mini-courbe (sparkline) pour visualiser la trajectoire. Les libellés longs sont affichés en entier (passez la souris pour le tooltip).",
       "Concentration clients : part du top 5 dans le chiffre d'affaires, indice HHI (Herfindahl-Hirschman, mesure standard de la concentration) et niveau de risque (faible, moyen, élevé).",
       "Comparaison année sur année (YoY) : graphique des revenus et dépenses mois par mois, comparés à l'année précédente.",
@@ -154,7 +154,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
         "Indicateurs clés (par société, sélection auto de la 1ère accessible) : autonomie (Runway), BFR (DSO/DPO), précision du prévisionnel, dérives par catégorie avec drill-down, top mouvements, concentration clients, YoY, comparaison entre sociétés.",
       does: [
         "Choisissez la société analysée dans l'EntitySelector (la première accessible est pré-sélectionnée).",
-        "Cliquez une ligne du tableau Dérives pour voir les transactions du mois qui l'expliquent.",
+        "Cliquez une ligne du tableau Dérives pour voir les transactions de M-1 qui l'expliquent.",
         "Surveillez Autonomie (Runway, rouge < 6 mois), BFR (DSO élevé = clients lents), et la Précision du prévisionnel (écart > 20 % = forecast à revoir).",
       ],
       hide: ["tips"],
@@ -175,9 +175,10 @@ export const DOC_SECTIONS: DocSectionData[] = [
     does: [
       "Pour comparer plusieurs hypothèses : créez plusieurs scénarios (référence, optimiste, pessimiste, etc.) via le ScenarioSelector et basculez de l'un à l'autre.",
       "Pour limiter le pivot à certains comptes bancaires : ouvrez la popover Comptes consolidés et cochez/décochez les comptes voulus.",
-      "Pour saisir une entrée prévisionnelle (montant, date, récurrence simple) : cliquez sur n'importe quelle cellule du pivot. Le tiroir d'édition s'ouvre à droite, pré-rempli sur le mois et la catégorie cliqués.",
+      "Pour saisir une entrée prévisionnelle : cliquez sur n'importe quelle cellule du pivot. Le tiroir d'édition s'ouvre à droite, pré-rempli sur le mois et la catégorie cliqués. Choisissez la méthode de calcul : Récurrent à montant fixe (un montant qui se répète chaque mois), Montant ponctuel — un seul mois (un montant fixe qui ne s'applique qu'au mois choisi, ex : encaissement client exceptionnel en juillet), Moyenne 3/6/12 mois, Mois précédent, Même mois l'année précédente, Basé sur une autre catégorie (% d'une catégorie tierce), ou Formule personnalisée.",
       "Pour ajuster la fenêtre temporelle : utilisez le PeriodSelector en haut à droite, en granularité mois (presets : 12 m, Année, Mois-1, Perso.).",
       "Pour fermer le tiroir d'édition sans enregistrer : cliquez en dehors ou utilisez le bouton Annuler du tiroir.",
+      "Pour supprimer une entrée prévisionnelle existante : ouvrez le tiroir sur la cellule concernée (la ligne actuelle est pré-chargée), puis cliquez sur Supprimer la ligne en bas à gauche du formulaire. Une confirmation est demandée. La cellule retombera sur le calcul par défaut (souvent 0) tant qu'aucune autre méthode n'est définie pour cette catégorie.",
     ],
     tips: [
       "Les mois passés du pivot sont remplis à partir des transactions réelles ; les mois futurs combinent les engagements existants et les saisies prévisionnelles manuelles.",
@@ -205,7 +206,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Liste paginée et filtrable de toutes les opérations bancaires importées.",
     sees: [
       "Un en-tête avec le nombre total d'opérations et, si applicable, le nombre de non catégorisées sur la page courante.",
-      "Une barre de filtres : un champ de recherche plein texte (placeholder « Rechercher par libellé, tiers, montant... »), un PeriodSelector, et à droite un toggle « Non catégorisées uniquement ».",
+      "Une barre de filtres : un champ de recherche plein texte (placeholder « Rechercher par libellé, tiers, montant... »), un PeriodSelector, un filtre par catégorie (combobox arborescente avec bouton croix pour le retirer), et à droite un toggle « Non catégorisées uniquement ».",
       "Un tableau avec : case à cocher, date, société (uniquement en vue consolidée), Tiers / Libellé (le tiers s'il est connu, sinon le libellé brut), Catégorie (badge gris si catégorisée, badge orange « Non catégorisée » sinon), Montant (vert avec « + » pour les crédits, rouge pour les débits).",
       "Une case à cocher en en-tête pour tout sélectionner sur la page.",
       "Quand vous cochez une ou plusieurs opérations, deux choses apparaissent : un mini-bandeau vert juste sous les filtres (« N opération(s) sélectionnée(s) · Désélectionner ») et un panneau latéral droit qui s'ouvre automatiquement avec les actions de catégorisation. Vous gardez votre position dans la liste pendant que vous agissez (plus besoin de remonter en haut de la page).",
@@ -218,13 +219,15 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour vider la sélection sans agir : cliquez sur Désélectionner (visible dans le mini-bandeau vert ou dans le panneau).",
       "Si vous fermez le panneau de catégorisation avec une sélection encore active, un bouton Rouvrir le panneau apparaît dans le mini-bandeau vert pour le ré-afficher.",
       "Pour ne voir que les opérations à traiter : activez le toggle « Non catégorisées uniquement ». Toggle désactivé = liste complète.",
+      "Pour isoler une catégorie : choisissez-la dans le filtre catégorie de la barre. Cliquez sur la croix à droite pour retirer le filtre. Pratique pour vérifier d'un coup toutes les opérations d'une catégorie (ex. : toutes les TVA, toute la masse salariale).",
       "Pour naviguer rapidement dans la liste : la barre de pagination en bas du tableau propose plusieurs raccourcis. Cliquez directement sur un numéro de page, ou utilisez « (début), ‹ (précédente), › (suivante), » (fin). Au-delà de 5 pages, le champ Aller à : permet de sauter à une page précise (validez avec Entrée).",
       "Pour afficher plus de transactions par écran : changez le sélecteur Lignes : (25 / 50 / 100 / 200) dans la barre de pagination. À 200, vous parcourez plus vite un gros volume sans recharger.",
     ],
     tips: [
       "Les opérations agrégées (lignes parents qui regroupent plusieurs sous-écritures) apparaissent sur fond gris plus dense pour les distinguer des lignes unitaires.",
       "Une opération sans catégorie porte un badge ambre « Non catégorisée » très visible : c'est ce qui alimente le KPI du Tableau de bord.",
-      "Le panneau latéral de catégorisation ne s'affiche que s'il y a au moins une sélection. Le bouton Catégoriser y reste désactivé tant qu'aucune catégorie n'a été choisie.",
+      "Le panneau latéral de catégorisation ne s'affiche que s'il y a au moins une sélection. Le bouton Appliquer y reste désactivé tant qu'aucune catégorie n'a été choisie.",
+      "La combobox catégorie du panneau s'adapte automatiquement au sens des opérations sélectionnées : si toutes ont un montant positif (encaissements), seules les sous-catégories d'« Encaissements » et les racines neutres (Flux financiers, Autres, Non catégorisées) sont proposées. Si toutes sont négatives (décaissements), la racine « Encaissements » est masquée. En cas de sélection mixte, toutes les catégories restent disponibles. Un badge en haut du panneau (Encaissements uniquement / Décaissements uniquement / Sélection mixte) rappelle ce filtrage.",
       "Si Suggérer une règle échoue (ex. : libellés trop hétérogènes), un message rouge s'affiche dans le panneau : ajustez la sélection puis recommencez.",
       "Les filtres et la pagination se réinitialisent à la page 1 dès que vous changez un filtre, pour éviter d'afficher une page vide.",
       "Voir aussi la section Règles de catégorisation pour automatiser durablement le travail de catégorisation, et la section Imports pour comprendre d'où viennent ces opérations.",
@@ -368,7 +371,8 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     does: [
       "Pour créer une règle : cliquez sur Nouvelle règle. Un tiroir s'ouvre avec : Nom, Priorité (par défaut 5000), Scope (Globale ou société précise), Filtre libellé (opérateur contient / commence par / finit par / égal à + valeur), Sens (Tous / Crédits uniquement / Débits uniquement), Catégorie cible.",
-      "Pour tester une règle avant de la créer : cliquez sur Aperçu dans le tiroir pour voir combien de transactions existantes seraient capturées.",
+      "Pour tester une règle avant de la créer : cliquez sur Aperçu dans le tiroir. Un tableau s'affiche avec les transactions concrètes qui seraient capturées (date, libellé complet, montant signé en couleur), trié par date décroissante, limité aux 20 plus récentes si la règle matche plus.",
+      "Pour cibler plusieurs libellés différents avec une seule règle : séparez-les par une virgule dans le champ valeur du filtre libellé. Exemple : « DGFIP, TVA » avec l'opérateur contient → la règle matche si le libellé contient l'un OU l'autre. Pratique pour regrouper les variantes d'un même flux (ex. : « URSSAF, RECOUV URSSAF »).",
       "Pour appliquer immédiatement une règle nouvellement créée à l'historique : cliquez sur Créer et appliquer (au lieu de Créer simple). Sinon la règle ne joue qu'à partir des prochains imports et des prochaines actions.",
       "Pour réordonner les règles : glissez-déposez une ligne. Les règles sont évaluées de haut en bas, la première qui matche gagne.",
       "Pour modifier une règle existante : cliquez sur Modifier sur la ligne. Le même tiroir s'ouvre, pré-rempli.",
@@ -377,7 +381,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     tips: [
       "Depuis la page Transactions, sélectionnez plusieurs opérations puis Suggérer une règle : Horizon vous pré-remplit le formulaire (libellé commun, sens, compte, catégorie déjà choisie le cas échéant).",
       "Les règles système ne sont ni modifiables ni supprimables. Elles assurent les catégorisations de base (frais bancaires, cotisations, virements internes) et garantissent une couverture minimale même sans configuration.",
-      "Les opérateurs de libellé disponibles sont contient, commence par, finit par, égal à. Il n'y a pas d'opérateur regex (expression régulière) : pour des cas complexes, créez plusieurs règles plus simples.",
+      "Les opérateurs de libellé disponibles sont contient, commence par, finit par, égal à. Il n'y a pas d'opérateur regex (expression régulière) : pour des cas complexes, séparez plusieurs valeurs par une virgule dans le champ (matching en OU) ou créez plusieurs règles plus simples.",
       "La priorité numérique sert uniquement à trancher entre plusieurs règles qui matchent en même temps : plus le nombre est petit, plus la règle passe en premier dans l'ordre d'évaluation. L'ordre visible dans le tableau reflète déjà cet ordre d'évaluation.",
       "Le scope « Globale » s'applique à toutes les sociétés ; un scope société restreint l'évaluation aux opérations de cette société uniquement.",
       "Voir aussi la section Transactions (origine des règles via Suggérer une règle) et la section Tiers (un tiers validé peut servir de condition).",
@@ -418,6 +422,35 @@ export const DOC_SECTIONS: DocSectionData[] = [
     panel: {
       summary:
         "Informations du compte (email, nom, rôle) en lecture seule, et changement du mot de passe (12 caractères minimum).",
+      hide: ["tips"],
+    },
+  },
+  {
+    id: "administration-categories",
+    title: "Catégories (administration)",
+    subtitle:
+      "Gestion des sous-catégories utilisateur (réservée aux administrateurs).",
+    sees: [
+      "Une page (/administration/categories) qui liste toutes les racines (Encaissements, Personnel, Charges externes, etc.) et leurs sous-catégories. Chaque section racine a un bouton « Ajouter une sous-catégorie » à droite.",
+      "Pour chaque sous-catégorie : son nom, un badge « Système » si elle a été seedée par les migrations Horizon (lecture seule), ou des boutons Renommer / Supprimer si c'est une catégorie utilisateur.",
+    ],
+    does: [
+      "Pour ajouter une sous-catégorie sous une racine (ex : « SolarFacility » sous Charges externes) : cliquez sur Ajouter une sous-catégorie dans la section voulue, saisissez le nom, validez. La sous-catégorie est immédiatement disponible dans toutes les comboboxes catégorie de l'app (Transactions, Règles, Prévisionnel).",
+      "Pour renommer une sous-catégorie utilisateur : cliquez sur Renommer, modifiez le nom, validez. Les transactions et règles déjà rattachées suivent automatiquement.",
+      "Pour supprimer une sous-catégorie utilisateur : cliquez sur Supprimer. Une première confirmation est demandée. Si la catégorie est encore référencée par des transactions ou des règles, une seconde confirmation propose de les déplacer automatiquement vers la catégorie parente puis de supprimer (ex : supprimer « SolarFacility » sous « Charges externes » reclasse les transactions concernées en « Charges externes »). La suppression reste refusée tant que la catégorie a elle-même des sous-catégories : supprimez d'abord celles-ci.",
+    ],
+    tips: [
+      "Les catégories système (badge « Système ») ne peuvent ni être renommées ni supprimées : elles servent de socle stable et sont liées à des règles seed. En revanche, vous pouvez créer autant de sous-catégories utilisateur que nécessaire sous une racine système.",
+      "On ne crée que des sous-catégories : les racines sont figées par les seeds. Si vous avez besoin d'une nouvelle racine, c'est une demande au support technique.",
+      "Quand vous supprimez une sous-catégorie utilisée, le déplacement vers le parent se fait en une seule transaction SQL : aucun état intermédiaire ne laisse une transaction « orpheline ». Les sous-catégories enfants restent bloquantes (refus de suppression) pour vous forcer à supprimer l'arborescence du bas vers le haut, ce qui évite d'aplatir silencieusement la hiérarchie.",
+    ],
+    panel: {
+      summary:
+        "Création / renommage / suppression des sous-catégories utilisateur (admins uniquement). Les catégories système sont en lecture seule.",
+      does: [
+        "Cliquez Ajouter une sous-catégorie dans la racine voulue, saisissez le nom, validez.",
+        "Cliquez Renommer ou Supprimer sur une sous-catégorie utilisateur.",
+      ],
       hide: ["tips"],
     },
   },
@@ -576,6 +609,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Termes financiers — Runway (autonomie de trésorerie) : nombre de mois pendant lesquels la société peut tenir à son rythme actuel de consommation de cash. Burn rate (consommation mensuelle) : différence moyenne entre les sorties et les entrées de cash sur la période récente. YoY (Year over Year, année sur année) : comparaison d'un indicateur entre l'année courante et la même période l'année précédente. KPI (Key Performance Indicator, indicateur clé de performance) : chiffre synthétique mesurant la santé d'un aspect de l'activité.",
       "Concentration et risque — HHI (Herfindahl-Hirschman Index, indice de concentration de Herfindahl-Hirschman) : somme des carrés des parts de marché. Varie de 0 (parfaitement diversifié) à 10 000 (un seul acteur). Repères : moins de 1500 = concentration faible, 1500 à 2500 = modérée, plus de 2500 = forte (seuil d'alerte antitrust américain).",
       "Identifiants bancaires — IBAN (International Bank Account Number, numéro de compte bancaire international) : identifiant standardisé d'un compte bancaire. BIC (Bank Identifier Code, code identifiant bancaire) : identifie l'établissement bancaire à l'échelle internationale. SIREN (Système d'Identification du Répertoire des Entreprises) : identifiant à 9 chiffres d'une entreprise française. SIRET (Système d'Identification du Répertoire des Établissements) : identifiant à 14 chiffres d'un établissement (SIREN + 5 chiffres NIC).",
+      "Fiscal et social — DGFIP (Direction Générale des Finances Publiques) : administration fiscale française qui collecte les impôts (TVA, IS, taxes) et le prélèvement à la source. URSSAF (Union de Recouvrement des cotisations de Sécurité Sociale et d'Allocations Familiales) : collecte les cotisations sociales sur les salaires. PAS (Prélèvement À la Source) : retenue d'impôt sur le revenu opérée par l'employeur sur les salaires des employés et reversée à la DGFIP — apparaît dans les libellés bancaires sous la forme PAS-DSN ou IMPOT-PAS-DSN. DSN (Déclaration Sociale Nominative) : déclaration mensuelle unifiée des cotisations sociales et fiscales. IS (Impôt sur les Sociétés) : impôt sur les bénéfices des entreprises. TVA (Taxe sur la Valeur Ajoutée) : taxe sur la consommation collectée puis reversée à la DGFIP. CFE/CVAE (Cotisation Foncière des Entreprises / Cotisation sur la Valeur Ajoutée des Entreprises) : composantes de la contribution économique territoriale.",
       "Technique — SHA256 : empreinte cryptographique de 64 caractères qui prouve qu'un fichier n'a pas été modifié. RGPD (Règlement Général sur la Protection des Données) : réglementation européenne sur la confidentialité des données personnelles. HTTP (HyperText Transfer Protocol) / HTTPS (HTTP Secure) : protocoles de communication web, le second chiffré.",
     ],
     tips: [
