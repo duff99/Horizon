@@ -4,6 +4,24 @@ import { apiFetch } from "./client";
 export type CommitmentStatus = "pending" | "paid" | "cancelled";
 export type CommitmentDirection = "in" | "out";
 
+export interface CommitmentDirectionKpis {
+  total_30d_cents: number;
+  overdue_total_cents: number;
+  overdue_count: number;
+  phantom_count: number;
+}
+
+export interface CommitmentKpis {
+  in?: CommitmentDirectionKpis;
+  out?: CommitmentDirectionKpis;
+}
+
+export interface CommitmentScoreBreakdown {
+  amount_diff_eur: number;
+  date_diff_days: number;
+  counterparty_match: boolean;
+}
+
 export interface Commitment {
   id: number;
   entity_id: number;
@@ -67,6 +85,8 @@ export interface CommitmentTransactionBrief {
   label: string;
   amount: string;
   bank_account_label: string | null;
+  score: number | null;
+  score_breakdown: CommitmentScoreBreakdown | null;
 }
 
 export interface CommitmentSuggestionResponse {
@@ -177,6 +197,43 @@ export function useUnmatchCommitment() {
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ["commitments"] });
       qc.invalidateQueries({ queryKey: ["commitment", id] });
+    },
+  });
+}
+
+export async function fetchCommitmentKpis(
+  args: { entityId?: number | null; direction?: "in" | "out" } = {},
+): Promise<CommitmentKpis> {
+  const p = new URLSearchParams();
+  if (args.entityId != null) p.set("entity_id", String(args.entityId));
+  if (args.direction) p.set("direction", args.direction);
+  const qs = p.toString() ? `?${p}` : "";
+  return apiFetch<CommitmentKpis>(`/api/commitments/aggregates${qs}`);
+}
+
+export function useCommitmentKpis(
+  args: { entityId?: number | null; direction?: "in" | "out" },
+) {
+  return useQuery({
+    queryKey: ["commitment-kpis", args],
+    queryFn: () => fetchCommitmentKpis(args),
+  });
+}
+
+export async function bulkCancelCommitments(ids: number[]): Promise<{ cancelled: number }> {
+  return apiFetch<{ cancelled: number }>("/api/commitments/bulk-cancel", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export function useBulkCancelCommitments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: bulkCancelCommitments,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["commitments"] });
+      qc.invalidateQueries({ queryKey: ["commitment-kpis"] });
     },
   });
 }
