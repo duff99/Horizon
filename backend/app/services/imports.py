@@ -119,7 +119,9 @@ def match_or_create_counterparty(
 
     - (None, False) si hint est vide.
     - (existing, False) si match fuzzy >= 90 % (token_set_ratio) sur
-      `normalized_name` des contreparties de l'entité (statut != ignored).
+      `normalized_name` parmi TOUTES les contreparties de l'entité, y
+      compris les IGNORED. Un match sur IGNORED retourne le tiers tel
+      quel (statut préservé, pas de réactivation).
     - (new, True) si aucune correspondance : création auto en statut `pending`.
 
     Le flag `was_created` permet au caller de compter uniquement les vraies
@@ -134,7 +136,6 @@ def match_or_create_counterparty(
     existing = session.execute(
         select(Counterparty).where(
             Counterparty.entity_id == entity_id,
-            Counterparty.status != CounterpartyStatus.IGNORED,
         )
     ).scalars().all()
 
