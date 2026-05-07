@@ -1031,6 +1031,29 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     ],
   },
   // ---------------------------------------------------------------------------
+  // G4 — Anomalies p95 par catégorie
+  // ---------------------------------------------------------------------------
+  {
+    id: "anomaly-detection",
+    title: "Détection des transactions inhabituelles (p95)",
+    whatItDoes:
+      "Identifie automatiquement les transactions dont le montant absolu dépasse le 95e percentile historique de leur catégorie sur les 180 derniers jours. Le résultat est une liste des transactions des 30 derniers jours qui sont statistiquement inhabituelles, triées par ratio décroissant (les plus inhabituelles en premier).",
+    whatItChanges: [
+      "Affiche une carte Transactions inhabituelles sur la page Analyse, avec la liste des transactions anormales : date, libellé, catégorie, montant, et le ratio (ex : x 2.3 signifie 2.3 fois le p95 de la catégorie).",
+      "Un compteur de badge indique le nombre total d'anomalies détectées.",
+    ],
+    whatItDoesNotChange: [
+      "Les transactions elles-mêmes ne sont pas modifiées, recatégorisées ou marquées en base.",
+      "Le calcul est en lecture seule : aucun enregistrement n'est créé lors de l'affichage.",
+      "Les catégories ayant moins de 5 transactions sur la fenêtre d'analyse sont exclues du calcul (p95 non fiable sur un petit échantillon).",
+    ],
+    whenToUse: [
+      "Pour repérer rapidement une dépense exceptionnelle oubliée (facture mal imputée, paiement en double, erreur de virement).",
+      "Pour préparer une revue mensuelle des dépenses inhabituelles sans trier manuellement les transactions.",
+      "Pour détecter des frais récurrents qui auraient subi une hausse silencieuse (abonnement, loyer, prestataire).",
+    ],
+  },
+  // ---------------------------------------------------------------------------
   // G12 — Snooze/acquittement de dérive
   // ---------------------------------------------------------------------------
   {

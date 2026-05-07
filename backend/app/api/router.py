@@ -5,6 +5,7 @@ from app.api import (
     admin_backups,
     admin_client_errors,
     analysis,
+    anomaly,
     auth,
     bank_accounts,
     bootstrap,
@@ -64,4 +65,5 @@ api_router.include_router(client_errors.router)
 api_router.include_router(admin_client_errors.router)
 api_router.include_router(treasury.router)
 api_router.include_router(drift_acks.router)
+api_router.include_router(anomaly.router)
 # Note : admin_backups inclut aussi /disk et /trigger (mêmes prefix /api/admin/backups)

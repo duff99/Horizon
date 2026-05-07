@@ -15,6 +15,7 @@ import { todayISO } from "@/api/exports";
 import { useEntities } from "@/api/entities";
 import { EntitySelector } from "@/components/EntitySelector";
 import { ExportButton } from "@/components/ExportButton";
+import { AnomalyCard } from "@/components/analyse/AnomalyCard";
 import { CategoryDriftTable } from "@/components/analyse/CategoryDriftTable";
 import { ClientConcentrationCard } from "@/components/analyse/ClientConcentrationCard";
 import { EntitiesComparisonTable } from "@/components/analyse/EntitiesComparisonTable";
@@ -96,6 +97,10 @@ export function AnalysePage() {
               />
             </div>
           )}
+        </div>
+        {/* Ligne 3 : anomalies p95 */}
+        <div className="col-span-12">
+          <AnomalyCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12 md:col-span-6">
           <TopMoversCard entityId={entityId ?? undefined} />
