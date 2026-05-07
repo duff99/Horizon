@@ -1,11 +1,12 @@
 """Endpoints /api/imports."""
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, time
 
 import magic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -50,6 +51,21 @@ async def create_import(
     if mime != "application/pdf":
         raise HTTPException(
             status_code=400, detail=f"Fichier non PDF (type détecté : {mime})"
+        )
+
+    # Idempotence : si un ImportRecord pour ce (bank_account, sha256) existe déjà,
+    # retourner l'existant en 200 (pas 201) sans réinsérer les transactions.
+    sha256 = hashlib.sha256(content).hexdigest()
+    existing = session.execute(
+        select(ImportRecord).where(
+            ImportRecord.bank_account_id == bank_account_id,
+            ImportRecord.file_sha256 == sha256,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return JSONResponse(
+            content=ImportRecordRead.model_validate(existing).model_dump(mode="json"),
+            status_code=200,
         )
 
     try:
