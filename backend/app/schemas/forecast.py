@@ -7,48 +7,14 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.forecast_entry import ForecastRecurrence
 
-
-class ForecastEntryCreate(BaseModel):
-    entity_id: int
-    bank_account_id: int | None = None
-    label: str = Field(min_length=1, max_length=255)
-    amount: Decimal
-    due_date: date
-    category_id: int | None = None
-    counterparty_id: int | None = None
-    recurrence: ForecastRecurrence = ForecastRecurrence.NONE
-    recurrence_until: date | None = None
-    notes: str | None = None
-
-
-class ForecastEntryUpdate(BaseModel):
-    label: str | None = Field(default=None, min_length=1, max_length=255)
-    amount: Decimal | None = None
-    due_date: date | None = None
-    bank_account_id: int | None = None
-    category_id: int | None = None
-    counterparty_id: int | None = None
-    recurrence: ForecastRecurrence | None = None
-    recurrence_until: date | None = None
-    notes: str | None = None
-
-
-class ForecastEntryRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    entity_id: int
-    bank_account_id: int | None
-    label: str
-    amount: Decimal
-    due_date: date
-    category_id: int | None
-    counterparty_id: int | None
-    recurrence: ForecastRecurrence
-    recurrence_until: date | None
-    notes: str | None
+class ForecastRecurrence(str, enum.Enum):
+    """Récurrence d'un flux prévisionnel (D1 : anciennement dans models/forecast_entry)."""
+    NONE = "NONE"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+    QUARTERLY = "QUARTERLY"
+    YEARLY = "YEARLY"
 
 
 class DetectedRecurrenceSuggestion(BaseModel):

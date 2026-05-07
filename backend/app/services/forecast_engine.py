@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.commitment import Commitment, CommitmentDirection, CommitmentStatus
-from app.models.forecast_entry import ForecastEntry
 from app.models.forecast_line import ForecastLine, ForecastLineMethod
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
@@ -83,7 +82,6 @@ class Preloaded:
     """
     transactions_by_cat_month: dict[tuple[int, str], int]
     commitments_by_cat_month: dict[tuple[int, str], int]
-    forecast_entries_by_cat_month: dict[tuple[int, str], int]
     lines_by_cat: dict[int, "ForecastLine"]
     categories_by_name: dict[str, int]
 
@@ -202,32 +200,7 @@ def _preload(
         key = (int(cat_id), _month_key(month))
         commitments_by_cat_month[key] = commitments_by_cat_month.get(key, 0) + signed
 
-    # 3) Forecast entries (manuelles) : SUM(amount) group by (cat, month)
-    fe_month_col = func.date_trunc("month", ForecastEntry.due_date)
-    fe_stmt = (
-        select(
-            ForecastEntry.category_id,
-            fe_month_col.label("month"),
-            func.coalesce(func.sum(ForecastEntry.amount), 0).label("total"),
-        )
-        .where(
-            and_(
-                ForecastEntry.entity_id == entity_id,
-                ForecastEntry.due_date >= earliest,
-                ForecastEntry.due_date < latest,
-                ForecastEntry.category_id.is_not(None),
-            )
-        )
-        .group_by(ForecastEntry.category_id, fe_month_col)
-    )
-    forecast_entries_by_cat_month: dict[tuple[int, str], int] = {}
-    for cat_id, month, total in session.execute(fe_stmt).all():
-        if cat_id is None or month is None:
-            continue
-        key = (int(cat_id), _month_key(month))
-        forecast_entries_by_cat_month[key] = _eur_to_cents(Decimal(total))
-
-    # 4) Lignes prévisionnelles du scénario
+    # 3) Lignes prévisionnelles du scénario
     lines_by_cat: dict[int, ForecastLine] = {}
     for line in session.scalars(
         select(ForecastLine).where(ForecastLine.scenario_id == scenario_id)
@@ -246,7 +219,6 @@ def _preload(
     return Preloaded(
         transactions_by_cat_month=transactions_by_cat_month,
         commitments_by_cat_month=commitments_by_cat_month,
-        forecast_entries_by_cat_month=forecast_entries_by_cat_month,
         lines_by_cat=lines_by_cat,
         categories_by_name=categories_by_name,
     )
@@ -318,34 +290,6 @@ def _sum_commitments(
         signed = int(amount) if direction == CommitmentDirection.IN else -int(amount)
         total += signed
     return total
-
-
-def _sum_forecast_entries(
-    session: Session,
-    entity_id: int,
-    category_id: int,
-    month: date,
-    *,
-    preloaded: Optional["Preloaded"] = None,
-) -> int:
-    """Somme des ForecastEntry manuelles au mois donné (amount en Decimal euros)."""
-    if preloaded is not None:
-        return preloaded.forecast_entries_by_cat_month.get(
-            (category_id, _month_key(_first_of_month(month))), 0
-        )
-    start = _first_of_month(month)
-    end = _next_month(start)
-    total = session.execute(
-        select(func.coalesce(func.sum(ForecastEntry.amount), 0)).where(
-            and_(
-                ForecastEntry.entity_id == entity_id,
-                ForecastEntry.category_id == category_id,
-                ForecastEntry.due_date >= start,
-                ForecastEntry.due_date < end,
-            )
-        )
-    ).scalar_one()
-    return _eur_to_cents(Decimal(total))
 
 
 def _avg_transactions_n_months(
@@ -593,10 +537,7 @@ def _compute_cell_internal(
                     seen=seen,
                     preloaded=preloaded,
                 )
-        manual = _sum_forecast_entries(
-            session, entity_id, category_id, month, preloaded=preloaded
-        )
-        forecast = line_value + manual
+        forecast = line_value
 
     total = _combine_total(realized, committed, forecast, month, current_month)
 

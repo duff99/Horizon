@@ -53,6 +53,5 @@ class CounterpartyMergePreview(BaseModel):
     target_id: int
     target_name: str
     transaction_count: int
-    forecast_entry_count: int
     rules: list[MergeImpactRule]
     commitments: list[MergeImpactCommitment]

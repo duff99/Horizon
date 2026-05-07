@@ -16,7 +16,6 @@ import { EntitySelector } from "@/components/EntitySelector";
 import { CategoryDriftTable } from "@/components/analyse/CategoryDriftTable";
 import { ClientConcentrationCard } from "@/components/analyse/ClientConcentrationCard";
 import { EntitiesComparisonTable } from "@/components/analyse/EntitiesComparisonTable";
-import { ForecastVarianceCard } from "@/components/analyse/ForecastVarianceCard";
 import { RunwayCard } from "@/components/analyse/RunwayCard";
 import { TopMoversCard } from "@/components/analyse/TopMoversCard";
 import { WorkingCapitalCard } from "@/components/analyse/WorkingCapitalCard";
@@ -83,11 +82,7 @@ export function AnalysePage() {
         <div className="col-span-12 md:col-span-6">
           <WorkingCapitalCard entityId={entityId ?? undefined} />
         </div>
-        {/* Ligne 2 : précision du forecast (utile pour l'utilisateur du module Prévisionnel) */}
-        <div className="col-span-12">
-          <ForecastVarianceCard entityId={entityId ?? undefined} />
-        </div>
-        {/* Ligne 3 : analyse de coûts */}
+        {/* Ligne 2 : analyse de coûts */}
         <div className="col-span-12">
           <CategoryDriftTable entityId={entityId ?? undefined} />
         </div>

@@ -16,7 +16,6 @@ from app.models.commitment import (
     CommitmentStatus,
 )
 from app.models.entity import Entity
-from app.models.forecast_entry import ForecastEntry
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -113,48 +112,7 @@ def test_drift_detail_requires_entity_access(
 
 
 # ---------------------------------------------------------------------------
-# 2. Forecast variance
-# ---------------------------------------------------------------------------
-
-
-def test_forecast_variance_empty_when_no_forecast(
-    client: TestClient, auth_user_admin: User, db_session: Session
-):
-    e, _ = _mk_entity_with_ba(db_session, auth_user_admin, "EmptyForecastCo")
-    resp = client.get(f"/api/analysis/forecast-variance?entity_id={e.id}")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["has_forecast"] is False
-    assert len(body["points"]) == 6  # 6 mois par défaut
-    for p in body["points"]:
-        assert p["forecasted_cents"] == 0
-
-
-def test_forecast_variance_compares_realized_vs_forecast(
-    client: TestClient, auth_user_admin: User, db_session: Session
-):
-    e, ba = _mk_entity_with_ba(db_session, auth_user_admin, "VarianceCo")
-    cm = _today_first()
-    db_session.add(ForecastEntry(
-        entity_id=e.id, label="Salaires prévus",
-        amount=Decimal("-10000"), due_date=cm,
-    ))
-    db_session.commit()
-    _mk_tx(db_session, ba, amount=Decimal("-9500"), op_date=cm, label="Salaires réels")
-    _mk_tx(db_session, ba, amount=Decimal("-300"), op_date=cm, label="Frais")
-
-    resp = client.get(f"/api/analysis/forecast-variance?entity_id={e.id}&months=3")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["has_forecast"] is True
-    current_pt = body["points"][-1]  # dernier = mois courant
-    assert current_pt["forecasted_cents"] == -1_000_000
-    assert current_pt["actual_cents"] == -980_000
-    assert current_pt["delta_cents"] == 20_000  # actual - forecast
-
-
-# ---------------------------------------------------------------------------
-# 3. Working capital (DSO/DPO/BFR)
+# 2. Working capital (DSO/DPO/BFR)
 # ---------------------------------------------------------------------------
 
 

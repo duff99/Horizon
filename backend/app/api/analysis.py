@@ -12,7 +12,6 @@ from app.schemas.analysis import (
     CategoryDriftResponse,
     ClientConcentrationResponse,
     EntitiesComparisonResponse,
-    ForecastVarianceResponse,
     RunwayResponse,
     TopMoversResponse,
     WorkingCapitalResponse,
@@ -23,7 +22,6 @@ from app.services.analysis import (
     compute_category_drift_detail,
     compute_client_concentration,
     compute_entities_comparison,
-    compute_forecast_variance,
     compute_runway,
     compute_top_movers,
     compute_working_capital,
@@ -119,25 +117,6 @@ def get_entities_comparison(
     session: Session = Depends(get_db),
 ) -> EntitiesComparisonResponse:
     return compute_entities_comparison(session, user=user, months=months)
-
-
-@router.get("/forecast-variance", response_model=ForecastVarianceResponse)
-def get_forecast_variance(
-    entity_id: int = Query(...),
-    months: int = Query(6, ge=1, le=24),
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_db),
-) -> ForecastVarianceResponse:
-    """Compare prévisionnel vs réalisé sur N mois (mois courant inclus).
-
-    Permet de répondre à la question "mes prévisions sont-elles fiables ?".
-    Si aucune entrée prévisionnelle n'existe, has_forecast=False (l'UI
-    affichera un état vide avec un lien vers la page Prévisionnel).
-    """
-    require_entity_access(session=session, user=user, entity_id=entity_id)
-    return compute_forecast_variance(
-        session, entity_id=entity_id, months=months
-    )
 
 
 @router.get("/working-capital", response_model=WorkingCapitalResponse)

@@ -120,7 +120,6 @@ export interface MergePreview {
   target_id: number;
   target_name: string;
   transaction_count: number;
-  forecast_entry_count: number;
   rules: { id: number; label: string | null; category_id: number | null }[];
   commitments: {
     id: number;

@@ -12,12 +12,12 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.models.counterparty import Counterparty, CounterpartyStatus
-from app.models.forecast_entry import ForecastEntry, ForecastRecurrence
 from app.models.transaction import Transaction
 from app.schemas.forecast import (
     DetectedRecurrenceSuggestion,
     ForecastProjection,
     ForecastProjectionPoint,
+    ForecastRecurrence,
 )
 
 
@@ -28,51 +28,6 @@ def _add_months(d: date, months: int) -> date:
     month = month_index % 12 + 1
     last_day = calendar.monthrange(year, month)[1]
     return date(year, month, min(d.day, last_day))
-
-
-def _expand_entry(
-    entry: ForecastEntry, *, start: date, end: date,
-) -> list[tuple[date, Decimal]]:
-    """Retourne la liste des occurrences (date, montant) dans [start, end]."""
-    if entry.due_date > end:
-        return []
-
-    amount = Decimal(entry.amount)
-    if entry.recurrence == ForecastRecurrence.NONE:
-        if entry.due_date < start:
-            return []
-        return [(entry.due_date, amount)]
-
-    step_days: int | None = {
-        ForecastRecurrence.WEEKLY: 7,
-    }.get(entry.recurrence)
-
-    months_step: int | None = {
-        ForecastRecurrence.MONTHLY: 1,
-        ForecastRecurrence.QUARTERLY: 3,
-        ForecastRecurrence.YEARLY: 12,
-    }.get(entry.recurrence)
-
-    out: list[tuple[date, Decimal]] = []
-    limit = entry.recurrence_until if entry.recurrence_until else end
-    cur = entry.due_date
-    # Avance jusqu'à la première occurrence >= start
-    if step_days is not None:
-        if cur < start:
-            steps = (start - cur).days // step_days
-            cur = cur + timedelta(days=steps * step_days)
-            if cur < start:
-                cur = cur + timedelta(days=step_days)
-        while cur <= end and cur <= limit:
-            out.append((cur, amount))
-            cur = cur + timedelta(days=step_days)
-    elif months_step is not None:
-        while cur < start and cur <= limit:
-            cur = _add_months(cur, months_step)
-        while cur <= end and cur <= limit:
-            out.append((cur, amount))
-            cur = _add_months(cur, months_step)
-    return out
 
 
 def compute_projection(
@@ -87,45 +42,19 @@ def compute_projection(
 ) -> ForecastProjection:
     """Projette le solde à partir de `starting_balance` sur `horizon_days`.
 
-    Les occurrences agrégées proviennent des `ForecastEntry` de l'entité
-    courante (ou toutes accessibles). Les transactions déjà passées ne sont
-    pas ajoutées — on postule que `starting_balance` les intègre déjà.
+    Depuis D1, forecast_entries n'existe plus. La projection retourne une
+    courbe plate depuis starting_balance — elle sert uniquement à afficher le
+    solde courant en point de départ de la ligne de projection sur 90 jours.
+    Les ForecastLine (pivot) sont la source de vérité pour le prévisionnel.
     """
     horizon_end = starting_date + timedelta(days=horizon_days)
-
-    entity_filter = (
-        [ForecastEntry.entity_id == entity_id]
-        if entity_id is not None
-        else [ForecastEntry.entity_id.in_(accessible_entity_ids)]
-    )
-    entries = db.execute(
-        select(ForecastEntry).where(and_(*entity_filter))
-    ).scalars().all()
-
-    # Si bank_account_id renseigné sur l'entry et qu'on filtre par entity,
-    # on conserve l'entry si elle appartient à un compte de l'entité.
-    # (Déjà garanti via entity_filter.)
-
-    daily_net: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
-    for entry in entries:
-        for d, amt in _expand_entry(
-            entry, start=starting_date + timedelta(days=1), end=horizon_end,
-        ):
-            daily_net[d] += amt
-
-    # Marque consciemment : on n'ajoute PAS les transactions futures (il n'y
-    # en a pas, par définition). Pas non plus les récurrences détectées
-    # automatiquement — elles sont exposées en suggestions côté UI, l'utilisateur
-    # choisit de les matérialiser en ForecastEntry.
 
     points: list[ForecastProjectionPoint] = []
     running = starting_balance
     cur = starting_date
     while cur <= horizon_end:
-        net = daily_net.get(cur, Decimal("0"))
-        running = running + net
         points.append(
-            ForecastProjectionPoint(date=cur, balance=running, planned_net=net)
+            ForecastProjectionPoint(date=cur, balance=running, planned_net=Decimal("0"))
         )
         cur = cur + timedelta(days=1)
 

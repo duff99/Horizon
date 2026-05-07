@@ -94,10 +94,6 @@ export function CounterpartyMergeDialog({
                 {previewQ.data.rules.length} règle(s) de catégorisation
                 mise(s) à jour
               </li>
-              <li>
-                {previewQ.data.forecast_entry_count} ligne(s) de prévisionnel
-                mise(s) à jour
-              </li>
             </ul>
             {previewQ.data.commitments.length > 0 && (
               <details className="mt-3">

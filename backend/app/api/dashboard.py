@@ -744,34 +744,6 @@ def get_alerts(
             )
         )
 
-    # Alerte 3 : entrées prévisionnelles dont la due_date est passée et pas récurrente
-    from app.models.forecast_entry import ForecastEntry, ForecastRecurrence
-
-    accessible = list(
-        db.scalars(accessible_entity_ids_subquery(session=db, user=user))
-    )
-    forecast_where = [
-        ForecastEntry.due_date < today,
-        ForecastEntry.recurrence == ForecastRecurrence.NONE,
-    ]
-    if entity_id is not None:
-        forecast_where.append(ForecastEntry.entity_id == entity_id)
-    else:
-        forecast_where.append(ForecastEntry.entity_id.in_(accessible))
-    stale_entries = db.execute(
-        select(func.count()).select_from(ForecastEntry).where(and_(*forecast_where))
-    ).scalar_one()
-    if stale_entries > 0:
-        alerts.append(
-            Alert(
-                id="stale-forecast",
-                severity=AlertSeverity.INFO,
-                title=f"{stale_entries} entrée(s) prévisionnelle(s) dépassée(s)",
-                detail="Pensez à les supprimer ou les rapprocher d'une transaction réelle.",
-                entity_id=entity_id,
-            )
-        )
-
     return alerts
 
 

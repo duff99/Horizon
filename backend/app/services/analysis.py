@@ -24,7 +24,6 @@ from app.models.commitment import (
 )
 from app.models.counterparty import Counterparty
 from app.models.entity import Entity
-from app.models.forecast_entry import ForecastEntry
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -35,8 +34,6 @@ from app.schemas.analysis import (
     ClientSlice,
     EntitiesComparisonResponse,
     EntityCompareRow,
-    ForecastVariancePoint,
-    ForecastVarianceResponse,
     RunwayResponse,
     TopMoverRow,
     TopMoversResponse,
@@ -864,107 +861,7 @@ def compute_entities_comparison(
 
 
 # ---------------------------------------------------------------------------
-# 7. Forecast variance — réalisé vs prévisionnel
-# ---------------------------------------------------------------------------
-
-
-def compute_forecast_variance(
-    session: Session, *, entity_id: int, months: int = 6,
-) -> ForecastVarianceResponse:
-    """Compare le réalisé (transactions) au prévisionnel (forecast_entries)
-    sur les N derniers mois (mois courant inclus, défaut 6).
-
-    Pour chaque mois :
-      forecasted_cents = somme des forecast_entries.amount du mois
-      actual_cents     = somme des Transaction.amount du mois
-      delta            = actual - forecasted (signé)
-      delta_pct        = delta / forecasted * 100, ou 0 si pas de prévu
-
-    Renvoie has_forecast=False si aucune entrée prévisionnelle n'existe pour
-    cette entité sur la fenêtre — l'UI affichera un état vide avec un
-    call-to-action vers la page Prévisionnel.
-    """
-    today = date.today()
-    current_first = _first_of_month(today)
-    earliest = _add_months(current_first, -(months - 1))
-    next_first = _add_months(current_first, 1)  # exclusive
-
-    # Forecast aggregation par mois
-    forecast_month = func.date_trunc("month", ForecastEntry.due_date)
-    forecast_rows = session.execute(
-        select(
-            forecast_month.label("month"),
-            func.coalesce(func.sum(ForecastEntry.amount), 0).label("total"),
-        )
-        .where(
-            and_(
-                ForecastEntry.entity_id == entity_id,
-                ForecastEntry.due_date >= earliest,
-                ForecastEntry.due_date < next_first,
-            )
-        )
-        .group_by(forecast_month)
-    ).all()
-    forecast_by_month: dict[str, int] = {}
-    for month, total in forecast_rows:
-        if month is None:
-            continue
-        forecast_by_month[_month_key(month)] = _eur_to_cents(Decimal(total))
-
-    # Actual aggregation par mois (depuis transactions)
-    ba_ids = _bank_account_ids_for_entity(session, entity_id)
-    actual_by_month: dict[str, int] = {}
-    if ba_ids:
-        actual_month = func.date_trunc("month", Transaction.operation_date)
-        actual_rows = session.execute(
-            select(
-                actual_month.label("month"),
-                func.coalesce(func.sum(Transaction.amount), 0).label("total"),
-            )
-            .where(
-                and_(
-                    Transaction.bank_account_id.in_(ba_ids),
-                    Transaction.operation_date >= earliest,
-                    Transaction.operation_date < next_first,
-                    Transaction.is_aggregation_parent.is_(False),
-                )
-            )
-            .group_by(actual_month)
-        ).all()
-        for month, total in actual_rows:
-            if month is None:
-                continue
-            actual_by_month[_month_key(month)] = _eur_to_cents(Decimal(total))
-
-    # Construit la série complète mois par mois
-    points: list[ForecastVariancePoint] = []
-    cursor = earliest
-    while cursor < next_first:
-        key = _month_key(cursor)
-        forecasted = forecast_by_month.get(key, 0)
-        actual = actual_by_month.get(key, 0)
-        delta = actual - forecasted
-        if forecasted != 0:
-            delta_pct = round((delta / forecasted) * 100, 1)
-        else:
-            delta_pct = 0.0
-        points.append(
-            ForecastVariancePoint(
-                month=key,
-                forecasted_cents=forecasted,
-                actual_cents=actual,
-                delta_cents=delta,
-                delta_pct=delta_pct,
-            )
-        )
-        cursor = _add_months(cursor, 1)
-
-    has_forecast = bool(forecast_by_month)
-    return ForecastVarianceResponse(points=points, has_forecast=has_forecast)
-
-
-# ---------------------------------------------------------------------------
-# 8. Working capital — DSO / DPO / BFR
+# 7. Working capital — DSO / DPO / BFR
 # ---------------------------------------------------------------------------
 
 

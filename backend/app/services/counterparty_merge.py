@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.models.categorization_rule import CategorizationRule
 from app.models.commitment import Commitment
 from app.models.counterparty import Counterparty
-from app.models.forecast_entry import ForecastEntry
 from app.models.transaction import Transaction
 from app.schemas.counterparty import (
     CounterpartyMergePreview,
@@ -42,7 +41,6 @@ def build_merge_preview(
     src, tgt = _get_pair(session, source_id, target_id)
 
     tx_count = session.query(Transaction).filter_by(counterparty_id=src.id).count()
-    fe_count = session.query(ForecastEntry).filter_by(counterparty_id=src.id).count()
 
     rules = (
         session.query(CategorizationRule)
@@ -57,7 +55,6 @@ def build_merge_preview(
         source_id=src.id, source_name=src.name,
         target_id=tgt.id, target_name=tgt.name,
         transaction_count=tx_count,
-        forecast_entry_count=fe_count,
         rules=[
             MergeImpactRule(
                 id=r.id,
@@ -101,11 +98,6 @@ def execute_merge(
     session.execute(
         update(CategorizationRule)
         .where(CategorizationRule.counterparty_id == src.id)
-        .values(counterparty_id=tgt.id)
-    )
-    session.execute(
-        update(ForecastEntry)
-        .where(ForecastEntry.counterparty_id == src.id)
         .values(counterparty_id=tgt.id)
     )
     session.delete(src)
