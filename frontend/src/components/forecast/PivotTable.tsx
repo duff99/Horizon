@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { PivotResult, PivotRow } from "@/types/forecast";
 import { formatCents, formatMonthLabel } from "@/lib/forecastFormat";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,33 @@ function flatten(
 export function PivotTable({ result, onCellClick, currentMonth }: Props) {
   const { months, rows: allRows } = result;
 
+  // ---------------------------------------------------------------------------
+  // G8 — What-if overrides
+  // clé = `${categoryId}:${month}`, valeur = montant overridé en centimes
+  // ---------------------------------------------------------------------------
+  const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
+  const hasOverrides = overrides.size > 0;
+
+  function getEffective(row: PivotRow, monthIdx: number): number {
+    const month = months[monthIdx];
+    const key = `${row.category_id}:${month}`;
+    return overrides.has(key)
+      ? overrides.get(key)!
+      : (row.cells[monthIdx]?.total_cents ?? 0);
+  }
+
+  function setOverride(categoryId: number, month: string, cents: number) {
+    setOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(`${categoryId}:${month}`, cents);
+      return next;
+    });
+  }
+
+  function clearOverrides() {
+    setOverrides(new Map());
+  }
+
   const inRows = useMemo(
     () => allRows.filter((r) => r.direction === "in"),
     [allRows],
@@ -111,20 +138,19 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     [outHier, expanded, outGroupOpen],
   );
 
-  // Monthly totals per direction — sum ALL rows of the direction (roots + children).
-  // The backend does NOT roll up parent←child: each PivotRow carries its own
-  // independent values. Summing only roots underestimates when roots have
-  // total_cents=0 but their children have values.
+  // Monthly totals per direction — use effective values (overrides apply)
   const inTotals = useMemo(() => {
     return months.map((_m, idx) =>
-      inRows.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
+      inRows.reduce((s, r) => s + getEffective(r, idx), 0),
     );
-  }, [months, inRows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [months, inRows, overrides]);
   const outTotals = useMemo(() => {
     return months.map((_m, idx) =>
-      outRows.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
+      outRows.reduce((s, r) => s + getEffective(r, idx), 0),
     );
-  }, [months, outRows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [months, outRows, overrides]);
 
   const netByMonth = useMemo(
     () => months.map((_m, i) => inTotals[i] - outTotals[i]),
@@ -142,8 +168,33 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     return arr;
   }, [months, result.opening_balance_cents, result.closing_balance_projection_cents]);
 
+  // Closing balance recalculé avec les overrides
+  const closingByMonth = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 0; i < months.length; i++) {
+      const opening = i === 0 ? result.opening_balance_cents : (arr[i - 1] ?? 0);
+      arr.push(opening + netByMonth[i]);
+    }
+    return arr;
+  }, [months, result.opening_balance_cents, netByMonth]);
+
   return (
     <div className="overflow-x-auto rounded-xl border border-line-soft bg-panel shadow-card">
+      {/* G8 — Bandeau avertissement mode simulation */}
+      {hasOverrides && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12.5px] text-amber-900">
+          Mode simulation actif — les valeurs modifiées (fond orange) sont locales à votre
+          navigateur et ne sont pas enregistrées. Cliquez sur{" "}
+          <button
+            type="button"
+            onClick={clearOverrides}
+            className="font-semibold underline underline-offset-2"
+          >
+            Réinitialiser
+          </button>{" "}
+          pour revenir aux données réelles.
+        </div>
+      )}
       <table className="min-w-full border-collapse text-[12.5px]">
         <thead>
           <tr className="border-b border-line-soft bg-panel-2">
@@ -151,7 +202,20 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
               className="sticky left-0 z-20 min-w-[260px] bg-panel-2 px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
               style={{ position: "sticky", left: 0 }}
             >
-              Catégorie
+              <div className="flex items-center justify-between">
+                <span>Catégorie</span>
+                {/* G8 — Bouton Réinitialiser */}
+                {hasOverrides && (
+                  <button
+                    type="button"
+                    onClick={clearOverrides}
+                    title="Remet toutes les cellules à leurs valeurs réelles du scénario actif."
+                    className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-200"
+                  >
+                    Réinitialiser les simulations
+                  </button>
+                )}
+              </div>
             </th>
             {months.map((m) => (
               <th
@@ -195,6 +259,8 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
               onToggle={() => toggle(row.category_id)}
               onCellClick={onCellClick}
               currentMonth={currentMonth}
+              overrides={overrides}
+              onOverride={setOverride}
             />
           ))}
 
@@ -218,6 +284,8 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
               onCellClick={onCellClick}
               currentMonth={currentMonth}
               isOut
+              overrides={overrides}
+              onOverride={setOverride}
             />
           ))}
 
@@ -230,10 +298,10 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             tone="emphasized"
           />
 
-          {/* Closing balance */}
+          {/* Closing balance — recalculé si overrides actifs */}
           <SummaryRow
-            label="Trésorerie en fin de mois"
-            values={result.closing_balance_projection_cents}
+            label={hasOverrides ? "Trésorerie en fin de mois (simulation)" : "Trésorerie en fin de mois"}
+            values={hasOverrides ? closingByMonth : result.closing_balance_projection_cents}
             months={months}
             currentMonth={currentMonth}
             tone="emphasized"
@@ -373,6 +441,9 @@ interface CategoryRowProps {
   onCellClick: (month: string, categoryId: number) => void;
   currentMonth: string;
   isOut?: boolean;
+  // G8
+  overrides: Map<string, number>;
+  onOverride: (categoryId: number, month: string, cents: number) => void;
 }
 
 function CategoryRow({
@@ -384,6 +455,8 @@ function CategoryRow({
   onCellClick,
   currentMonth,
   isOut,
+  overrides,
+  onOverride,
 }: CategoryRowProps) {
   return (
     <tr className="border-t border-line-soft last:border-b-0 hover:bg-panel-2/30">
@@ -412,33 +485,127 @@ function CategoryRow({
         const isFuture = cell.month > currentMonth;
         const isCurrent = cell.month === currentMonth;
         const clickable = cell.month >= currentMonth;
-        const displayed = isOut ? -cell.total_cents : cell.total_cents;
+        const overrideKey = `${row.category_id}:${cell.month}`;
+        const isOverridden = overrides.has(overrideKey);
+        const effectiveCents = isOverridden
+          ? overrides.get(overrideKey)!
+          : cell.total_cents;
+        const displayed = isOut ? -effectiveCents : effectiveCents;
+
         return (
-          <td
+          <WhatIfCell
             key={cell.month}
-            className={cn(
-              "relative px-3 py-1.5 text-right font-mono tabular-nums",
-              amountClass(displayed, isFuture),
-              clickable &&
-                "cursor-pointer transition-colors hover:bg-panel-2/50",
-            )}
-            onClick={
-              clickable
-                ? () => onCellClick(cell.month, row.category_id)
-                : undefined
-            }
-          >
-            {isCurrent && (
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 w-0.5 bg-accent"
-              />
-            )}
-            {formatCents(displayed)}
-          </td>
+            month={cell.month}
+            displayed={displayed}
+            isOverridden={isOverridden}
+            isFuture={isFuture}
+            isCurrent={isCurrent}
+            clickable={clickable}
+            isOut={isOut}
+            onCellClick={() => onCellClick(cell.month, row.category_id)}
+            onOverride={(euros) => {
+              const cents = Math.round(euros * 100);
+              // Pour les décaissements : l'utilisateur saisit positif,
+              // on le stocke négatif (convention interne)
+              onOverride(row.category_id, cell.month, isOut ? -cents : cents);
+            }}
+          />
         );
       })}
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// G8 — Cellule what-if avec double-clic pour édition
+// ---------------------------------------------------------------------------
+
+interface WhatIfCellProps {
+  month: string; // utilisé pour la key, pas dans le rendu
+  displayed: number;
+  isOverridden: boolean;
+  isFuture: boolean;
+  isCurrent: boolean;
+  clickable: boolean;
+  isOut?: boolean;
+  onCellClick: () => void;
+  onOverride: (euros: number) => void;
+}
+
+function WhatIfCell({
+  month: _month,
+  displayed,
+  isOverridden,
+  isFuture,
+  isCurrent,
+  clickable,
+  onCellClick,
+  onOverride,
+}: WhatIfCellProps) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEdit(e: React.MouseEvent) {
+    // Double-clic sur mois futur uniquement
+    if (!clickable) return;
+    e.stopPropagation();
+    setInputVal(String(Math.abs(displayed / 100)));
+    setEditing(true);
+    // Focus après render
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function commitEdit() {
+    const val = parseFloat(inputVal);
+    if (!isNaN(val)) {
+      onOverride(val);
+    }
+    setEditing(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      commitEdit();
+    } else if (e.key === "Escape") {
+      setEditing(false);
+    }
+  }
+
+  return (
+    <td
+      className={cn(
+        "relative px-3 py-1.5 text-right font-mono tabular-nums",
+        isOverridden
+          ? "bg-amber-50 text-amber-900"
+          : amountClass(displayed, isFuture),
+        clickable && !editing && "cursor-pointer transition-colors hover:bg-panel-2/50",
+      )}
+      onClick={!editing && clickable ? onCellClick : undefined}
+      onDoubleClick={clickable ? startEdit : undefined}
+      title={clickable ? "Double-clic pour simuler un montant (what-if)" : undefined}
+    >
+      {isCurrent && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-0.5 bg-accent"
+        />
+      )}
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={handleKeyDown}
+          className="w-full bg-amber-50 border border-amber-300 rounded px-1 text-right font-mono text-[13px] text-amber-900 focus:outline-none"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        formatCents(displayed)
+      )}
+    </td>
   );
 }
 
