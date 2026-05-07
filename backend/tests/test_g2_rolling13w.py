@@ -140,6 +140,8 @@ class TestRolling13W:
         tx_date = last_monday + timedelta(days=2)  # mercredi de la semaine passée
 
         _mk_tx(db_session, ba.id, amount=Decimal("-500.00"), op_date=tx_date, label="g2-realized-test")
+        # Fixer l'ancre data sur aujourd'hui pour que la fenêtre 13w soit correcte
+        _mk_tx(db_session, ba.id, amount=Decimal("1.00"), op_date=date.today(), label="g2-anchor-today")
 
         resp = client.get(
             "/api/forecast/rolling-13w",

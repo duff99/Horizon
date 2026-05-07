@@ -22,6 +22,7 @@ from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.schemas.anomaly import AnomalyResponse, AnomalyRow
+from app.services._anchor import data_anchor
 
 # Nombre minimal de transactions pour calculer un p95 fiable
 MIN_TX_FOR_P95 = 5
@@ -59,7 +60,7 @@ def detect_anomalies(
             rows=[],
         )
 
-    today = date.today()
+    today = data_anchor(session, entity_id=entity_id)
     window_start = today - timedelta(days=days)
     recent_start = today - timedelta(days=RECENT_DAYS)
 

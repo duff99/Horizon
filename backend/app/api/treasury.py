@@ -20,6 +20,7 @@ from app.schemas.treasury import (
     PerAccountBalance,
     PerAccountBalanceResponse,
 )
+from app.services._anchor import data_anchor
 
 router = APIRouter(prefix="/api/treasury", tags=["treasury"])
 
@@ -249,8 +250,8 @@ def get_per_account(
         for r in latest_rows
     }
 
-    # Solde il y a 30 jours : dernier closing_balance dont period_end <= today - 30
-    today = date.today()
+    # Solde il y a 30 jours : dernier closing_balance dont period_end <= anchor - 30
+    today = data_anchor(db, entity_id=entity_id)
     cutoff_30d = today - timedelta(days=30)
     prev30_sq = (
         select(

@@ -35,15 +35,16 @@ from app.schemas.analysis import (
     ClientSlice,
     EntitiesComparisonResponse,
     EntityCompareRow,
+    MoMPoint,
+    MoMResponse,
     RunwayResponse,
     SeasonalityPoint,
     SeasonalityResponse,
     TopMoverRow,
     TopMoversResponse,
     WorkingCapitalResponse,
-    YoYPoint,
-    YoYResponse,
 )
+from app.services._anchor import data_anchor
 
 
 # ---------------------------------------------------------------------------
@@ -551,7 +552,7 @@ def _compute_runway_core(
 
     Utilisé à la fois par /runway et par /entities-comparison.
     """
-    today = date.today()
+    today = data_anchor(session, entity_id=entity_id)
     current_first = _first_of_month(today)
     # 3 derniers mois finis : [m-3, m-2, m-1]
     earliest = _add_months(current_first, -3)
@@ -607,35 +608,27 @@ def compute_runway(session: Session, *, entity_id: int) -> RunwayResponse:
 
 
 # ---------------------------------------------------------------------------
-# 4. Year-over-year
+# 4. MoM 6 mois glissants finis
 # ---------------------------------------------------------------------------
 
 
-def compute_yoy(session: Session, *, entity_id: int) -> YoYResponse:
-    today = date.today()
-    current_first = _first_of_month(today)
-    # 12 mois glissants finissant au mois courant inclus
-    months = [_add_months(current_first, -11 + i) for i in range(12)]
-    # Plage : de 12m avant le plus ancien (pour année N-1) jusqu'au courant inclus
-    earliest = _add_months(months[0], -12)
-    latest = _add_months(current_first, 1)  # exclusive
+def compute_mom_6m(session: Session, *, entity_id: int) -> MoMResponse:
+    """Calcule les revenus/dépenses/net des 6 mois finis avant l'ancre data.
+
+    Fenêtre : [M-6, M-5, M-4, M-3, M-2, M-1] où M = mois de data_anchor.
+    Le mois M (mois ancre) est exclu car il peut être partiel.
+    Si moins de 6 mois de data, retourne les mois disponibles + available_months.
+    """
+    anchor = data_anchor(session, entity_id=entity_id)
+    anchor_first = _first_of_month(anchor)
+    # 6 mois finis : M-6 à M-1 (anchor_first exclusif côté haut)
+    months = [_add_months(anchor_first, -i) for i in range(6, 0, -1)]
+    earliest = months[0]   # M-6
+    latest = anchor_first  # exclusive : n'inclut pas le mois ancre
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     if not ba_ids:
-        month_keys = [_month_key(m) for m in months]
-        return YoYResponse(
-            months=month_keys,
-            series=[
-                YoYPoint(
-                    month=k,
-                    revenues_current=0,
-                    revenues_previous=0,
-                    expenses_current=0,
-                    expenses_previous=0,
-                )
-                for k in month_keys
-            ],
-        )
+        return MoMResponse(months=[], series=[], available_months=0)
 
     month_col = func.date_trunc("month", Transaction.operation_date)
     rows = session.execute(
@@ -672,23 +665,45 @@ def compute_yoy(session: Session, *, entity_id: int) -> YoYResponse:
             continue
         k = _month_key(month)
         inflow_by_month[k] = _eur_to_cents(Decimal(inflow))
-        outflow_by_month[k] = _eur_to_cents(Decimal(outflow))
+        outflow_by_month[k] = abs(_eur_to_cents(Decimal(outflow)))
 
     month_keys = [_month_key(m) for m in months]
-    series: list[YoYPoint] = []
-    for m in months:
-        k = _month_key(m)
-        k_prev = _month_key(_add_months(m, -12))
+    series: list[MoMPoint] = []
+    prev_rev: int | None = None
+    prev_exp: int | None = None
+    months_with_data = 0
+
+    for m_key in month_keys:
+        rev = inflow_by_month.get(m_key, 0)
+        exp = outflow_by_month.get(m_key, 0)
+        net = rev - exp
+
+        if rev != 0 or exp != 0:
+            months_with_data += 1
+
+        def _delta_pct(curr: int, prev: int | None) -> float | None:
+            if prev is None or prev == 0:
+                return None
+            return round((curr - prev) / abs(prev) * 100.0, 2)
+
         series.append(
-            YoYPoint(
-                month=k,
-                revenues_current=inflow_by_month.get(k, 0),
-                revenues_previous=inflow_by_month.get(k_prev, 0),
-                expenses_current=abs(outflow_by_month.get(k, 0)),
-                expenses_previous=abs(outflow_by_month.get(k_prev, 0)),
+            MoMPoint(
+                month=m_key,
+                revenues_cents=rev,
+                expenses_cents=exp,
+                net_cents=net,
+                delta_revenues_pct=_delta_pct(rev, prev_rev),
+                delta_expenses_pct=_delta_pct(exp, prev_exp),
             )
         )
-    return YoYResponse(months=month_keys, series=series)
+        prev_rev = rev
+        prev_exp = exp
+
+    return MoMResponse(
+        months=month_keys,
+        series=series,
+        available_months=months_with_data,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -699,7 +714,7 @@ def compute_yoy(session: Session, *, entity_id: int) -> YoYResponse:
 def compute_client_concentration(
     session: Session, *, entity_id: int, months: int,
 ) -> ClientConcentrationResponse:
-    today = date.today()
+    today = data_anchor(session, entity_id=entity_id)
     current_first = _first_of_month(today)
     earliest = _add_months(current_first, -(months - 1))
     latest = _add_months(current_first, 1)  # exclusive
@@ -802,7 +817,7 @@ def compute_entities_comparison(
     if not entity_ids:
         return EntitiesComparisonResponse(entities=[])
 
-    today = date.today()
+    today = data_anchor(session, entity_id=None)
     current_first = _first_of_month(today)
     earliest = _add_months(current_first, -(months - 1))
     latest = _add_months(current_first, 1)  # exclusive

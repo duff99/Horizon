@@ -19,6 +19,7 @@ from app.models.forecast_line import ForecastLine
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services._anchor import data_anchor
 from app.schemas.forecast import (
     DetectedRecurrenceSuggestion,
     ForecastProjection,
@@ -143,8 +144,8 @@ def get_rolling_13w(
         db.scalars(select(BankAccount.id).where(BankAccount.entity_id == entity_id))
     )
 
-    today = date.today()
-    # Lundi de la semaine courante
+    today = data_anchor(db, entity_id=entity_id)
+    # Lundi de la semaine courante (ancrée sur les données disponibles)
     monday_this_week = today - timedelta(days=today.weekday())
     # W-1 = semaine précédente
     window_start = monday_this_week - timedelta(weeks=1)
