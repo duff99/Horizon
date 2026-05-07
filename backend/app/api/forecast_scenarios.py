@@ -49,6 +49,8 @@ def _unset_other_defaults(
 @router.get("", response_model=list[ScenarioRead])
 def list_scenarios(
     entity_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[ScenarioRead]:
@@ -69,6 +71,8 @@ def list_scenarios(
                 ForecastScenario.is_default.desc(),
                 ForecastScenario.name,
             )
+            .limit(limit)
+            .offset(offset)
         )
     )
     return [ScenarioRead.model_validate(r) for r in rows]

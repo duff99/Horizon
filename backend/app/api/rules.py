@@ -56,6 +56,8 @@ def _require_editor(user: User) -> None:
 def list_rules(
     scope: Optional[Literal["global", "entity", "all"]] = Query(default="all"),
     entity_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[RuleRead]:
@@ -80,6 +82,7 @@ def list_rules(
         CategorizationRule.entity_id.asc().nulls_last(),
         CategorizationRule.priority.asc(),
     )
+    q = q.limit(limit).offset(offset)
     rows = session.execute(q).scalars().all()
     return [RuleRead.model_validate(r) for r in rows]
 

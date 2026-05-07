@@ -42,6 +42,8 @@ def list_counterparties(
     entity_id: int | None = Query(default=None),
     include_ignored: bool = Query(default=False),
     search: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[CounterpartyWithAggregates]:
@@ -102,6 +104,7 @@ def list_counterparties(
         q = q.where(Counterparty.name.ilike(f"%{search}%"))
 
     q = q.order_by(tx_volume_sq.desc(), Counterparty.name.asc())
+    q = q.limit(limit).offset(offset)
 
     rows = session.execute(q).all()
     return [

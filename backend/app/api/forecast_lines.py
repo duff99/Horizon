@@ -36,6 +36,8 @@ def _get_scenario_with_access(
 @router.get("", response_model=list[LineRead])
 def list_lines(
     scenario_id: int = Query(...),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[LineRead]:
@@ -45,6 +47,8 @@ def list_lines(
             select(ForecastLine)
             .where(ForecastLine.scenario_id == scenario_id)
             .order_by(ForecastLine.category_id)
+            .limit(limit)
+            .offset(offset)
         )
     )
     return [LineRead.model_validate(r) for r in rows]
