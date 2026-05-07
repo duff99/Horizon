@@ -1030,4 +1030,30 @@ export const FEATURE_DOCS: FeatureDoc[] = [
       "Pour preparer un chiffre a communiquer (si on depense X ce mois, quel est le solde fin de mois ?) avant une reunion.",
     ],
   },
+  // ---------------------------------------------------------------------------
+  // G12 — Snooze/acquittement de dérive
+  // ---------------------------------------------------------------------------
+  {
+    id: "drift-snooze",
+    title: "Snooze d'une alerte de dérive (30 jours)",
+    whatItDoes:
+      "Permet de mettre en veille une alerte de dérive de catégorie pour 30 jours en cliquant sur le bouton \"Snooze 30 j\" visible sur chaque ligne en statut Dérive dans le tableau Dérives par catégorie. Un acquittement est enregistré en base avec la date d'expiration, le nom de l'utilisateur et une note optionnelle. L'alerte reste visible dans le tableau sous la forme d'un badge gris \"En veille\" jusqu'à expiration, ce qui garantit la traçabilité.",
+    whatItChanges: [
+      "Crée un enregistrement dans la table drift_acks en base avec entity_id, category_id, snoozed_until (aujourd'hui + 30 jours) et l'identifiant de l'utilisateur connecté.",
+      "La catégorie passe du statut Dérive (fond rose) au statut En veille (fond gris) dans le tableau Dérives par catégorie.",
+      "L'alerte ne compte plus dans le compteur de dérives affiché en haut du tableau.",
+      "Après expiration (J+30), la catégorie peut à nouveau apparaître en statut Dérive si la dérive persiste.",
+    ],
+    whatItDoesNotChange: [
+      "Les transactions de la catégorie ne sont pas modifiées.",
+      "Le calcul de dérive continue de s'exécuter en arrière-plan : la donnée est toujours calculée, seul l'affichage change.",
+      "Les autres catégories du tableau ne sont pas affectées.",
+      "L'historique de l'acquittement est conservé en base et auditable.",
+    ],
+    whenToUse: [
+      "Lorsqu'une dépense exceptionnelle connue (achat de matériel, prime de fin d'année, sinistre, campagne marketing ponctuelle) déclenche une alerte qui n'a pas lieu d'être surveillée ce mois-ci.",
+      "Pour nettoyer le tableau de bord avant une réunion de revue financière, en distinguant les alertes réelles des alertes contextuelles.",
+      "Lorsqu'une catégorie est en cours de restructuration et que les chiffres du mois sont transitoires.",
+    ],
+  },
 ];

@@ -2,10 +2,13 @@
  * CategoryDriftTable — dérive de chaque catégorie (mois courant vs moyenne 3 mois).
  *
  * Ligne "alert" : bg-rose-50. Max 15 visibles + bouton "Voir tout".
+ * Ligne "snoozed" : badge "En veille" gris + bouton absent.
+ * Bouton "Snooze 30 j" sur chaque ligne alert (G12).
  */
 import { memo, useMemo, useState } from "react";
 
 import { useCategoryDrift } from "@/api/analysis";
+import { useSnoozeDrift } from "@/api/driftAcks";
 import { CategoryDriftDetailModal } from "@/components/analyse/CategoryDriftDetailModal";
 import { formatCents } from "@/lib/forecastFormat";
 
@@ -14,8 +17,8 @@ interface Props {
   seuilPct?: number;
 }
 
-function formatPct(v: number): string {
-  if (!Number.isFinite(v)) return "—";
+function formatPct(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   const sign = v > 0 ? "+" : "";
   return `${sign}${v.toFixed(1)} %`;
 }
@@ -41,6 +44,7 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
   const [showAll, setShowAll] = useState(false);
   const [drilledCategoryId, setDrilledCategoryId] = useState<number | null>(null);
   const query = useCategoryDrift({ entityId, seuilPct });
+  const snoozeMutation = useSnoozeDrift();
 
   const rows = query.data?.rows ?? [];
   const threshold = query.data?.seuil_pct ?? seuilPct;
@@ -52,6 +56,21 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
     () => (showAll ? rows : rows.slice(0, 15)),
     [rows, showAll],
   );
+
+  function handleSnooze(
+    e: React.MouseEvent,
+    categoryId: number,
+    categoryLabel: string,
+  ) {
+    e.stopPropagation(); // ne pas ouvrir le modal de détail
+    if (!entityId) return;
+    if (!window.confirm(`Mettre en veille la dérive "${categoryLabel}" pour 30 jours ?`)) return;
+    snoozeMutation.mutate({
+      entity_id: entityId,
+      category_id: categoryId,
+      snooze_days: 30,
+    });
+  }
 
   return (
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
@@ -110,6 +129,15 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Statut
                   </th>
+                  <th
+                    className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    title="Snooze 30 jours : masque temporairement l'alerte sans supprimer la donnee. Elle reapparaitra apres expiration."
+                  >
+                    Action{" "}
+                    <span className="cursor-help text-[11px] text-muted-foreground">
+                      ?
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +147,11 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
                     onClick={() => setDrilledCategoryId(r.category_id)}
                     className={
                       "cursor-pointer border-b border-line-soft last:border-0 hover:bg-panel-2/60 " +
-                      (r.status === "alert" ? "bg-rose-50 hover:bg-rose-100/50" : "")
+                      (r.status === "alert"
+                        ? "bg-rose-50 hover:bg-rose-100/50"
+                        : r.status === "snoozed"
+                          ? "bg-slate-50/60"
+                          : "")
                     }
                   >
                     <td
@@ -161,11 +193,31 @@ function CategoryDriftTableInner({ entityId, seuilPct = 20 }: Props) {
                         <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-900">
                           Dérive
                         </span>
+                      ) : r.status === "snoozed" ? (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          En veille
+                        </span>
+                      ) : r.status === "insufficient" ? (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+                          Données insuffisantes
+                        </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                           Normal
                         </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {r.status === "alert" && entityId !== undefined ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleSnooze(e, r.category_id, r.label)}
+                          disabled={snoozeMutation.isPending}
+                          className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[12px] text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          Snooze 30 j
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
