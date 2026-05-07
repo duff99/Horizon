@@ -10,6 +10,9 @@ import { LoginPage } from '@/pages/LoginPage';
 const AdminAuditLogPage = lazy(() =>
   import('@/pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })),
 );
+const AdminClientErrorsPage = lazy(() =>
+  import('@/pages/AdminClientErrorsPage').then((m) => ({ default: m.AdminClientErrorsPage })),
+);
 const AdminBackupsPage = lazy(() =>
   import('@/pages/AdminBackupsPage').then((m) => ({ default: m.AdminBackupsPage })),
 );
@@ -223,6 +226,16 @@ export const router = createBrowserRouter([
           <AdminRoute>
             <LazyPage>
               <AdminAuditLogPage />
+            </LazyPage>
+          </AdminRoute>
+        ),
+      },
+      {
+        path: '/administration/erreurs-client',
+        element: (
+          <AdminRoute>
+            <LazyPage>
+              <AdminClientErrorsPage />
             </LazyPage>
           </AdminRoute>
         ),

@@ -222,24 +222,33 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Liste paginée et filtrable de toutes les opérations bancaires importées.",
     sees: [
       "Un en-tête avec le nombre total d'opérations et, si applicable, le nombre de non catégorisées sur la page courante.",
-      "Une barre de filtres : un champ de recherche plein texte (placeholder « Rechercher par libellé, tiers, montant... »), un PeriodSelector, un filtre par catégorie (combobox arborescente avec bouton croix pour le retirer), et à droite un toggle « Non catégorisées uniquement ».",
+      "Une barre de filtres : un champ de recherche plein texte (placeholder « Rechercher par libellé, tiers, montant... »), un PeriodSelector, un filtre par catégorie (combobox arborescente avec bouton croix pour le retirer), deux champs numériques « Montant min (€) » et « Montant max (€) », un toggle « Afficher les virements SEPA détaillés », et à droite un toggle « Non catégorisées uniquement ».",
+      "Un bandeau ambre en haut de page lorsqu'Horizon détecte que vous avez catégorisé manuellement le même libellé au moins 3 fois dans les 30 derniers jours. Le bandeau propose de créer une règle automatique via le bouton « Créer une règle » ou d'ignorer la suggestion pour la session via « Plus tard ».",
       "Un tableau avec : case à cocher, date, société (uniquement en vue consolidée), Tiers / Libellé (le tiers s'il est connu, sinon le libellé brut), Catégorie (badge gris si catégorisée, badge orange « Non catégorisée » sinon), Montant (vert avec « + » pour les crédits, rouge pour les débits).",
       "Une case à cocher en en-tête pour tout sélectionner sur la page.",
       "Quand vous cochez une ou plusieurs opérations, deux choses apparaissent : un mini-bandeau vert juste sous les filtres (« N opération(s) sélectionnée(s) · Désélectionner ») et un panneau latéral droit qui s'ouvre automatiquement avec les actions de catégorisation. Vous gardez votre position dans la liste pendant que vous agissez (plus besoin de remonter en haut de la page).",
+      "Quand toutes les transactions de la page sont cochées et qu'il y a d'autres résultats hors page, un lien « Sélectionner les X résultats correspondant aux filtres actuels » apparaît dans le mini-bandeau vert. Le cliquer active le mode de catégorisation sur l'ensemble du résultat filtré.",
       "Un pied de tableau avec une pagination complète : récapitulatif (« Affichage 51 à 100 sur 1234 · Page 2 sur 25 »), sélecteur Lignes (25 / 50 / 100 / 200), boutons « (première), ‹ (précédente), numéros de page directement cliquables avec ellipsis intelligente, › (suivante), » (dernière). Au-delà de 5 pages, un champ Aller à : permet de saisir un numéro et valider avec Entrée.",
     ],
     does: [
       "Pour rechercher une opération : saisissez un fragment de libellé, un nom de tiers ou un montant exact dans le champ de recherche (ex. : tapez « 500 » pour ne voir que les opérations contenant ce montant, ou « URSSAF » pour cibler un tiers).",
+      "Pour filtrer par montant : renseignez un ou deux champs « Montant min (€) » / « Montant max (€) » dans la barre de filtres. Le filtre s'applique sur la valeur absolue du montant (un filtre Montant min = 1000 isole toutes les opérations supérieures à 1 000 €, qu'il s'agisse d'encaissements ou de décaissements).",
       "Pour catégoriser plusieurs opérations en masse : 1. Cochez les lignes concernées (ou la case d'en-tête pour toute la page). Le panneau latéral droit s'ouvre automatiquement. 2. Choisissez une catégorie dans la combobox du panneau. 3. Cliquez sur Catégoriser. Les opérations sont mises à jour, la sélection vidée et le panneau se referme.",
+      "Pour catégoriser toutes les transactions d'un filtre en une seule action (sans limites de page) : sélectionnez toutes les transactions de la page courante avec la case d'en-tête, puis cliquez sur le lien « Sélectionner les X résultats correspondant aux filtres actuels » qui apparaît dans le mini-bandeau vert. Le drawer de catégorisation s'applique alors à l'ensemble du résultat filtré via un appel unique au serveur.",
       "Pour transformer la sélection en règle automatique : dans le même panneau, cliquez sur Suggérer une règle. Horizon analyse les libellés communs et ouvre le formulaire de création de règle pré-rempli (opérateur de libellé, valeur, sens, compte, catégorie).",
       "Pour vider la sélection sans agir : cliquez sur Désélectionner (visible dans le mini-bandeau vert ou dans le panneau).",
       "Si vous fermez le panneau de catégorisation avec une sélection encore active, un bouton Rouvrir le panneau apparaît dans le mini-bandeau vert pour le ré-afficher.",
       "Pour ne voir que les opérations à traiter : activez le toggle « Non catégorisées uniquement ». Toggle désactivé = liste complète.",
+      "Pour afficher les sous-transactions SEPA : cochez le toggle « Afficher les virements SEPA détaillés » dans la barre de filtres. Par défaut, seules les lignes agrégées sont affichées. Quand le toggle est activé, les lignes enfants (sous-virements d'un virement SEPA de masse) apparaissent également.",
       "Pour isoler une catégorie : choisissez-la dans le filtre catégorie de la barre. Cliquez sur la croix à droite pour retirer le filtre. Pratique pour vérifier d'un coup toutes les opérations d'une catégorie (ex. : toutes les TVA, toute la masse salariale).",
+      "Pour créer une règle depuis la suggestion automatique : si un bandeau ambre apparaît en haut de la page, cliquez sur « Créer une règle ». Le formulaire de règle s'ouvre pré-rempli avec le libellé et la catégorie détectés. Cliquez sur « Plus tard » pour ignorer la suggestion jusqu'au prochain rechargement de page.",
       "Pour naviguer rapidement dans la liste : la barre de pagination en bas du tableau propose plusieurs raccourcis. Cliquez directement sur un numéro de page, ou utilisez « (début), ‹ (précédente), › (suivante), » (fin). Au-delà de 5 pages, le champ Aller à : permet de sauter à une page précise (validez avec Entrée).",
       "Pour afficher plus de transactions par écran : changez le sélecteur Lignes : (25 / 50 / 100 / 200) dans la barre de pagination. À 200, vous parcourez plus vite un gros volume sans recharger.",
     ],
     tips: [
+      "Les filtres actifs sont mémorisés dans l'URL de la page. Vous pouvez copier-coller l'URL pour partager une vue filtrée avec un collègue, ou retrouver votre contexte après un rechargement de page.",
+      "Les filtres Montant min et Montant max s'appliquent sur la valeur absolue du montant. Un filtre Montant min = 1000 isole toutes les opérations de plus de 1 000 €, quel que soit le sens (encaissement ou décaissement).",
+      "Par défaut, les virements SEPA agrégés et leurs sous-transactions ne s'affichent pas simultanément. Activez le toggle « Afficher les virements SEPA détaillés » uniquement si vous souhaitez explorer la décomposition d'un virement de masse.",
       "Les opérations agrégées (lignes parents qui regroupent plusieurs sous-écritures) apparaissent sur fond gris plus dense pour les distinguer des lignes unitaires.",
       "Une opération sans catégorie porte un badge ambre « Non catégorisée » très visible : c'est ce qui alimente le KPI du Tableau de bord.",
       "Le panneau latéral de catégorisation ne s'affiche que s'il y a au moins une sélection. Le bouton Appliquer y reste désactivé tant qu'aucune catégorie n'a été choisie.",
@@ -250,12 +259,15 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     panel: {
       summary:
-        "Liste paginée des opérations bancaires. Filtres, recherche, sélection multiple, catégorisation en masse, suggestion de règle.",
+        "Liste paginée des opérations bancaires. Filtres (montant, SEPA, catégorie, période), recherche, sélection multiple, catégorisation en masse, suggestion de règle. Filtres persistés dans l'URL.",
       does: [
         "Recherchez par libellé, tiers ou montant dans la barre de filtres.",
+        "Filtrez par Montant min / Montant max (valeur absolue) pour isoler les grosses ou petites opérations.",
         "Cochez les lignes : un panneau s'ouvre à droite avec la combobox catégorie + bouton Catégoriser.",
+        "Pour catégoriser tous les résultats d'un filtre : sélectionnez toute la page, puis cliquez sur le lien « Sélectionner les X résultats ».",
         "Cliquez sur Suggérer une règle (dans le panneau) pour automatiser une catégorisation récurrente.",
         "Activez « Non catégorisées uniquement » pour vous concentrer sur les lignes à traiter.",
+        "Activez « Afficher les virements SEPA détaillés » pour voir les sous-transactions d'un virement de masse.",
       ],
       hide: ["tips"],
     },
@@ -757,6 +769,102 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     whenToUse: [
       "Pour identifier les règles jamais déclenchées (hit_count = 0) et envisager de les supprimer ou de les ajuster.",
       "Pour vérifier qu'une règle nouvellement créée commence bien à capturer des transactions après un import.",
+    ],
+  },
+  {
+    id: "filtres-montant",
+    title: "Filtres Montant min / Montant max sur la page Transactions",
+    whatItDoes:
+      "Permet de restreindre la liste des transactions a celles dont la valeur absolue du montant est comprise dans une fourchette donnee.",
+    whatItChanges: [
+      "Passe les parametres amount_min et amount_max (en euros) a l'API GET /api/transactions.",
+      "Le backend filtre les transactions dont func.abs(amount) est superieur ou egal a amount_min et inferieur ou egal a amount_max.",
+      "La liste se rechargeen page 1 des que vous modifiez un des deux champs.",
+    ],
+    whatItDoesNotChange: [
+      "Ne modifie aucune transaction.",
+      "Le filtre montant ne remplace pas les autres filtres (periode, categorie, recherche) : ils s'appliquent tous ensemble.",
+      "Le filtre s'applique sur la valeur absolue : un filtre Montant min = 1000 capture aussi bien les encaissements de 1 000 EUR que les decaissements de 1 000 EUR.",
+    ],
+    whenToUse: [
+      "Pour isoler les operations importantes au-dela d'un seuil (ex. : toutes les depenses superieures a 5 000 EUR).",
+      "Pour identifier les micro-transactions sous un certain montant (ex. : tout ce qui est inferieur a 10 EUR).",
+    ],
+  },
+  {
+    id: "url-persistence-transactions",
+    title: "Persistance des filtres dans l'URL sur la page Transactions",
+    whatItDoes:
+      "Enregistre l'etat de tous les filtres actifs dans l'URL de la page, de sorte qu'un rechargement ou un partage de lien restaure exactement la meme vue filtree.",
+    whatItChanges: [
+      "Chaque modification de filtre (recherche, periode, categorie, montant, SEPA, non categorisees, compte, contrepartie, pagination) met a jour l'URL via useSearchParams sans provoquer de rechargement complet.",
+      "L'URL reste propre (aucun parametre) quand tous les filtres sont a leur valeur par defaut.",
+    ],
+    whatItDoesNotChange: [
+      "La selection de transactions (cases cochees) n'est pas persistee dans l'URL : elle se vide au changement de page ou de filtre.",
+      "Le filtre entite (societe) n'est pas dans l'URL : il est global a l'application via l'EntitySelector.",
+    ],
+    whenToUse: [
+      "Pour partager une vue filtree avec un collegue (copier-coller l'URL du navigateur).",
+      "Pour retrouver un contexte de travail apres un rechargement accidentel de la page.",
+    ],
+  },
+  {
+    id: "toggle-sepa",
+    title: "Toggle Afficher les virements SEPA detailles sur la page Transactions",
+    whatItDoes:
+      "Permet d'afficher les sous-transactions d'un virement SEPA de masse (lignes enfants dont parent_transaction_id est non null), masquees par defaut.",
+    whatItChanges: [
+      "Active ou desactive le parametre include_sepa_children dans la requete GET /api/transactions.",
+      "Quand desactive (comportement par defaut) : seules les lignes sans parent (parent_transaction_id = null) sont retournees, ce qui evite de voir la meme operation deux fois.",
+      "Quand active : les sous-transactions apparaissent egalement, permettant de voir le detail de chaque sous-virement.",
+      "L'etat du toggle est persist dans l'URL (parametre sepa=true).",
+    ],
+    whatItDoesNotChange: [
+      "Ne modifie aucune transaction.",
+      "L'activation du toggle n'affecte pas les autres filtres.",
+    ],
+    whenToUse: [
+      "Quand vous voulez comprendre la decomposition d'un virement SEPA de masse et verifier que chaque ligne enfant est correctement categorisee.",
+    ],
+  },
+  {
+    id: "bulk-categorize-filtre",
+    title: "Categoriser tous les resultats d'un filtre (sans limite de page)",
+    whatItDoes:
+      "Permet de catégoriser en une seule action toutes les transactions correspondant aux filtres actifs, sans etre limite a la page courante.",
+    whatItChanges: [
+      "Appelle POST /api/transactions/bulk-categorize-filtered avec les criteres de filtre courants (periode, recherche, categorie, montant, SEPA, non categorisees, compte, contrepartie) et la categorie choisie.",
+      "Le backend reconstruit la meme requete SQL que GET /api/transactions, sans limite de pagination, et met a jour toutes les transactions trouvees.",
+      "Le nombre total d'operations categorisees est affiche dans le panneau apres l'action.",
+    ],
+    whatItDoesNotChange: [
+      "Ne touche pas aux transactions qui ne correspondent pas aux filtres actifs.",
+      "L'endpoint existant de categorisation par identifiants (bulk-categorize avec transaction_ids) reste disponible pour la categorisation de la page courante uniquement.",
+    ],
+    whenToUse: [
+      "Quand vous avez filtre « Non categorisees uniquement » et souhaitez tout catégoriser d'un coup dans la meme categorie.",
+      "Quand vous avez un grand volume de transactions a traiter (plus de 50, donc plusieurs pages) et qu'une seule categorie convient pour tout le resultat filtre.",
+    ],
+  },
+  {
+    id: "auto-suggest-regle",
+    title: "Suggestion automatique de regle apres catégorisations manuelles repetees",
+    whatItDoes:
+      "Detecte lorsque vous avez catégorise manuellement le meme libellé au moins 3 fois dans la meme categorie au cours des 30 derniers jours, et vous propose de créer une regle automatique.",
+    whatItChanges: [
+      "Appelle GET /api/rules/auto-suggest au chargement de la page Transactions.",
+      "Si des suggestions sont disponibles, un bandeau ambre apparait en haut de la page avec un bouton « Créer une regle » par suggestion.",
+      "Cliquer sur « Créer une regle » ouvre le formulaire de regle prefilled (operateur CONTAINS, valeur = libelle normalise, categorie = categorie detectee).",
+      "Cliquer sur « Plus tard » masque la suggestion pour la session en cours (sessionStorage), sans la supprimer cote serveur.",
+    ],
+    whatItDoesNotChange: [
+      "Ne crée aucune regle automatiquement : c'est toujours vous qui validez le formulaire.",
+      "Ne supprime pas les transactions ni les catégorisations manuelles existantes.",
+      "Les catégorisations effectuees par une regle ne sont pas comptees : seules les catégorisations de type MANUAL sont analysees.",
+    ],
+    whenToUse: [
+      "Quand le meme tiers ou libelle revient chaque mois et que vous le catégorisez manuellement a chaque fois : acceptez la suggestion pour automatiser la prochaine fois.",
     ],
   },
 ];
