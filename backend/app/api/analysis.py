@@ -1,9 +1,14 @@
 """Endpoints `/api/analysis/*` — indicateurs KPI pour la page Analyse."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from datetime import date
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api._export_helpers import XLSX_AVAILABLE, export_response
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
 from app.models.user import User
@@ -132,3 +137,125 @@ def get_working_capital(
     """
     require_entity_access(session=session, user=user, entity_id=entity_id)
     return compute_working_capital(session, entity_id=entity_id)
+
+
+# ---------------------------------------------------------------------------
+# G11 — Endpoints export CSV
+# ---------------------------------------------------------------------------
+
+
+def _check_xlsx(format: str) -> None:
+    """Lève HTTPException 400 si XLSX demandé mais openpyxl absent."""
+    if format == "xlsx" and not XLSX_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Format XLSX non disponible sur ce serveur.")
+
+
+@router.get("/drift/export")
+def export_drift(
+    entity_id: int = Query(...),
+    seuil_pct: float = Query(20.0, ge=0.0, le=500.0),
+    format: Literal["csv", "xlsx"] = Query(default="csv"),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export CSV des dérives par catégorie (G11).
+
+    Colonnes : Catégorie, M-1 (EUR), Moyenne M-2/M-4 (EUR), Écart (EUR), Écart %.
+    """
+    _check_xlsx(format)
+    require_entity_access(session=session, user=user, entity_id=entity_id)
+    result = compute_category_drift(session, entity_id=entity_id, seuil_pct=seuil_pct)
+
+    headers = ["Categorie", "M-1 (EUR)", "Moyenne M-2/M-4 (EUR)", "Ecart (EUR)", "Ecart %", "Statut"]
+    rows = [
+        [
+            row.label,
+            f"{row.current_cents / 100:.2f}",
+            f"{row.avg3m_cents / 100:.2f}",
+            f"{row.delta_cents / 100:.2f}",
+            f"{row.delta_pct:.1f}" if row.delta_pct is not None else "",
+            row.status,
+        ]
+        for row in result.rows
+    ]
+
+    today = date.today().isoformat()
+    filename_base = f"analyse-drift_{today}"
+    try:
+        return export_response(headers, rows, filename_base, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/top-movers/export")
+def export_top_movers(
+    entity_id: int = Query(...),
+    limit: int = Query(5, ge=1, le=50),
+    format: Literal["csv", "xlsx"] = Query(default="csv"),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export CSV des top movers (G11).
+
+    Colonnes : Catégorie, Direction, Variation (EUR).
+    """
+    _check_xlsx(format)
+    require_entity_access(session=session, user=user, entity_id=entity_id)
+    result = compute_top_movers(session, entity_id=entity_id, limit=limit)
+
+    headers = ["Categorie", "Direction", "Variation (EUR)"]
+    rows = []
+    for row in result.increases + result.decreases:
+        rows.append([
+            row.label,
+            "encaissement" if row.direction == "in" else "decaissement",
+            f"{row.delta_cents / 100:.2f}",
+        ])
+
+    today = date.today().isoformat()
+    filename_base = f"analyse-top-movers_{today}"
+    try:
+        return export_response(headers, rows, filename_base, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/yoy/export")
+def export_yoy(
+    entity_id: int = Query(...),
+    format: Literal["csv", "xlsx"] = Query(default="csv"),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export CSV de l'analyse YoY (G11).
+
+    Colonnes : Mois, Encaissements N, Encaissements N-1, Décaissements N, Décaissements N-1.
+    """
+    _check_xlsx(format)
+    require_entity_access(session=session, user=user, entity_id=entity_id)
+    result = compute_yoy(session, entity_id=entity_id)
+
+    headers = [
+        "Mois",
+        "Encaissements N (EUR)",
+        "Encaissements N-1 (EUR)",
+        "Decaissements N (EUR)",
+        "Decaissements N-1 (EUR)",
+    ]
+    rows = [
+        [
+            pt.month,
+            f"{pt.revenues_current / 100:.2f}",
+            f"{pt.revenues_previous / 100:.2f}",
+            f"{pt.expenses_current / 100:.2f}",
+            f"{pt.expenses_previous / 100:.2f}",
+        ]
+        for pt in result.series
+    ]
+
+    today = date.today().isoformat()
+    filename_base = f"analyse-yoy_{today}"
+    try:
+        return export_response(headers, rows, filename_base, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

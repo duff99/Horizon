@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api._export_helpers import XLSX_AVAILABLE, export_response
 from app.db import get_db
 from app.deps import get_current_user, require_entity_access
 from app.models.bank_account import BankAccount
@@ -171,3 +174,86 @@ def get_pivot(
         realized_series=realized_series,
         forecast_series=forecast_series,
     )
+
+
+@router.get("/pivot/export")
+def export_pivot(
+    scenario_id: int = Query(...),
+    entity_id: int = Query(...),
+    from_: str = Query(..., alias="from"),
+    to: str = Query(...),
+    accounts: str | None = Query(default=None),
+    format: Literal["csv", "xlsx"] = Query(default="csv"),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export CSV (ou XLSX) du tableau pivot prévisionnel (G11).
+
+    Matrice catégorie × mois avec montants réalisés, engagés et prévisionnels.
+    Colonnes : Catégorie, Niveau, Direction, puis un triplet (Réalisé, Engagé, Prévisionnel)
+    pour chaque mois de la plage.
+    """
+    if format == "xlsx" and not XLSX_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Format XLSX non disponible sur ce serveur.")
+
+    # Mêmes validations que get_pivot
+    require_entity_access(session=session, user=user, entity_id=entity_id)
+
+    sc = session.get(ForecastScenario, scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="Scénario introuvable")
+    if sc.entity_id != entity_id:
+        raise HTTPException(status_code=403, detail="Scénario non rattaché à cette entité")
+
+    from_month = _parse_year_month(from_, "from")
+    to_month = _parse_year_month(to, "to")
+    if from_month > to_month:
+        raise HTTPException(status_code=400, detail="La borne 'from' doit être <= 'to'")
+    span = _months_between(from_month, to_month)
+    if span > _MAX_RANGE_MONTHS:
+        raise HTTPException(status_code=400, detail=f"Plage trop large : {span} mois (maximum {_MAX_RANGE_MONTHS})")
+
+    account_ids = _parse_accounts_csv(accounts)
+    if account_ids is not None:
+        entity_account_ids = set(
+            session.scalars(select(BankAccount.id).where(BankAccount.entity_id == entity_id))
+        )
+        invalid = [a for a in account_ids if a not in entity_account_ids]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Comptes non rattachés à l'entité : {invalid}")
+
+    result = compute_pivot(
+        session,
+        scenario_id=scenario_id,
+        entity_id=entity_id,
+        from_month=from_month,
+        to_month=to_month,
+        account_ids=account_ids,
+    )
+
+    months = result.months
+
+    # En-têtes : Catégorie, Niveau, Direction, puis pour chaque mois : Réalisé/Engagé/Prévisionnel
+    base_headers = ["Categorie", "Niveau", "Direction"]
+    month_headers = []
+    for m in months:
+        month_headers += [f"{m} Realise (EUR)", f"{m} Engage (EUR)", f"{m} Previsionnel (EUR)"]
+    headers = base_headers + month_headers
+
+    csv_rows = []
+    for row in result.rows:
+        base = [row.label, str(row.level), row.direction]
+        for cell in row.cells:
+            base += [
+                f"{cell.realized_cents / 100:.2f}",
+                f"{cell.committed_cents / 100:.2f}",
+                f"{cell.forecast_cents / 100:.2f}",
+            ]
+        csv_rows.append(base)
+
+    today = date.today().isoformat()
+    filename_base = f"previsionnel-pivot_{today}"
+    try:
+        return export_response(headers, csv_rows, filename_base, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1,10 +1,16 @@
 """Endpoint /api/transactions."""
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api._export_helpers import XLSX_AVAILABLE, export_response
 from app.db import get_db
 from app.deps import (
     accessible_entity_ids_subquery,
@@ -123,6 +129,103 @@ def list_transactions(
         page=filters.page,
         per_page=filters.per_page,
     )
+
+
+@router.get("/export")
+def export_transactions(
+    entity_id: int | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    bank_account_id: int | None = Query(None),
+    category_id: int | None = Query(None),
+    counterparty_id: int | None = Query(None),
+    search: str | None = Query(None),
+    uncategorized: bool | None = Query(None),
+    amount_min: Decimal | None = Query(None),
+    amount_max: Decimal | None = Query(None),
+    include_sepa_children: bool = Query(False),
+    format: Literal["csv", "xlsx"] = Query(default="csv"),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export CSV (ou XLSX si disponible) des transactions filtrées.
+
+    Réutilise les mêmes filtres que GET /api/transactions.
+    Colonnes : Date, Libellé, Tiers, Catégorie, Montant (€), Compte.
+    Multi-tenant : seules les transactions des entités accessibles sont exportées.
+    """
+    if format == "xlsx" and not XLSX_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Format XLSX non disponible sur ce serveur.")
+
+    accessible_entity_ids = accessible_entity_ids_subquery(session=session, user=user)
+
+    conditions = [
+        BankAccount.entity_id.in_(accessible_entity_ids),
+        Transaction.is_aggregation_parent.is_(False),
+    ]
+    if entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        conditions.append(BankAccount.entity_id == entity_id)
+    if bank_account_id:
+        conditions.append(Transaction.bank_account_id == bank_account_id)
+    if date_from:
+        conditions.append(Transaction.operation_date >= date_from)
+    if date_to:
+        conditions.append(Transaction.operation_date <= date_to)
+    if counterparty_id:
+        conditions.append(Transaction.counterparty_id == counterparty_id)
+    if category_id is not None:
+        conditions.append(Transaction.category_id == category_id)
+    if search:
+        like = f"%{search.lower()}%"
+        conditions.append(
+            or_(
+                func.lower(Transaction.label).like(like),
+                func.lower(Transaction.raw_label).like(like),
+            )
+        )
+    if uncategorized:
+        conditions.append(
+            Transaction.categorized_by == TransactionCategorizationSource.NONE
+        )
+    if not include_sepa_children:
+        conditions.append(Transaction.parent_transaction_id.is_(None))
+    if amount_min is not None:
+        conditions.append(func.abs(Transaction.amount) >= amount_min)
+    if amount_max is not None:
+        conditions.append(func.abs(Transaction.amount) <= amount_max)
+
+    q = (
+        select(Transaction, BankAccount.name.label("account_name"))
+        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
+        .where(and_(*conditions))
+        .order_by(Transaction.operation_date.desc(), Transaction.statement_row_index.desc())
+        .options(
+            selectinload(Transaction.counterparty),
+            selectinload(Transaction.category),
+        )
+    )
+    results = session.execute(q).all()
+
+    headers_csv = ["Date", "Libelle", "Tiers", "Categorie", "Montant (EUR)", "Compte"]
+    rows = []
+    for tx, acct_name in results:
+        rows.append([
+            tx.operation_date.isoformat() if tx.operation_date else "",
+            tx.label,
+            tx.counterparty.name if tx.counterparty else "",
+            tx.category.name if tx.category else "",
+            # Montant en euros, point décimal, pas de symbole
+            f"{float(tx.amount):.2f}",
+            acct_name or "",
+        ])
+
+    today = date.today().isoformat()
+    filename_base = f"transactions_{today}"
+    try:
+        return export_response(headers_csv, rows, filename_base, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/bulk-categorize")
