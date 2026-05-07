@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import require_admin
+from app.deps import accessible_entity_ids_subquery, get_current_user, require_admin
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity
 from app.models.user import User
@@ -18,13 +18,22 @@ from app.services.audit import record_audit, to_dict_for_audit
 router = APIRouter(
     prefix="/api/bank-accounts",
     tags=["bank-accounts"],
-    dependencies=[Depends(require_admin)],
 )
 
 
 @router.get("", response_model=list[BankAccountRead])
-def list_bank_accounts(db: Session = Depends(get_db)) -> list[BankAccount]:
-    return list(db.scalars(select(BankAccount).order_by(BankAccount.created_at.desc())))
+def list_bank_accounts(
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+) -> list[BankAccount]:
+    subq = accessible_entity_ids_subquery(session=db, user=current)
+    return list(
+        db.scalars(
+            select(BankAccount)
+            .where(BankAccount.entity_id.in_(subq))
+            .order_by(BankAccount.created_at.desc())
+        )
+    )
 
 
 @router.post("", response_model=BankAccountRead, status_code=status.HTTP_201_CREATED)
