@@ -117,6 +117,12 @@ class CommitmentMatchRequest(BaseModel):
     transaction_id: int
 
 
+class CommitmentScoreBreakdown(BaseModel):
+    amount_diff_eur: float
+    date_diff_days: int
+    counterparty_match: bool
+
+
 class TransactionBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -125,7 +131,33 @@ class TransactionBrief(BaseModel):
     label: str
     amount: Decimal
     bank_account_label: str | None = None
+    score: int | None = None
+    score_breakdown: CommitmentScoreBreakdown | None = None
 
 
 class CommitmentSuggestionResponse(BaseModel):
     candidates: list[TransactionBrief]
+
+
+class CommitmentDirectionKpis(BaseModel):
+    total_30d_cents: int
+    overdue_total_cents: int
+    overdue_count: int
+    phantom_count: int
+
+
+class CommitmentKpis(BaseModel):
+    in_: CommitmentDirectionKpis | None = Field(
+        default=None, alias="in", serialization_alias="in",
+    )
+    out: CommitmentDirectionKpis | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class BulkCancelRequest(BaseModel):
+    ids: list[int]
+
+
+class BulkCancelResponse(BaseModel):
+    cancelled: int

@@ -1,7 +1,7 @@
 """Endpoints /api/commitments : CRUD + match/unmatch/suggest."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -19,10 +19,15 @@ from app.models.commitment import Commitment, CommitmentDirection, CommitmentSta
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.commitment import (
+    BulkCancelRequest,
+    BulkCancelResponse,
     CommitmentCreate,
+    CommitmentDirectionKpis,
+    CommitmentKpis,
     CommitmentListResponse,
     CommitmentMatchRequest,
     CommitmentRead,
+    CommitmentScoreBreakdown,
     CommitmentSuggestionResponse,
     CommitmentUpdate,
     TransactionBrief,
@@ -47,6 +52,107 @@ def _get_or_404_with_access(
         raise HTTPException(status_code=404, detail="Engagement introuvable")
     require_entity_access(session=session, user=user, entity_id=c.entity_id)
     return c
+
+
+@router.get("/aggregates", response_model=CommitmentKpis, response_model_by_alias=True)
+def aggregates(
+    entity_id: int | None = Query(default=None),
+    direction: Literal["in", "out"] | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> CommitmentKpis:
+    accessible = _accessible_entity_ids(session, user)
+    if entity_id is not None:
+        if entity_id not in accessible:
+            raise HTTPException(status_code=403, detail="Entité non accessible")
+        scope = [Commitment.entity_id == entity_id]
+    else:
+        scope = [Commitment.entity_id.in_(accessible)]
+
+    today = date.today()
+    h30 = today + timedelta(days=30)
+    phantom_cutoff = today - timedelta(days=7)
+
+    def _kpi_for(d: CommitmentDirection) -> CommitmentDirectionKpis:
+        base = and_(
+            *scope,
+            Commitment.direction == d,
+            Commitment.status == CommitmentStatus.PENDING,
+        )
+        total_30d = session.scalar(
+            select(func.coalesce(func.sum(Commitment.amount_cents), 0)).where(
+                and_(
+                    base,
+                    Commitment.expected_date >= today,
+                    Commitment.expected_date <= h30,
+                )
+            )
+        ) or 0
+        overdue_total = session.scalar(
+            select(func.coalesce(func.sum(Commitment.amount_cents), 0)).where(
+                and_(base, Commitment.expected_date < today)
+            )
+        ) or 0
+        overdue_count = session.scalar(
+            select(func.count(Commitment.id)).where(
+                and_(base, Commitment.expected_date < today)
+            )
+        ) or 0
+        phantom_count = session.scalar(
+            select(func.count(Commitment.id)).where(
+                and_(
+                    base,
+                    Commitment.matched_transaction_id.is_(None),
+                    Commitment.expected_date < phantom_cutoff,
+                )
+            )
+        ) or 0
+        return CommitmentDirectionKpis(
+            total_30d_cents=int(total_30d),
+            overdue_total_cents=int(overdue_total),
+            overdue_count=int(overdue_count),
+            phantom_count=int(phantom_count),
+        )
+
+    if direction == "in":
+        return CommitmentKpis(in_=_kpi_for(CommitmentDirection.IN))
+    if direction == "out":
+        return CommitmentKpis(out=_kpi_for(CommitmentDirection.OUT))
+    return CommitmentKpis(
+        in_=_kpi_for(CommitmentDirection.IN),
+        out=_kpi_for(CommitmentDirection.OUT),
+    )
+
+
+@router.post("/bulk-cancel", response_model=BulkCancelResponse)
+def bulk_cancel(
+    payload: BulkCancelRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> BulkCancelResponse:
+    if not payload.ids:
+        return BulkCancelResponse(cancelled=0)
+    accessible = set(_accessible_entity_ids(session, user))
+    rows = session.execute(
+        select(Commitment).where(Commitment.id.in_(payload.ids))
+    ).scalars().all()
+    if any(c.entity_id not in accessible for c in rows):
+        raise HTTPException(status_code=403, detail="Engagement hors périmètre")
+    cancelled = 0
+    for c in rows:
+        if c.status == CommitmentStatus.CANCELLED:
+            continue
+        before = to_dict_for_audit(c)
+        c.status = CommitmentStatus.CANCELLED
+        session.flush()
+        record_audit(
+            session, user=user, action="update", entity=c,
+            before=before, after=to_dict_for_audit(c), request=request,
+        )
+        cancelled += 1
+    session.commit()
+    return BulkCancelResponse(cancelled=cancelled)
 
 
 @router.get("", response_model=CommitmentListResponse)
@@ -299,6 +405,19 @@ def suggest_matches_endpoint(
             )
         ):
             ba_map[row[0]] = row[1]
+    def _breakdown(tx: Transaction) -> CommitmentScoreBreakdown:
+        cp_match = (
+            c.counterparty_id is not None
+            and tx.counterparty_id is not None
+            and tx.counterparty_id == c.counterparty_id
+        )
+        commitment_eur = c.amount_cents / 100.0
+        return CommitmentScoreBreakdown(
+            amount_diff_eur=float(commitment_eur - float(abs(tx.amount))),
+            date_diff_days=(tx.operation_date - c.expected_date).days,
+            counterparty_match=bool(cp_match),
+        )
+
     items = [
         TransactionBrief(
             id=tx.id,
@@ -306,7 +425,9 @@ def suggest_matches_endpoint(
             label=tx.label,
             amount=tx.amount,
             bank_account_label=ba_map.get(tx.bank_account_id),
+            score=score,
+            score_breakdown=_breakdown(tx),
         )
-        for tx, _score in candidates
+        for tx, score in candidates
     ]
     return CommitmentSuggestionResponse(candidates=items)
