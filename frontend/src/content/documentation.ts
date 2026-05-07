@@ -907,4 +907,98 @@ export const FEATURE_DOCS: FeatureDoc[] = [
       "Pour identifier quel compte est le plus actif ou le plus en tension avant un arbitrage de tresorerie.",
     ],
   },
+  // ---------------------------------------------------------------------------
+  // G3 — Bandeau DSO/DPO/BFR sur ForecastV2Page
+  // ---------------------------------------------------------------------------
+  {
+    id: "working-capital-banner-forecast",
+    title: "Bandeau DSO/DPO/BFR sur la page Previsionnel",
+    whatItDoes:
+      "Affiche en tete de la page Previsionnel trois indicateurs de besoin en fonds de roulement : DSO (delai client moyen), DPO (delai fournisseur moyen) et BFR (besoin en fonds de roulement en euros). Ces chiffres ancrent le previsionnel dans la realite des creances et dettes courantes.",
+    whatItChanges: [
+      "Appelle GET /api/analysis/working-capital au chargement de la page Previsionnel, pour l'entite selectionnee.",
+      "Affiche trois cartes KPI entre le selecteur d'entite/scenario et le graphique de barres.",
+      "Si has_data=false (aucun engagement matche a une transaction), affiche un encadre ambre invitant a creer des engagements.",
+      "Si DSO ou DPO est null (donnees insuffisantes), affiche le tiret — avec un tooltip explicatif.",
+    ],
+    whatItDoesNotChange: [
+      "Les engagements, les transactions, le scenario de prevision.",
+      "Le pivot et le graphique de barres ne sont pas modifies.",
+      "C'est une lecture seule : aucune ecriture en base.",
+    ],
+    whenToUse: [
+      "Avant de valider un previsionnel mensuel, pour verifier que le BFR est coherent avec les encaissements attendus.",
+      "Pour surveiller un DSO eleve signalant des clients qui paient lentement et pouvant creer un creux de tresorerie.",
+    ],
+  },
+  // ---------------------------------------------------------------------------
+  // G2 — Rolling 13-week
+  // ---------------------------------------------------------------------------
+  {
+    id: "rolling-13w",
+    title: "Vue hebdomadaire 13 semaines glissantes",
+    whatItDoes:
+      "Affiche un graphique en barres representant les flux nets realises (semaines passees) et prevus par le scenario actif (semaines futures) sur une fenetre de 13 semaines : W-1 (semaine precedente) a W+11. Permet de detecter d'un coup d'oeil si une semaine prochaine est financierement tendue.",
+    whatItChanges: [
+      "Appelle GET /api/forecast/rolling-13w au chargement, pour l'entite et le scenario selectionnes.",
+      "Affiche une section Tresorerie hebdomadaire en bas de la page Previsionnel, apres le tableau pivot.",
+      "Les semaines passees ont des barres pleines, les semaines futures ont des barres semi-transparentes.",
+    ],
+    whatItDoesNotChange: [
+      "Les transactions, les forecast_lines, le scenario.",
+      "La vue mensuelle du pivot n'est pas affectee.",
+      "Lecture seule : aucune ecriture en base.",
+    ],
+    whenToUse: [
+      "En gestion de tresorerie operationnelle jour-a-jour, pour anticiper une semaine tendue a venir.",
+      "Pour valider que les previsions hebdomadaires du scenario actif sont coherentes avec les transactions realisees des semaines precedentes.",
+    ],
+  },
+  // ---------------------------------------------------------------------------
+  // G7 — Overlay multi-scenarios
+  // ---------------------------------------------------------------------------
+  {
+    id: "scenario-overlay",
+    title: "Comparaison de scenarios en overlay",
+    whatItDoes:
+      "Permet de superposer le solde projete d'un second scenario sur le graphique Encaissements vs. decaissements, sous la forme d'une ligne pointillee jaune. Facilite la comparaison visuelle entre deux hypotheses (par exemple Optimiste vs Pessimiste) sans quitter la page.",
+    whatItChanges: [
+      "Active un bouton Comparer dans la barre d'outils de la page Previsionnel.",
+      "Quand active, affiche un selecteur de scenario de comparaison.",
+      "Quand un second scenario est selectionne, appelle GET /api/forecast/pivot pour ce scenario et ajoute une ligne pointillee jaune sur le graphique de barres.",
+    ],
+    whatItDoesNotChange: [
+      "Aucun scenario n'est modifie : c'est une visualisation en lecture seule.",
+      "Le tableau pivot et le scenario actif restent inchanges.",
+      "Fermer ou desactiver le bouton Comparer retire l'overlay sans aucun effet de bord.",
+    ],
+    whenToUse: [
+      "Pour comparer visuellement un scenario optimiste et un scenario pessimiste sur la meme periode.",
+      "Pour preparer une presentation a un investisseur ou un banquier en montrant l'amplitude des incertitudes.",
+    ],
+  },
+  // ---------------------------------------------------------------------------
+  // G8 — What-if sans persistence
+  // ---------------------------------------------------------------------------
+  {
+    id: "what-if-simulation",
+    title: "Simulation what-if sur le tableau pivot",
+    whatItDoes:
+      "Permet de modifier temporairement n'importe quelle cellule de prevision (mois courant ou futur) en double-cliquant dessus, sans enregistrer la valeur en base. Les totaux de colonnes et le solde de fin de mois sont recalcules automatiquement cote navigateur. Un bouton Reinitialiser les simulations remet toutes les cellules a leurs valeurs reelles.",
+    whatItChanges: [
+      "Double-clic sur une cellule future ou courante : affiche un champ de saisie (fond orange) a la place de la valeur.",
+      "Apres validation (Entree ou clic ailleurs), la cellule s'affiche en orange avec la valeur saisie.",
+      "Les lignes Total encaissements, Total decaissements, Variation nette de cash et Tresorerie en fin de mois (simulation) sont recalculees avec les valeurs overridees.",
+      "Un bandeau ambre en haut du tableau indique que le mode simulation est actif.",
+    ],
+    whatItDoesNotChange: [
+      "Le scenario, les forecast_lines et aucune donnee persistee en base.",
+      "Les overrides disparaissent lors d'un rechargement de page ou en cliquant sur Reinitialiser.",
+      "Les mois passes (anterieurs au mois courant) ne sont pas editables.",
+    ],
+    whenToUse: [
+      "Pour explorer rapidement l'impact d'une depense exceptionnelle sur la tresorerie projetee, sans creer un nouveau scenario.",
+      "Pour preparer un chiffre a communiquer (si on depense X ce mois, quel est le solde fin de mois ?) avant une reunion.",
+    ],
+  },
 ];

@@ -14,6 +14,12 @@ import { ConsolidatedAccountsPopover } from "@/components/forecast/ConsolidatedA
 import { PivotBars } from "@/components/forecast/PivotBars";
 import { PivotTable } from "@/components/forecast/PivotTable";
 import { CellEditorDrawer } from "@/components/forecast/CellEditorDrawer";
+import { WorkingCapitalBanner } from "@/components/forecast/WorkingCapitalBanner";
+import { Rolling13WChart } from "@/components/forecast/Rolling13WChart";
+import {
+  ScenarioOverlaySelect,
+  useScenarioOverlay,
+} from "@/components/forecast/ScenarioOverlay";
 import { currentMonthStr, shiftMonth } from "@/lib/forecastFormat";
 
 interface DrawerState {
@@ -71,6 +77,16 @@ export function ForecastV2Page() {
 
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
 
+  // G7 — Overlay scénario de comparaison
+  const [showOverlay, setShowOverlay] = useState(false);
+  const overlay = useScenarioOverlay({
+    entityId: effectiveEntityId,
+    currentScenarioId: scenarioId,
+    from: period.from,
+    to: period.to,
+    accountIds,
+  });
+
   const noEntity = effectiveEntityId == null;
   const noScenario =
     !scenariosQuery.isLoading &&
@@ -101,8 +117,40 @@ export function ForecastV2Page() {
             onChange={setPeriod}
             granularity="month"
           />
+          {/* G7 — bouton Comparer */}
+          {!noEntity && !noScenario && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowOverlay((v) => {
+                  if (v) overlay.setOverlayScenarioId(null);
+                  return !v;
+                });
+              }}
+              title="Superpose les flux d'un second scénario sur le graphique pour visualiser l'écart entre deux hypothèses."
+              className={`rounded-md border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                showOverlay
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-line-soft bg-panel text-ink-2 hover:text-ink"
+              }`}
+            >
+              Comparer
+            </button>
+          )}
         </div>
       </div>
+
+      {/* G7 — sélecteur de scénario overlay (visible si showOverlay) */}
+      {showOverlay && !noEntity && !noScenario && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <ScenarioOverlaySelect
+            entityId={effectiveEntityId}
+            currentScenarioId={scenarioId}
+            overlayScenarioId={overlay.overlayScenarioId}
+            onSelect={overlay.setOverlayScenarioId}
+          />
+        </div>
+      )}
 
       {noEntityAtAll && (
         <div
@@ -145,6 +193,11 @@ export function ForecastV2Page() {
         </div>
       )}
 
+      {/* G3 — Bandeau DSO/DPO/BFR */}
+      {!noEntity && !noScenario && effectiveEntityId != null && (
+        <WorkingCapitalBanner entityId={effectiveEntityId} />
+      )}
+
       {!noEntity && !noScenario && pivotQuery.data && (
         <>
           <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
@@ -154,11 +207,21 @@ export function ForecastV2Page() {
               </h2>
               <span className="text-[11px] text-muted-foreground">
                 Hachures = prévisionnel · ligne = solde projeté
+                {overlay.overlayScenarioId != null && (
+                  <span className="ml-2 text-amber-600">
+                    · pointillés jaunes = scénario de comparaison
+                  </span>
+                )}
               </span>
             </div>
             <PivotBars
               result={pivotQuery.data}
               currentMonth={currentMonth}
+              overlayResult={
+                overlay.overlayScenarioId != null
+                  ? overlay.overlayPivot
+                  : undefined
+              }
             />
           </div>
 
@@ -169,6 +232,16 @@ export function ForecastV2Page() {
             }
             currentMonth={currentMonth}
           />
+
+          {/* G2 — Rolling 13-week */}
+          {effectiveEntityId != null && (
+            <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+              <Rolling13WChart
+                entityId={effectiveEntityId}
+                scenarioId={scenarioId}
+              />
+            </div>
+          )}
         </>
       )}
 
