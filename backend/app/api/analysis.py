@@ -18,6 +18,7 @@ from app.schemas.analysis import (
     ClientConcentrationResponse,
     EntitiesComparisonResponse,
     RunwayResponse,
+    SeasonalityResponse,
     TopMoversResponse,
     WorkingCapitalResponse,
     YoYResponse,
@@ -28,6 +29,7 @@ from app.services.analysis import (
     compute_client_concentration,
     compute_entities_comparison,
     compute_runway,
+    compute_seasonality,
     compute_top_movers,
     compute_working_capital,
     compute_yoy,
@@ -259,3 +261,24 @@ def export_yoy(
         return export_response(headers, rows, filename_base, format)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# G9 — Saisonnalité par catégorie
+# ---------------------------------------------------------------------------
+
+
+@router.get("/seasonality", response_model=SeasonalityResponse)
+def get_seasonality(
+    entity_id: int = Query(...),
+    category_id: int = Query(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> SeasonalityResponse:
+    """Retourne les totaux mensuels d'une catégorie sur 24 mois glissants.
+
+    Si la catégorie a moins de 13 mois de données, `has_enough_data=False`
+    et le frontend affiche un placeholder informatif.
+    """
+    require_entity_access(session=session, user=user, entity_id=entity_id)
+    return compute_seasonality(session, entity_id=entity_id, category_id=category_id)

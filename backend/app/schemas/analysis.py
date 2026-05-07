@@ -181,3 +181,25 @@ class EntityCompareRow(BaseModel):
 
 class EntitiesComparisonResponse(BaseModel):
     entities: list[EntityCompareRow]
+
+
+# ---------------------------------------------------------------------------
+# 9. Saisonnalité par catégorie (G9)
+# ---------------------------------------------------------------------------
+
+
+class SeasonalityPoint(BaseModel):
+    month: str       # "YYYY-MM"
+    year: int
+    month_num: int   # 1-12
+    amount_cents: int  # Σ transactions de la catégorie ce mois
+
+
+class SeasonalityResponse(BaseModel):
+    entity_id: int
+    category_id: int
+    category_label: str
+    months_available: int  # nombre de mois distincts avec des données
+    has_enough_data: bool  # True si >= 13 mois
+    earliest_available: str | None  # "YYYY-MM"
+    points: list[SeasonalityPoint]  # 24 mois max, triés chronologiquement

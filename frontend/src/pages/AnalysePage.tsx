@@ -20,6 +20,7 @@ import { CategoryDriftTable } from "@/components/analyse/CategoryDriftTable";
 import { ClientConcentrationCard } from "@/components/analyse/ClientConcentrationCard";
 import { EntitiesComparisonTable } from "@/components/analyse/EntitiesComparisonTable";
 import { RunwayCard } from "@/components/analyse/RunwayCard";
+import { SeasonalityCard } from "@/components/analyse/SeasonalityCard";
 import { TopMoversCard } from "@/components/analyse/TopMoversCard";
 import { WorkingCapitalCard } from "@/components/analyse/WorkingCapitalCard";
 import { YoYChart } from "@/components/analyse/YoYChart";
@@ -129,6 +130,10 @@ export function AnalysePage() {
               />
             </div>
           )}
+        </div>
+        {/* Ligne 5 : saisonnalité */}
+        <div className="col-span-12">
+          <SeasonalityCard entityId={entityId ?? undefined} />
         </div>
         <div className="col-span-12">
           <EntitiesComparisonTable />

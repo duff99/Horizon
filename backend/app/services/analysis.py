@@ -36,6 +36,8 @@ from app.schemas.analysis import (
     EntitiesComparisonResponse,
     EntityCompareRow,
     RunwayResponse,
+    SeasonalityPoint,
+    SeasonalityResponse,
     TopMoverRow,
     TopMoversResponse,
     WorkingCapitalResponse,
@@ -982,4 +984,89 @@ def compute_working_capital(
         receivables_cents=receivables, payables_cents=payables,
         matched_in_count=in_count, matched_out_count=out_count,
         has_data=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# G9 — Saisonnalité par catégorie
+# ---------------------------------------------------------------------------
+
+SEASONALITY_MIN_MONTHS = 13
+SEASONALITY_MAX_MONTHS = 24
+
+
+def compute_seasonality(
+    session: Session,
+    *,
+    entity_id: int,
+    category_id: int,
+) -> SeasonalityResponse:
+    """Retourne les totaux mensuels d'une catégorie sur 24 mois glissants.
+
+    Si la catégorie a moins de 13 mois de données, `has_enough_data=False`
+    et le frontend affiche un placeholder informatif.
+    """
+    ba_ids = _bank_account_ids_for_entity(session, entity_id)
+
+    # Récupérer le label de la catégorie
+    cat = session.get(Category, category_id)
+    category_label = cat.name if cat else f"Catégorie {category_id}"
+
+    if not ba_ids:
+        return SeasonalityResponse(
+            entity_id=entity_id,
+            category_id=category_id,
+            category_label=category_label,
+            months_available=0,
+            has_enough_data=False,
+            earliest_available=None,
+            points=[],
+        )
+
+    month_col = func.date_trunc("month", Transaction.operation_date)
+    rows = session.execute(
+        select(
+            month_col.label("month"),
+            func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+        )
+        .where(
+            and_(
+                Transaction.bank_account_id.in_(ba_ids),
+                Transaction.category_id == category_id,
+                Transaction.is_aggregation_parent.is_(False),
+            )
+        )
+        .group_by(month_col)
+        .order_by(month_col.desc())
+        .limit(SEASONALITY_MAX_MONTHS)
+    ).all()
+
+    points: list[SeasonalityPoint] = []
+    for month_date, total in rows:
+        if month_date is None:
+            continue
+        month_key = _month_key(month_date)
+        points.append(
+            SeasonalityPoint(
+                month=month_key,
+                year=month_date.year,
+                month_num=month_date.month,
+                amount_cents=_eur_to_cents(Decimal(total)),
+            )
+        )
+
+    # Trier chronologiquement (du plus ancien au plus récent)
+    points.sort(key=lambda p: p.month)
+
+    months_available = len(points)
+    earliest = points[0].month if points else None
+
+    return SeasonalityResponse(
+        entity_id=entity_id,
+        category_id=category_id,
+        category_label=category_label,
+        months_available=months_available,
+        has_enough_data=months_available >= SEASONALITY_MIN_MONTHS,
+        earliest_available=earliest,
+        points=points,
     )

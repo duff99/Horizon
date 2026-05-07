@@ -1031,6 +1031,32 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     ],
   },
   // ---------------------------------------------------------------------------
+  // G9 — Saisonnalité par catégorie
+  // ---------------------------------------------------------------------------
+  {
+    id: "seasonality-chart",
+    title: "Saisonnalité par catégorie (N vs N-1)",
+    whatItDoes:
+      "Affiche un graphique comparant les flux mensuels d'une catégorie entre l'année en cours (N) et l'année précédente (N-1) sur 24 mois glissants. Permet de détecter les patterns récurrents (loyer, abonnements, primes) et d'anticiper les mois à flux élevés.",
+    whatItChanges: [
+      "Affiche une carte Saisonnalité par catégorie en bas de la page Analyse.",
+      "Un menu déroulant permet de choisir la catégorie à analyser.",
+      "Si la catégorie sélectionnée a moins de 13 mois de données, un encadré informatif indique la date estimée à laquelle le graphique deviendra disponible.",
+      "Si 13+ mois de données sont disponibles, un graphique en courbes (bleu = N, gris tirets = N-1) s'affiche avec les totaux mensuels en euros.",
+    ],
+    whatItDoesNotChange: [
+      "Les transactions, catégories ou imports ne sont pas modifiés.",
+      "C'est une visualisation en lecture seule.",
+      "Les données d'autres catégories ou entités ne sont pas affectées.",
+    ],
+    whenToUse: [
+      "Pour valider que les dépenses d'une catégorie suivent le même rythme que l'année précédente (vérification de conformité).",
+      "Pour anticiper un pic de dépenses saisonnier (ex. : assurances en janvier, primes en décembre) avant qu'il n'impacte la trésorerie.",
+      "Pour expliquer à un partenaire bancaire ou un investisseur la normalité d'un pic mensuel.",
+      "Note : avec moins de 13 mois de données importées, ce graphique affiche un placeholder et deviendra utile progressivement.",
+    ],
+  },
+  // ---------------------------------------------------------------------------
   // G4 — Anomalies p95 par catégorie
   // ---------------------------------------------------------------------------
   {
