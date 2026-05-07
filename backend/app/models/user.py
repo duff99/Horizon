@@ -44,3 +44,9 @@ class User(Base):
     session_token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
