@@ -1,14 +1,16 @@
 """Endpoint admin : consultation du journal d'audit.
 
 GET /api/admin/audit-log — liste paginée, filtrable, admin only.
-POST /api/admin/audit-log/prune — supprime les lignes > N jours (manuel).
+
+La purge des lignes anciennes se fait via SQL direct (intervention technique) :
+  DELETE FROM audit_log WHERE occurred_at < NOW() - INTERVAL '365 days';
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -72,19 +74,3 @@ def list_audit_log(
         limit=limit,
         offset=offset,
     )
-
-
-@router.post("/prune")
-def prune_audit_log(
-    days: int = Query(default=365, ge=30, le=3650),
-    db: Session = Depends(get_db),
-) -> dict[str, int]:
-    """Supprime les lignes audit_log plus anciennes que `days` jours.
-
-    Rétention cible : 365 jours. Minimum autorisé : 30 jours (garde-fou).
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    result = db.execute(delete(AuditLog).where(AuditLog.occurred_at < cutoff))
-    deleted = result.rowcount or 0
-    db.commit()
-    return {"deleted_count": deleted, "cutoff_days": days}

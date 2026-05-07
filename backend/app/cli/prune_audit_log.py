@@ -5,8 +5,9 @@ Usage (dans le container backend) :
     python -m app.cli.prune_audit_log --days 30 # autre cutoff
 
 Ne PAS exécuter ce script automatiquement — il est destiné à un déclenchement
-manuel (admin) ou à un cron soigneusement configuré. L'endpoint
-`POST /api/admin/audit-log/prune` expose la même logique pour les admins.
+manuel ou à un cron soigneusement configuré.
+L'endpoint POST /api/admin/audit-log/prune a été supprimé (F9) ; la purge
+passe désormais exclusivement par ce CLI ou par SQL direct.
 """
 from __future__ import annotations
 
