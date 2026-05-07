@@ -111,18 +111,20 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     [outHier, expanded, outGroupOpen],
   );
 
-  // Monthly totals per direction (sum of ROOT rows only — they already
-  // include their children thanks to the backend aggregation).
+  // Monthly totals per direction — sum ALL rows of the direction (roots + children).
+  // The backend does NOT roll up parent←child: each PivotRow carries its own
+  // independent values. Summing only roots underestimates when roots have
+  // total_cents=0 but their children have values.
   const inTotals = useMemo(() => {
     return months.map((_m, idx) =>
-      inHier.roots.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
+      inRows.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
     );
-  }, [months, inHier.roots]);
+  }, [months, inRows]);
   const outTotals = useMemo(() => {
     return months.map((_m, idx) =>
-      outHier.roots.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
+      outRows.reduce((s, r) => s + (r.cells[idx]?.total_cents ?? 0), 0),
     );
-  }, [months, outHier.roots]);
+  }, [months, outRows]);
 
   const netByMonth = useMemo(
     () => months.map((_m, i) => inTotals[i] - outTotals[i]),

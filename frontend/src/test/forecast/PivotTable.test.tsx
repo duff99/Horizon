@@ -142,4 +142,71 @@ describe("PivotTable", () => {
     fireEvent.click(groupBtn);
     expect(screen.queryByText("Ventes")).not.toBeInTheDocument();
   });
+
+  it("inTotals sums all rows including children, not only roots", () => {
+    // Root in avec total=0 (pas de tx directes) + child in avec total=200k
+    // Le total ligne Encaissements doit afficher 200k, pas 0.
+    const months = ["2026-05", "2026-06"];
+    const fixture: PivotResult = {
+      months,
+      opening_balance_cents: 0,
+      closing_balance_projection_cents: [200_000, 400_000],
+      realized_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
+      forecast_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
+      rows: [
+        {
+          category_id: 10,
+          parent_id: null,
+          label: "Ventes",
+          level: 0,
+          direction: "in" as const,
+          cells: months.map((m) => ({
+            month: m,
+            realized_cents: 0,
+            committed_cents: 0,
+            forecast_cents: 0,
+            total_cents: 0,       // root : pas de tx directes
+            line_method: null,
+            line_params: null,
+          })),
+        },
+        {
+          category_id: 11,
+          parent_id: 10,
+          label: "Ventes produits",
+          level: 1,
+          direction: "in" as const,
+          cells: months.map((m) => ({
+            month: m,
+            realized_cents: 0,
+            committed_cents: 0,
+            forecast_cents: 0,
+            total_cents: 200_000, // child : a des valeurs
+            line_method: null,
+            line_params: null,
+          })),
+        },
+      ],
+    };
+
+    const { container } = render(
+      <PivotTable
+        result={fixture}
+        onCellClick={() => undefined}
+        currentMonth="2026-04"
+      />,
+    );
+
+    // Après le fix, le total Encaissements = root(0) + child(200k) = 200k.
+    // formatCents(200_000) = "2 000 €" (espace fine insécable U+202F entre milliers).
+    // Avant le fix, la ligne Encaissements affichait "0 €" (seul root sommé).
+    // On vérifie que "2 000 €" apparaît au moins 2 fois
+    // (header Encaissements + ligne child).
+    const text = container.textContent ?? "";
+    // Regex tolérante sur l'espace (U+202F ou espace normale ou espace insécable)
+    const matches = text.match(/2[   ]000[   ]€/g) ?? [];
+    // Sans fix : 0 occurrence dans le groupe header Encaissements.
+    // Avec fix : au moins 2 occurrences (header Encaissements + ligne child).
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
 });
