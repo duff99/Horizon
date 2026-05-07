@@ -29,7 +29,7 @@ def list_audit_log(
     entity_type: str | None = Query(default=None),
     entity_id: str | None = Query(default=None),
     user_id: int | None = Query(default=None),
-    action: str | None = Query(default=None, pattern="^(create|update|delete)$"),
+    action: str | None = Query(default=None, pattern="^(create|update|delete|merge)$"),
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
