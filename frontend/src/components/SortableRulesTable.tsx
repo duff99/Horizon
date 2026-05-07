@@ -21,6 +21,9 @@ interface Props {
   onEdit: (rule: Rule) => void;
   onDelete: (rule: Rule) => void;
   canDelete: boolean;
+  /** Trie les règles par hit_count desc quand true. Clic sur en-tête Hits pour basculer. */
+  sortByHits?: boolean;
+  onSortByHits?: () => void;
 }
 
 function operatorLabel(op: string) {
@@ -37,9 +40,12 @@ function operatorLabel(op: string) {
 function SortableRow({
   rule, categories, entities, onEdit, onDelete, canDelete,
 }: {
-  rule: Rule; categories: CategoryOption[];
+  rule: Rule;
+  categories: CategoryOption[];
   entities?: { id: number; name: string }[];
-  onEdit: (r: Rule) => void; onDelete: (r: Rule) => void; canDelete: boolean;
+  onEdit: (r: Rule) => void;
+  onDelete: (r: Rule) => void;
+  canDelete: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: rule.id });
@@ -88,6 +94,9 @@ function SortableRow({
           <span className="text-muted-foreground">{operatorLabel(rule.label_operator ?? "")}</span>
           <span className="font-semibold text-ink">« {rule.label_value ?? ""} »</span>
         </span>
+      </td>
+      <td className="px-3 py-3 text-center font-mono tabular-nums text-[12.5px] text-ink-2">
+        {rule.hit_count ?? 0}
       </td>
       <td className="px-3 py-3 text-[13px]">
         <span className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-panel-2 px-2 py-0.5 text-[12px] font-medium text-ink-2">
@@ -139,6 +148,7 @@ function SortableRow({
 }
 
 export function SortableRulesTable(props: Props) {
+  const { sortByHits, onSortByHits } = props;
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -168,6 +178,13 @@ export function SortableRulesTable(props: Props) {
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Condition
               </th>
+              <th
+                className="cursor-pointer px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-ink"
+                onClick={onSortByHits}
+                title="Trier par nombre de transactions categorisees par cette regle"
+              >
+                Hits {sortByHits ? "▼" : ""}
+              </th>
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Catégorie
               </th>
@@ -186,7 +203,7 @@ export function SortableRulesTable(props: Props) {
             <tbody>
               {props.rules.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={8} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
                     Aucune règle. Cliquez sur « Nouvelle règle » pour commencer.
                   </td>
                 </tr>

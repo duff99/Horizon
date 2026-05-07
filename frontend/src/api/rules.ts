@@ -22,6 +22,7 @@ export interface Rule {
   category_id: number;
   created_at: string;
   updated_at: string;
+  hit_count: number;
 }
 
 export interface RuleCreatePayload {
@@ -134,5 +135,27 @@ export function suggestRuleFromTransactions(
 ): Promise<RuleSuggestion> {
   return apiFetch<RuleSuggestion>("/api/rules/from-transactions", {
     method: "POST", body: JSON.stringify({ transaction_ids }),
+  });
+}
+
+// ─── E4 — Auto-suggestion de règle ───────────────────────────────────────────
+
+export interface AutoSuggestItem {
+  normalized_label: string;
+  category_id: number;
+  category_name: string;
+  manual_count: number;
+}
+
+export function fetchAutoSuggest(entityId?: number): Promise<AutoSuggestItem[]> {
+  const params = entityId != null ? `?entity_id=${entityId}` : "";
+  return apiFetch<AutoSuggestItem[]>(`/api/rules/auto-suggest${params}`);
+}
+
+export function useAutoSuggest(entityId?: number) {
+  return useQuery({
+    queryKey: ["rules", "auto-suggest", entityId ?? null],
+    queryFn: () => fetchAutoSuggest(entityId),
+    staleTime: 60_000,
   });
 }

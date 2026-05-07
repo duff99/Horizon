@@ -45,6 +45,7 @@ export function RulesPage() {
   const [editing, setEditing] = useState<Rule | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [sortByHits, setSortByHits] = useState(false);
 
   const isLoading =
     rulesQuery.isLoading ||
@@ -100,6 +101,13 @@ export function RulesPage() {
       return false;
     });
   }, [rules, search, categories]);
+
+  // Tri optionnel par hit_count desc (toggle via clic sur l'en-tête Hits).
+  // La priorité native du tableau reste utilisée quand sortByHits est false.
+  const sortedRules = useMemo(() => {
+    if (!sortByHits) return filteredRules;
+    return [...filteredRules].sort((a, b) => (b.hit_count ?? 0) - (a.hit_count ?? 0));
+  }, [filteredRules, sortByHits]);
 
   return (
     <section className="space-y-6">
@@ -231,7 +239,7 @@ export function RulesPage() {
             </div>
           ) : (
             <SortableRulesTable
-              rules={filteredRules}
+              rules={sortedRules}
               categories={categories}
               entities={entities}
               onReorder={(items) => reorderMut.mutate(items)}
@@ -243,6 +251,8 @@ export function RulesPage() {
                 if (confirm(`Supprimer la règle "${r.name}" ?`)) deleteMut.mutate(r.id);
               }}
               canDelete={meQuery.data?.role === "admin"}
+              sortByHits={sortByHits}
+              onSortByHits={() => setSortByHits((v) => !v)}
             />
           )}
         </div>
