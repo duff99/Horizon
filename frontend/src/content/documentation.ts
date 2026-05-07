@@ -400,7 +400,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     does: [
       "Pour créer une règle : cliquez sur Nouvelle règle. Un tiroir s'ouvre avec : Nom, Priorité (par défaut 5000), Scope (Globale ou société précise), Sens (Tous / Crédits uniquement / Débits uniquement), Filtre libellé (opérateur contient / commence par / finit par / égal à + valeur), Filtre montant en € (égal / différent / supérieur / inférieur / entre — montant comparé en valeur absolue, signe ignoré), Tiers (counterparty cible — facultatif), Compte bancaire (facultatif, restreint aux comptes de la société sélectionnée), Catégorie cible. Au moins un filtre (libellé, montant, sens, tiers ou compte) est requis.",
-      "Pour tester une règle avant de la créer : cliquez sur Aperçu dans le tiroir. Un tableau s'affiche avec les transactions concrètes qui seraient capturées (date, libellé complet, montant signé en couleur), trié par date décroissante, limité aux 20 plus récentes si la règle matche plus.",
+      "Pour tester une règle avant de la créer : l'aperçu se met à jour automatiquement (délai de 0,5 secondes) dès que vous modifiez un filtre. Vous pouvez aussi cliquer sur le bouton Aperçu pour forcer un rafraîchissement immédiat. Un tableau s'affiche avec les transactions concrètes qui seraient capturées (date, libellé complet, montant signé en couleur), trié par date décroissante, limité aux 20 plus récentes si la règle matche plus.",
       "Pour cibler plusieurs libellés différents avec une seule règle : séparez-les par une virgule dans le champ valeur du filtre libellé. Exemple : « DGFIP, TVA » avec l'opérateur contient → la règle matche si le libellé contient l'un OU l'autre. Pratique pour regrouper les variantes d'un même flux (ex. : « URSSAF, RECOUV URSSAF »).",
       "Pour appliquer immédiatement une règle nouvellement créée à l'historique : cliquez sur Créer et appliquer (au lieu de Créer simple). Sinon la règle ne joue qu'à partir des prochains imports et des prochaines actions.",
       "Pour réordonner les règles : glissez-déposez une ligne. Les règles sont évaluées de haut en bas, la première qui matche gagne.",
@@ -637,6 +637,41 @@ export const DOC_SECTIONS: DocSectionData[] = [
     },
   },
   {
+    id: "administration-erreurs-client",
+    title: "Erreurs client (administration)",
+    subtitle:
+      "Liste des erreurs JavaScript remontées automatiquement par les navigateurs des utilisateurs (réservée aux administrateurs).",
+    sees: [
+      "Une page (/administration/erreurs-client) qui liste toutes les erreurs JavaScript survenues dans les navigateurs des utilisateurs. Chaque entrée correspond à une exception non interceptée, un appel API échoué ou une erreur remontée manuellement.",
+      "Un tableau avec : identifiant, date et heure de survenance, email de l'utilisateur concerné (ou « Anonyme » si non connecté), niveau de gravité (error, warning, fatal) avec un badge coloré, message d'erreur (tronqué à 80 caractères, texte complet au survol), URL de la page où l'erreur a eu lieu, statut (badge « A traiter » en orange si non acquittée, badge « Acquitte » en vert si acquittée).",
+      "Des filtres en haut de page : niveau de gravité (toutes / error / warning / fatal), statut (toutes / non acquittées uniquement / acquittées uniquement), dates Depuis et Jusqu'au.",
+      "Un bouton « Marquer acquitte » sur chaque erreur non encore acquittée. Un tooltip explique l'action.",
+      "Une pagination (Précédent / Suivant, 50 entrées par page).",
+    ],
+    does: [
+      "Pour consulter les erreurs : ouvrez Administration > Erreurs client dans la sidebar (visible uniquement pour les administrateurs). La liste charge les 50 erreurs les plus récentes.",
+      "Pour filtrer par gravité : sélectionnez le niveau dans le menu déroulant Gravité (toutes / error / warning / fatal).",
+      "Pour ne voir que les erreurs à traiter : sélectionnez « Non acquittées uniquement » dans le filtre Statut.",
+      "Pour acquitter une erreur : cliquez sur Marquer acquitte sur la ligne correspondante. L'erreur passe en statut Acquitte et ne réapparaît pas dans le filtre « Non acquittées uniquement ».",
+      "Pour voir le message d'erreur complet : survolez la cellule Message avec la souris (tooltip).",
+    ],
+    tips: [
+      "Acquitter une erreur ne la supprime pas. Elle reste visible dans la liste et dans les filtres. L'acquittement signifie uniquement que l'erreur a été examinée.",
+      "Les erreurs sans utilisateur connecté portent la mention « Anonyme » dans la colonne email : elles peuvent indiquer des problèmes sur les pages publiques (connexion, assets).",
+      "Un volume élevé d'erreurs d'un même type sur une courte période peut signaler une régression récente. Triez par date décroissante et observez les répétitions.",
+    ],
+    panel: {
+      summary:
+        "Erreurs JavaScript remontées par les navigateurs des utilisateurs. Filtre par gravité et statut. Acquittement ligne par ligne.",
+      does: [
+        "Filtrez par gravité (error / warning / fatal) et par statut (à traiter / acquittées).",
+        "Cliquez sur Marquer acquitte pour indiquer qu'une erreur a été examinée.",
+        "Survolez le message pour lire le texte complet.",
+      ],
+      hide: ["tips"],
+    },
+  },
+  {
     id: "lexique",
     title: "Lexique des sigles",
     subtitle:
@@ -660,5 +695,68 @@ export const DOC_SECTIONS: DocSectionData[] = [
         "Glossaire des sigles utilisés dans l'application (financiers, bancaires, techniques).",
       hide: ["tips"],
     },
+  },
+];
+
+/**
+ * Documentation d'impact des actions UI à effet (E3, E5, E9).
+ * Voir CLAUDE.md -> section "Documentation d'impact obligatoire".
+ */
+export const FEATURE_DOCS: FeatureDoc[] = [
+  {
+    id: "apercu-live-regles",
+    title: "Aperçu automatique dans le formulaire de règle",
+    whatItDoes:
+      "Affiche en temps réel les transactions qui seraient capturées par la règle en cours de configuration, sans nécessiter un clic sur le bouton Aperçu.",
+    whatItChanges: [
+      "Déclenche automatiquement un appel GET /api/rules/preview 450 ms après la dernière modification d'un filtre (libellé, sens, montant, tiers, compte, société).",
+      "Met à jour la liste d'aperçu dans le tiroir sans action manuelle.",
+    ],
+    whatItDoesNotChange: [
+      "Ne crée aucune règle, ne catégorise aucune transaction.",
+      "Le bouton Aperçu reste disponible pour un rafraîchissement forcé immédiat.",
+      "L'aperçu ne se déclenche pas si aucun filtre n'est défini (champ libellé vide, sens Toutes, pas de tiers ni de compte).",
+    ],
+    whenToUse: [
+      "Quand vous ajustez un libellé et souhaitez voir immédiatement l'impact sans cliquer.",
+      "Quand vous comparez plusieurs variantes d'un filtre pour trouver la formulation la plus précise.",
+    ],
+  },
+  {
+    id: "marquer-acquitte-erreur-client",
+    title: "Marquer une erreur client comme acquittée",
+    whatItDoes:
+      "Indique qu'une erreur JavaScript remontée par un navigateur a été examinée et traitée par un administrateur.",
+    whatItChanges: [
+      "Appelle PATCH /api/admin/client-errors/{id}/acknowledge côté backend.",
+      "Enregistre la date et l'heure d'acquittement (champ acknowledged_at) dans la base de données.",
+      "Le badge statut de la ligne passe de « A traiter » (orange) à « Acquitte » (vert).",
+    ],
+    whatItDoesNotChange: [
+      "Ne supprime pas l'entrée. L'erreur reste visible dans la liste.",
+      "Ne corrige pas le bug sous-jacent. L'acquittement est un marqueur organisationnel, pas une résolution technique.",
+    ],
+    whenToUse: [
+      "Après avoir examiné une erreur, identifié sa cause et confirmé qu'elle est résolue ou sans impact.",
+      "Pour filtrer la liste et ne voir que les erreurs restant à traiter.",
+    ],
+  },
+  {
+    id: "rules-hit-count",
+    title: "Colonne Hits dans la liste des règles",
+    whatItDoes:
+      "Affiche le nombre de transactions que chaque règle a catégorisées jusqu'à présent. Permet de distinguer les règles actives des règles jamais déclenchées.",
+    whatItChanges: [
+      "L'API GET /api/rules retourne désormais un champ hit_count par règle, calculé en direct via COUNT(transactions.categorization_rule_id).",
+      "Une colonne Hits apparaît entre les colonnes Condition et Catégorie dans le tableau. Un clic sur l'en-tête Hits trie les règles du plus au moins utilisé.",
+    ],
+    whatItDoesNotChange: [
+      "Ne modifie aucune règle ni aucune transaction.",
+      "Le tri par Hits est temporaire (en mémoire) et n'affecte pas l'ordre d'évaluation des règles au moment de la catégorisation. L'ordre d'évaluation reste déterminé par la priorité numérique.",
+    ],
+    whenToUse: [
+      "Pour identifier les règles jamais déclenchées (hit_count = 0) et envisager de les supprimer ou de les ajuster.",
+      "Pour vérifier qu'une règle nouvellement créée commence bien à capturer des transactions après un import.",
+    ],
   },
 ];

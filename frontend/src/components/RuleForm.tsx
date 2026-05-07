@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ export function RuleForm(props: Props) {
   const [bankAccountId, setBankAccountId] = useState<number | null>(init?.bank_account_id ?? null);
   const [categoryId, setCategoryId] = useState<number | null>(init?.category_id ?? null);
   const [preview, setPreview] = useState<RulePreviewResponse | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function buildPayload(): RuleCreatePayload {
     return {
@@ -59,6 +60,24 @@ export function RuleForm(props: Props) {
       category_id: categoryId ?? 0,
     };
   }
+
+  // Aperçu automatique : se déclenche 450 ms après la dernière modification
+  // d'un filtre. Pas d'appel si aucun filtre n'est défini (évite un appel
+  // à vide à l'ouverture du tiroir).
+  useEffect(() => {
+    const hasFilter =
+      labelValue || counterpartyId || bankAccountId || amountOp || direction !== "ANY";
+    if (!hasFilter) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const resp = await previewRule(buildPayload());
+      setPreview(resp);
+    }, 450);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelOp, labelValue, direction, amountOp, amountVal, amountVal2, counterpartyId, bankAccountId, entityId]);
 
   async function handlePreview() {
     const resp = await previewRule(buildPayload());
@@ -326,7 +345,12 @@ export function RuleForm(props: Props) {
         <Button variant="ghost" type="button" onClick={props.onCancel}>
           Annuler
         </Button>
-        <Button variant="outline" type="button" onClick={handlePreview}>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={handlePreview}
+          title="Rafraichir l'apercu manuellement (l'apercu se met aussi a jour automatiquement 450 ms apres chaque modification)"
+        >
           Aperçu
         </Button>
         <Button
