@@ -100,6 +100,50 @@ def _resolve_anchor_month(session: Session, entity_id: int) -> date | None:
     return _first_of_month(max_op)
 
 
+def _last_full_month(session: Session, entity_id: int) -> date | None:
+    """Retourne le 1er du dernier mois "plein" de données pour l'entité.
+
+    Un mois est considéré "plein" si son nombre de transactions est >= 50 %
+    de la médiane des 6 mois précédents. Si le mois le plus récent est en
+    dessous de ce seuil (import partiel), recule d'un mois.
+
+    None si aucune data.
+    """
+    ba_ids = _bank_account_ids_for_entity(session, entity_id)
+    if not ba_ids:
+        return None
+    month_col = func.date_trunc("month", Transaction.operation_date)
+    rows = session.execute(
+        select(month_col.label("m"), func.count(Transaction.id).label("n"))
+        .where(
+            Transaction.bank_account_id.in_(ba_ids),
+            Transaction.is_aggregation_parent.is_(False),
+        )
+        .group_by(month_col)
+        .order_by(month_col.desc())
+        .limit(7)
+    ).all()
+    if not rows:
+        return None
+    counts = [r.n for r in rows]
+    if len(counts) <= 1:
+        return _first_of_month(rows[0].m)
+    sorted_prev = sorted(counts[1:7])
+    median = sorted_prev[len(sorted_prev) // 2] if sorted_prev else 0
+    threshold = max(1, median // 2)
+    def _to_date(m) -> date:
+        """Convertit le résultat de date_trunc (datetime ou date) en date."""
+        if hasattr(m, "date"):
+            return m.date()
+        return m
+
+    if counts[0] >= threshold:
+        return _first_of_month(_to_date(rows[0].m))
+    if len(rows) >= 2:
+        return _first_of_month(_to_date(rows[1].m))
+    return None
+
+
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
         session.scalars(accessible_entity_ids_subquery(session=session, user=user))
@@ -312,12 +356,12 @@ def compute_top_movers(
     Ancrage : current_first = mois de MAX(operation_date), pas date.today().
     Cela évite de comparer un mois courant vide à un mois précédent plein.
     """
-    current_first = _resolve_anchor_month(session, entity_id)
+    current_first = _last_full_month(session, entity_id)
     if current_first is None:
         return TopMoversResponse(increases=[], decreases=[], window_month=None)
 
-    # On récupère 4 mois : courant (ancre) + 3 précédents (pour sparkline 3m et delta)
-    # Sparkline = [m-3, m-2, m-1] (3 mois avant l'ancre), delta = current - (m-1)
+    # On récupère 4 mois : courant (dernier mois plein) + 3 précédents (pour sparkline et delta)
+    # Sparkline = [m-3, m-2, m-1] (3 mois avant le courant), delta = current - (m-1)
     earliest = _add_months(current_first, -3)
     latest = _add_months(current_first, 1)  # exclusive (inclut mois ancre)
 
