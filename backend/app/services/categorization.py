@@ -198,6 +198,7 @@ def preview_rule(
     rule: CategorizationRule,
     *,
     sample_limit: int = 20,
+    accessible_entity_ids: list[int] | None = None,
 ) -> RulePreviewResult:
     """Compte + échantillonne les transactions que la règle matcherait,
     en excluant les MANUAL. Ne mute rien.
@@ -207,6 +208,10 @@ def preview_rule(
     cette entité — sinon l'aperçu remontait des transactions d'autres
     sociétés et donnait un nombre inexact (cf. apply_rule qui faisait déjà
     cette restriction).
+
+    Si la règle est globale (`rule.entity_id` IS NULL) ET que
+    `accessible_entity_ids` est fourni, restreint aux comptes des entités
+    accessibles pour éviter d'exposer un décompte cross-tenant.
     """
     from app.models.bank_account import BankAccount
 
@@ -217,6 +222,14 @@ def preview_rule(
     if rule.entity_id is not None:
         accessible_accounts = select(BankAccount.id).where(
             BankAccount.entity_id == rule.entity_id
+        )
+        base_filter = and_(
+            base_filter,
+            Transaction.bank_account_id.in_(accessible_accounts),
+        )
+    elif accessible_entity_ids is not None:
+        accessible_accounts = select(BankAccount.id).where(
+            BankAccount.entity_id.in_(accessible_entity_ids)
         )
         base_filter = and_(
             base_filter,

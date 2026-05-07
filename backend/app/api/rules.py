@@ -229,7 +229,6 @@ def preview_rule_endpoint(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> RulePreviewResponse:
-    _require_editor(user)
     if payload.entity_id is not None:
         require_entity_access(session=session, user=user, entity_id=payload.entity_id)
 
@@ -247,7 +246,10 @@ def preview_rule_endpoint(
         bank_account_id=payload.bank_account_id,
         category_id=payload.category_id,
     )
-    result = preview_rule_service(session, draft, sample_limit=20)
+    accessible_ids = _accessible_entity_ids(session=session, user=user)
+    result = preview_rule_service(
+        session, draft, sample_limit=20, accessible_entity_ids=accessible_ids,
+    )
     return RulePreviewResponse(
         matching_count=result.matching_count,
         sample=[RuleSampleTransaction(**s.__dict__) for s in result.sample],
