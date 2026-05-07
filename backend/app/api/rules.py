@@ -15,7 +15,6 @@ from app.deps import (
     get_current_user,
     require_entity_access,
 )
-from app.models.audit_log import AuditLog
 from app.models.bank_account import BankAccount
 from app.models.categorization_rule import CategorizationRule
 from app.models.transaction import Transaction
@@ -31,7 +30,8 @@ from app.schemas.categorization_rule import (
     RuleSuggestion,
     RuleUpdate,
 )
-from app.services.audit import _extract_request_meta, record_audit, to_dict_for_audit
+from app.services.audit import record_audit, to_dict_for_audit
+from app.services.audit_batch import record_batch_audit
 from app.services.categorization import apply_rule as apply_rule_service
 from app.services.categorization import preview_rule as preview_rule_service
 
@@ -273,32 +273,20 @@ def apply_rule_endpoint(
     report = apply_rule_service(session, rule)
     # Audit batch : 1 ligne résumant l'application (update N transactions).
     if report.updated_count > 0:
-        try:
-            meta = _extract_request_meta(request)
-            session.add(
-                AuditLog(
-                    user_id=user.id,
-                    user_email=user.email,
-                    action="update",
-                    entity_type="Transaction",
-                    entity_id=f"rule-apply({rule.id})",
-                    before_json=None,
-                    after_json={
-                        "operation": "rule_apply",
-                        "rule_id": rule.id,
-                        "rule_name": rule.name,
-                        "updated_count": report.updated_count,
-                    },
-                    diff_json=None,
-                    ip_address=meta["ip_address"],
-                    user_agent=meta["user_agent"],
-                    request_id=meta["request_id"],
-                )
-            )
-            session.flush()
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("audit.rule_apply_failed")
+        record_batch_audit(
+            session,
+            user=user,
+            request=request,
+            action="update",
+            entity_type="Transaction",
+            entity_id=f"rule-apply({rule.id})",
+            after={
+                "operation": "rule_apply",
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "updated_count": report.updated_count,
+            },
+        )
     session.commit()
     return RuleApplyResponse(updated_count=report.updated_count)
 
@@ -346,30 +334,19 @@ def reorder_rules(
         )
 
     # Audit batch : 1 ligne résumant le réordonnancement.
-    try:
-        meta = _extract_request_meta(request)
-        session.add(
-            AuditLog(
-                user_id=user.id,
-                user_email=user.email,
-                action="update",
-                entity_type="CategorizationRule",
-                entity_id=f"reorder({len(items)})",
-                before_json={"priorities_before": before_priorities},
-                after_json={
-                    "operation": "reorder",
-                    "priorities_after": {i.id: i.priority for i in items},
-                },
-                diff_json=None,
-                ip_address=meta["ip_address"],
-                user_agent=meta["user_agent"],
-                request_id=meta["request_id"],
-            )
-        )
-        session.flush()
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception("audit.rules_reorder_failed")
+    record_batch_audit(
+        session,
+        user=user,
+        request=request,
+        action="update",
+        entity_type="CategorizationRule",
+        entity_id=f"reorder({len(items)})",
+        before={"priorities_before": before_priorities},
+        after={
+            "operation": "reorder",
+            "priorities_after": {i.id: i.priority for i in items},
+        },
+    )
     session.commit()
 
     refreshed = session.execute(

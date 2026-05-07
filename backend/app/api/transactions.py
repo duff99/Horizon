@@ -11,7 +11,6 @@ from app.deps import (
     get_current_user,
     require_entity_access,
 )
-from app.models.audit_log import AuditLog
 from app.models.bank_account import BankAccount
 from app.models.category import Category
 from app.models.entity import Entity
@@ -23,7 +22,7 @@ from app.schemas.transaction import (
     TransactionListResponse,
     TransactionRead,
 )
-from app.services.audit import _extract_request_meta
+from app.services.audit_batch import record_batch_audit
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -149,31 +148,19 @@ def bulk_categorize(
 
     # Audit batch : 1 seule ligne, pas N. entity_id = liste des ids.
     if txs:
-        try:
-            meta = _extract_request_meta(request)
-            session.add(
-                AuditLog(
-                    user_id=user.id,
-                    user_email=user.email,
-                    action="update",
-                    entity_type="Transaction",
-                    entity_id=f"bulk({len(txs)})",
-                    before_json=None,
-                    after_json={
-                        "operation": "bulk_categorize",
-                        "transaction_ids": [tx.id for tx in txs],
-                        "category_id": payload.category_id,
-                        "count": len(txs),
-                    },
-                    diff_json=None,
-                    ip_address=meta["ip_address"],
-                    user_agent=meta["user_agent"],
-                    request_id=meta["request_id"],
-                )
-            )
-            session.flush()
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("audit.bulk_categorize_failed")
+        record_batch_audit(
+            session,
+            user=user,
+            request=request,
+            action="update",
+            entity_type="Transaction",
+            entity_id=f"bulk({len(txs)})",
+            after={
+                "operation": "bulk_categorize",
+                "transaction_ids": [tx.id for tx in txs],
+                "category_id": payload.category_id,
+                "count": len(txs),
+            },
+        )
     session.commit()
     return {"updated_count": len(txs)}
