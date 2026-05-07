@@ -98,6 +98,12 @@ export interface TransactionFilter {
   page?: number;
   per_page?: number;
   uncategorized?: boolean;
+  /** Inclure les sous-transactions SEPA (parent_transaction_id non null). Défaut : false. */
+  include_sepa_children?: boolean;
+  /** Montant minimum en euros (valeur absolue). */
+  amount_min?: number;
+  /** Montant maximum en euros (valeur absolue). */
+  amount_max?: number;
 }
 
 export interface Counterparty {

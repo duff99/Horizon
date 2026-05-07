@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchTransactions, useBulkCategorize } from "../api/transactions";
+import { useSearchParams } from "react-router-dom";
+import { fetchTransactions, useBulkCategorize, useBulkCategorizeFiltered, type BulkCategorizeFilteredPayload } from "../api/transactions";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
@@ -22,6 +23,7 @@ import {
   suggestRuleFromTransactions,
   useCreateRule,
   useApplyRule,
+  useAutoSuggest,
   type RuleCreatePayload,
   type RuleSuggestion,
 } from "@/api/rules";
@@ -39,14 +41,73 @@ const DATE = new Intl.DateTimeFormat("fr-FR", {
   month: "short",
 });
 
+// ─── URL persistence helpers (E8) ────────────────────────────────────────────
+
+function parseIntParam(v: string | null): number | undefined {
+  if (v === null || v === "") return undefined;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? undefined : n;
+}
+
+function parseFloatParam(v: string | null): number | undefined {
+  if (v === null || v === "") return undefined;
+  const n = parseFloat(v);
+  return isNaN(n) ? undefined : n;
+}
+
+function filtersFromSearchParams(sp: URLSearchParams): TransactionFilter {
+  return {
+    page: parseIntParam(sp.get("page")) ?? 1,
+    per_page: parseIntParam(sp.get("per_page")) ?? 50,
+    search: sp.get("search") ?? undefined,
+    bank_account_id: parseIntParam(sp.get("account")),
+    uncategorized: sp.get("uncategorized") === "true" || undefined,
+    category_id: parseIntParam(sp.get("category")),
+    amount_min: parseFloatParam(sp.get("amount_min")),
+    amount_max: parseFloatParam(sp.get("amount_max")),
+    include_sepa_children: sp.get("sepa") === "true",
+    date_from: sp.get("date_from") ?? undefined,
+    date_to: sp.get("date_to") ?? undefined,
+    counterparty_id: parseIntParam(sp.get("counterparty")),
+  };
+}
+
+function filtersToSearchParams(f: TransactionFilter): URLSearchParams {
+  const sp = new URLSearchParams();
+  if (f.page && f.page > 1) sp.set("page", String(f.page));
+  if (f.per_page && f.per_page !== 50) sp.set("per_page", String(f.per_page));
+  if (f.search) sp.set("search", f.search);
+  if (f.bank_account_id) sp.set("account", String(f.bank_account_id));
+  if (f.uncategorized) sp.set("uncategorized", "true");
+  if (f.category_id) sp.set("category", String(f.category_id));
+  if (f.amount_min != null) sp.set("amount_min", String(f.amount_min));
+  if (f.amount_max != null) sp.set("amount_max", String(f.amount_max));
+  if (f.include_sepa_children) sp.set("sepa", "true");
+  if (f.date_from) sp.set("date_from", f.date_from);
+  if (f.date_to) sp.set("date_to", f.date_to);
+  if (f.counterparty_id) sp.set("counterparty", String(f.counterparty_id));
+  return sp;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function TransactionsPage() {
-  const [filters, setFilters] = useState<TransactionFilter>({ page: 1, per_page: 50 });
+  // E8 — tous les filtres persistés en URL
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = filtersFromSearchParams(searchParams);
+
+  function setFilters(next: TransactionFilter) {
+    setSearchParams(filtersToSearchParams(next), { replace: true });
+  }
+
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState<number | null>(null);
   const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
   const [ruleDrawerOpen, setRuleDrawerOpen] = useState(false);
   const [ruleInitialValue, setRuleInitialValue] = useState<RuleSuggestion | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // E6 — mode "sélectionner tous les résultats du filtre"
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
 
   const entityId = useEntityFilter((s) => s.entityId);
 
@@ -65,7 +126,16 @@ export function TransactionsPage() {
   const counterpartiesQuery = useCounterparties({ entityId });
   const bankAccountsQuery = useBankAccounts();
 
+  // E4 — auto-suggestion de règles
+  const autoSuggestQuery = useAutoSuggest(entityId ?? undefined);
+  const suggestions = autoSuggestQuery.data ?? [];
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
+  const visibleSuggestions = suggestions.filter(
+    (s) => !dismissedSuggestions.has(s.normalized_label),
+  );
+
   const bulkMut = useBulkCategorize();
+  const bulkFilteredMut = useBulkCategorizeFiltered();
   const createRuleMut = useCreateRule();
   const applyRuleMut = useApplyRule();
 
@@ -105,6 +175,7 @@ export function TransactionsPage() {
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds(new Set());
+      setSelectAllFiltered(false);
     } else {
       setSelectedIds(new Set(allPageIds));
     }
@@ -118,11 +189,14 @@ export function TransactionsPage() {
       next.add(id);
     }
     setSelectedIds(next);
+    // Si on décoche une ligne, on quitte le mode "tous les résultats"
+    if (selectAllFiltered) setSelectAllFiltered(false);
   }
 
   function handleUncategorizedChange(checked: boolean) {
     setFilters({ ...filters, uncategorized: checked || undefined, page: 1 });
     setSelectedIds(new Set());
+    setSelectAllFiltered(false);
   }
 
   // Ouvre auto le drawer dès qu'il y a des sélections, le ferme quand 0.
@@ -134,14 +208,36 @@ export function TransactionsPage() {
     } else {
       setBulkDrawerOpen(false);
       setSuggestError(null);
+      setSelectAllFiltered(false);
     }
   }, [selectedIds.size]);
 
   async function handleBulkCategorize() {
     if (!bulkCategoryId) return;
-    await bulkMut.mutateAsync({ transaction_ids: [...selectedIds], category_id: bulkCategoryId });
+
+    if (selectAllFiltered) {
+      // E6 — catégoriser tous les résultats du filtre courant
+      const payload: BulkCategorizeFilteredPayload = {
+        category_id: bulkCategoryId,
+        entity_id: entityId ?? undefined,
+        bank_account_id: filters.bank_account_id,
+        date_from: filters.date_from,
+        date_to: filters.date_to,
+        counterparty_id: filters.counterparty_id,
+        search: filters.search,
+        uncategorized: filters.uncategorized,
+        include_sepa_children: filters.include_sepa_children,
+        amount_min: filters.amount_min,
+        amount_max: filters.amount_max,
+      };
+      await bulkFilteredMut.mutateAsync(payload);
+    } else {
+      await bulkMut.mutateAsync({ transaction_ids: [...selectedIds], category_id: bulkCategoryId });
+    }
+
     setSelectedIds(new Set());
     setBulkCategoryId(null);
+    setSelectAllFiltered(false);
   }
 
   async function handleSuggestRule() {
@@ -185,6 +281,7 @@ export function TransactionsPage() {
         category_id: bulkCategoryId ?? 0,
         created_at: "",
         updated_at: "",
+        hit_count: 0,
       }
     : null;
 
@@ -193,6 +290,53 @@ export function TransactionsPage() {
 
   return (
     <div className="space-y-6">
+      {/* E4 — Bandeau de suggestion de règle automatique */}
+      {visibleSuggestions.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 space-y-2">
+          <p className="font-semibold text-[12px] uppercase tracking-wide text-amber-700">
+            Suggestions de règles automatiques
+          </p>
+          {visibleSuggestions.slice(0, 3).map((s) => (
+            <div key={s.normalized_label} className="flex flex-wrap items-center justify-between gap-4">
+              <span>
+                Vous avez catégorisé{" "}
+                <span className="font-semibold">{s.manual_count}</span> fois le libellé{" "}
+                <span className="font-mono font-semibold">{s.normalized_label}</span>{" "}
+                dans <span className="font-semibold">{s.category_name}</span>. Créer une règle automatique ?
+              </span>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRuleInitialValue({
+                      suggested_label_operator: "CONTAINS",
+                      suggested_label_value: s.normalized_label,
+                      suggested_direction: "ANY",
+                      suggested_bank_account_id: null,
+                      transaction_count: s.manual_count,
+                    });
+                    setBulkCategoryId(s.category_id);
+                    setRuleDrawerOpen(true);
+                  }}
+                >
+                  Créer une règle
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setDismissedSuggestions((prev) => new Set([...prev, s.normalized_label]))
+                  }
+                >
+                  Plus tard
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Page head */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -275,10 +419,32 @@ export function TransactionsPage() {
             l'utilisateur l'a fermé. */}
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-5 py-2 text-[12.5px] text-emerald-900">
-            <span className="font-semibold">
-              {selectedIds.size} opération{selectedIds.size > 1 ? "s" : ""}{" "}
-              sélectionnée{selectedIds.size > 1 ? "s" : ""}
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="font-semibold">
+                {selectAllFiltered
+                  ? `${totalCount.toLocaleString("fr-FR")} opérations (tous les résultats du filtre) sélectionnées`
+                  : `${selectedIds.size} opération${selectedIds.size > 1 ? "s" : ""} sélectionnée${selectedIds.size > 1 ? "s" : ""}`}
+              </span>
+              {/* E6 — lien pour sélectionner tous les résultats du filtre */}
+              {allSelected && !selectAllFiltered && (data?.total ?? 0) > items.length && (
+                <button
+                  type="button"
+                  className="text-[12.5px] text-blue-700 underline hover:no-underline"
+                  onClick={() => setSelectAllFiltered(true)}
+                >
+                  Sélectionner les {(data?.total ?? 0).toLocaleString("fr-FR")} résultats correspondant aux filtres actuels
+                </button>
+              )}
+              {selectAllFiltered && (
+                <button
+                  type="button"
+                  className="text-[12.5px] text-blue-700 underline hover:no-underline"
+                  onClick={() => setSelectAllFiltered(false)}
+                >
+                  Annuler la sélection étendue
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {!bulkDrawerOpen && (
                 <Button
@@ -410,7 +576,7 @@ export function TransactionsPage() {
                             title="Catégoriser cette transaction"
                             className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-800 transition-colors hover:border-amber-400 hover:bg-amber-100"
                           >
-                            ⚠ Non catégorisée
+                            Non catégorisée
                           </button>
                         )}
                       </td>
@@ -450,14 +616,14 @@ export function TransactionsPage() {
       <BulkCategorizationDrawer
         isOpen={bulkDrawerOpen}
         onOpenChange={setBulkDrawerOpen}
-        selectedCount={selectedIds.size}
+        selectedCount={selectAllFiltered ? (data?.total ?? selectedIds.size) : selectedIds.size}
         categories={categories}
         bulkCategoryId={bulkCategoryId}
         onBulkCategoryChange={setBulkCategoryId}
         onCategorize={handleBulkCategorize}
         onSuggestRule={handleSuggestRule}
         onDeselectAll={() => setSelectedIds(new Set())}
-        isCategorizing={bulkMut.isPending}
+        isCategorizing={bulkMut.isPending || bulkFilteredMut.isPending}
         suggestError={suggestError}
         directionHint={directionHint}
       />

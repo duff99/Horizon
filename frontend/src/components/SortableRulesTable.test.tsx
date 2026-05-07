@@ -9,14 +9,14 @@ const rules: Rule[] = [
     label_operator: "CONTAINS", label_value: "A", direction: "ANY",
     amount_operator: null, amount_value: null, amount_value2: null,
     counterparty_id: null, bank_account_id: null, category_id: 1,
-    created_at: "", updated_at: "",
+    created_at: "", updated_at: "", hit_count: 0,
   },
   {
     id: 2, name: "B", entity_id: null, priority: 200, is_system: true,
     label_operator: "CONTAINS", label_value: "B", direction: "ANY",
     amount_operator: null, amount_value: null, amount_value2: null,
     counterparty_id: null, bank_account_id: null, category_id: 1,
-    created_at: "", updated_at: "",
+    created_at: "", updated_at: "", hit_count: 5,
   },
 ];
 

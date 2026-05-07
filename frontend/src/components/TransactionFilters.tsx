@@ -76,6 +76,22 @@ export function TransactionFilters({
     onChange({ ...value, category_id: id ?? undefined, page: 1 });
   };
 
+  function handleAmountMinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const val = raw === "" ? undefined : Number(raw);
+    onChange({ ...value, amount_min: val, page: 1 });
+  }
+
+  function handleAmountMaxChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const val = raw === "" ? undefined : Number(raw);
+    onChange({ ...value, amount_max: val, page: 1 });
+  }
+
+  function handleSepaChange(e: React.ChangeEvent<HTMLInputElement>) {
+    onChange({ ...value, include_sepa_children: e.target.checked || undefined, page: 1 });
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!hideSearch && (
@@ -125,6 +141,43 @@ export function TransactionFilters({
           )}
         </div>
       )}
+      {/* Filtres montant min / max (E8) */}
+      <div className="flex items-center gap-1">
+        <input
+          id="amount-min"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Montant min (€)"
+          value={value.amount_min ?? ""}
+          onChange={handleAmountMinChange}
+          aria-label="Montant minimum en euros"
+          className="w-[130px] rounded-md border border-line bg-panel py-1.5 px-2.5 text-[12.5px] text-ink outline-none placeholder:text-muted-foreground focus:border-ink-2"
+        />
+        <span className="text-[12px] text-muted-foreground">–</span>
+        <input
+          id="amount-max"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Montant max (€)"
+          value={value.amount_max ?? ""}
+          onChange={handleAmountMaxChange}
+          aria-label="Montant maximum en euros"
+          className="w-[130px] rounded-md border border-line bg-panel py-1.5 px-2.5 text-[12.5px] text-ink outline-none placeholder:text-muted-foreground focus:border-ink-2"
+        />
+      </div>
+      {/* Toggle SEPA détaillés (E7) */}
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          id="include-sepa"
+          type="checkbox"
+          checked={value.include_sepa_children ?? false}
+          onChange={handleSepaChange}
+          className="h-3.5 w-3.5 accent-ink"
+        />
+        <span className="text-[12.5px] text-ink-2">Afficher les virements SEPA détaillés</span>
+      </label>
     </div>
   );
 }
