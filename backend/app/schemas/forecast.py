@@ -175,6 +175,7 @@ class PivotCellRead(BaseModel):
     total_cents: int
     line_method: str | None = None
     line_params: dict | None = None
+    insufficient_history: bool = False
 
 
 class PivotRowRead(BaseModel):

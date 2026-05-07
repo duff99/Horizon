@@ -140,6 +140,7 @@ def get_pivot(
                     total_cents=c.total_cents,
                     line_method=c.line_method,
                     line_params=c.line_params,
+                    insufficient_history=c.insufficient_history,
                 )
                 for idx, c in enumerate(row.cells)
             ],

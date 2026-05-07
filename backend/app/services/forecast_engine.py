@@ -51,6 +51,7 @@ class CellValue:
     total_cents: int
     line_method: Optional[str] = None
     line_params: Optional[dict] = None
+    insufficient_history: bool = False  # D5 : AVG_* sans données disponibles
 
 
 @dataclass
@@ -301,18 +302,27 @@ def _avg_transactions_n_months(
     *,
     preloaded: Optional["Preloaded"] = None,
 ) -> int:
-    """Moyenne des N mois précédents (excluant le mois `month` lui-même)."""
+    """Moyenne des N mois précédents (excluant `month`).
+
+    Divise par le nombre de mois ayant des données non nulles (min(n, available))
+    pour éviter la sous-estimation sur historique court. Retourne 0 si aucune
+    donnée n'existe sur la fenêtre.
+    """
     if n_months <= 0:
         return 0
-    # Prend les N mois strictement avant `month`
-    total = 0
+    totals = []
     for i in range(1, n_months + 1):
         m = _add_months(month, -i)
-        total += _sum_transactions(
-            session, entity_id, category_id, m, preloaded=preloaded
-        )
-    # Division entière (centimes)
-    return total // n_months
+        v = _sum_transactions(session, entity_id, category_id, m, preloaded=preloaded)
+        totals.append(v)
+
+    non_zero = [v for v in totals if v != 0]
+    available = len(non_zero)
+    if available == 0:
+        return 0
+
+    # Division par le nombre de mois avec données, jamais par n_months fixe
+    return sum(totals) // available
 
 
 # ---------------------------------------------------------------------------
