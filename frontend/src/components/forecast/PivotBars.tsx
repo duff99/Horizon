@@ -13,6 +13,9 @@ import {
 import type { PivotResult } from "@/types/forecast";
 import { formatMonthLabel } from "@/lib/forecastFormat";
 
+// Réexporte le type pour les consommateurs
+export type { PivotResult };
+
 const EUR = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 0,
   signDisplay: "auto",
@@ -25,6 +28,7 @@ function formatEUR(cents: number): string {
 interface Props {
   result: PivotResult;
   currentMonth: string;
+  overlayResult?: PivotResult;
 }
 
 interface ChartPoint {
@@ -37,9 +41,10 @@ interface ChartPoint {
   forecast_out: number;
   closing_past: number | null;
   closing_future: number | null;
+  overlay_balance: number | null;
 }
 
-export function PivotBars({ result, currentMonth }: Props) {
+export function PivotBars({ result, currentMonth, overlayResult }: Props) {
   const data = useMemo<ChartPoint[]>(() => {
     const realizedByMonth = new Map(
       result.realized_series.map((s) => [s.month, s]),
@@ -47,6 +52,14 @@ export function PivotBars({ result, currentMonth }: Props) {
     const forecastByMonth = new Map(
       result.forecast_series.map((s) => [s.month, s]),
     );
+    const overlayClosingByIdx = overlayResult
+      ? new Map(
+          result.months.map((m, idx) => [
+            m,
+            (overlayResult.closing_balance_projection_cents[idx] ?? 0) / 100,
+          ]),
+        )
+      : null;
 
     return result.months.map((m, idx) => {
       const r = realizedByMonth.get(m);
@@ -67,9 +80,10 @@ export function PivotBars({ result, currentMonth }: Props) {
         // dash the projected part only.
         closing_past: m <= currentMonth ? closing / 100 : null,
         closing_future: m >= currentMonth ? closing / 100 : null,
+        overlay_balance: overlayClosingByIdx?.get(m) ?? null,
       };
     });
-  }, [result, currentMonth]);
+  }, [result, currentMonth, overlayResult]);
 
   return (
     <div style={{ width: "100%", height: 260 }}>
@@ -153,6 +167,7 @@ export function PivotBars({ result, currentMonth }: Props) {
                 forecast_out: "Sorties prévues",
                 closing_past: "Solde de clôture",
                 closing_future: "Solde projeté",
+                overlay_balance: "Solde scénario comparaison",
               };
               return [formatEUR(cents), labels[String(name)] ?? String(name)];
             }}
@@ -205,6 +220,20 @@ export function PivotBars({ result, currentMonth }: Props) {
             connectNulls={false}
             isAnimationActive={false}
           />
+          {overlayResult && (
+            <Line
+              type="monotone"
+              dataKey="overlay_balance"
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="6 3"
+              strokeOpacity={0.7}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+              name="Scénario comparaison"
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
