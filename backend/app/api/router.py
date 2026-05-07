@@ -23,6 +23,7 @@ from app.api import (
     me,
     rules,
     transactions,
+    treasury,
     users,
 )
 
@@ -60,4 +61,5 @@ api_router.include_router(admin_backups.router)
 api_router.include_router(admin_audit.router)
 api_router.include_router(client_errors.router)
 api_router.include_router(admin_client_errors.router)
+api_router.include_router(treasury.router)
 # Note : admin_backups inclut aussi /disk et /trigger (mêmes prefix /api/admin/backups)

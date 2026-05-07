@@ -867,4 +867,44 @@ export const FEATURE_DOCS: FeatureDoc[] = [
       "Quand le meme tiers ou libelle revient chaque mois et que vous le catégorisez manuellement a chaque fois : acceptez la suggestion pour automatiser la prochaine fois.",
     ],
   },
+  {
+    id: "daily-balance-chart",
+    title: "Graphe de solde de tresorerie quotidien (90 jours)",
+    whatItDoes:
+      "Affiche l'evolution du solde de tresorerie jour par jour sur les 90 derniers jours, reconstruit a partir du dernier releve importe. Permet de visualiser en un coup d'oeil la tendance et les creux de liquidites.",
+    whatItChanges: [
+      "Aucun effet : c'est une lecture seule. Survoler le graphe avec la souris fait apparaitre un tooltip avec la date et le solde exact de ce jour.",
+      "La couleur de l'aire change selon le signe du dernier solde connu : verte si positif, rouge si negatif.",
+    ],
+    whatItDoesNotChange: [
+      "Les transactions ne sont pas modifiees.",
+      "Les imports ne sont pas modifies.",
+      "Le graphe ne modifie aucune donnee en base.",
+    ],
+    whenToUse: [
+      "Pour detecter des creux de tresorerie a venir ou passes.",
+      "Pour reperer la saisonnalite des flux (pic de depenses en fin de mois, renforcement en debut de trimestre).",
+      "Pour preparer un rendez-vous banquier avec une vision claire de l'evolution du solde.",
+    ],
+  },
+  {
+    id: "per-account-balance",
+    title: "Position de tresorerie par compte bancaire",
+    whatItDoes:
+      "Affiche une grille de cartes, une par compte bancaire accessible, avec le solde courant, la variation sur 30 jours (en euros et en pourcentage) et une mini-courbe (sparkline) sur 30 points quotidiens. Permet de voir d'un coup d'oeil quelle entite ou quel compte est en tension.",
+    whatItChanges: [
+      "Aucun effet : c'est une lecture seule.",
+      "Les cartes se mettent a jour automatiquement lors du rechargement de la page ou apres un nouvel import.",
+    ],
+    whatItDoesNotChange: [
+      "Les soldes en base ne sont pas modifies.",
+      "La variation affichee est calculee entre le dernier import disponible et le dernier import dont la date de fin de periode est anterieure de 30 jours.",
+      "Un compte sans import n'apparait pas dans la grille.",
+    ],
+    whenToUse: [
+      "Pour surveiller la position de chaque compte separement quand plusieurs comptes bancaires sont enregistres.",
+      "Pour verifier rapidement si la variation 30 jours est coherente avec les flux attendus.",
+      "Pour identifier quel compte est le plus actif ou le plus en tension avant un arbitrage de tresorerie.",
+    ],
+  },
 ];

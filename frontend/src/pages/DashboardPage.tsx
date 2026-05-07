@@ -8,6 +8,8 @@ import {
   type PeriodValue,
 } from "@/components/PeriodSelector";
 import { MonthComparisonCard } from "@/components/dashboard/MonthComparisonCard";
+import { DailyBalanceChart } from "@/components/treasury/DailyBalanceChart";
+import { PerAccountWidget } from "@/components/treasury/PerAccountWidget";
 import {
   Area,
   AreaChart,
@@ -363,6 +365,10 @@ export function DashboardPage() {
         </div>
       )}
 
+      {entityIdForQueries !== undefined && (
+        <DailyBalanceChart entityId={entityIdForQueries} days={90} />
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isLoading || !data ? (
           <>
@@ -424,6 +430,8 @@ export function DashboardPage() {
       </div>
 
       <BankBalancesSection entityId={entityIdForQueries} />
+
+      <PerAccountWidget entityId={entityIdForQueries} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <FlowColumn
