@@ -565,8 +565,9 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Trace historique de toutes les mutations finance-sensibles (réservée aux administrateurs).",
     sees: [
       "Une table paginée listant chaque mutation : création, modification ou suppression sur les données critiques — utilisateurs, sociétés, comptes bancaires, transactions, engagements, tiers, règles de catégorisation, scénarios et lignes prévisionnelles.",
-      "Pour chaque événement : horodatage précis (date + heure + secondes), utilisateur auteur, IP source, action (badge create / update / delete avec un code couleur), type d'entité, identifiant interne, et un résumé des champs modifiés (« champ : avant → après »).",
-      "Des filtres en haut de page : type d'entité, action (create/update/delete), utilisateur, période.",
+      "Les événements d'authentification : chaque connexion réussie (action login), chaque tentative de connexion échouée (action login_failed) et chaque déconnexion (action logout) sont tracés dans le journal avec l'adresse IP source et l'horodatage. Pour les retrouver, filtrez par action dans la barre de filtres en haut de page.",
+      "Pour chaque événement : horodatage précis (date + heure + secondes), utilisateur auteur, IP source, action (badge create / update / delete / login / login_failed / logout avec un code couleur), type d'entité, identifiant interne, et un résumé des champs modifiés (« champ : avant → après »).",
+      "Des filtres en haut de page : type d'entité, action (create/update/delete/login/login_failed/logout), utilisateur, période.",
       "Au clic sur une ligne : un panneau de détail (drawer) qui expose les JSON complets — état avant, état après, et diff champ par champ, en mono-espacé pour la lisibilité.",
     ],
     does: [
@@ -579,14 +580,14 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Les mots de passe et secrets sont toujours masqués (« <redacted> ») dans les snapshots : aucune donnée sensible n'est exposée dans le journal, même pour un administrateur.",
       "Les lectures (consultations, GET) ne sont pas tracées, seulement les mutations (create/update/delete). Impossible donc de savoir qui a simplement consulté une donnée — c'est volontaire (volume et bruit).",
       "Les imports massifs (par exemple 500 transactions créées d'un coup) ne génèrent qu'une seule entrée d'audit résumée, pas une par transaction. Vous gardez la traçabilité globale sans noyer le journal.",
-      "La rétention par défaut est de 365 jours : les événements plus anciens peuvent être purgés via un endpoint admin dédié (intervention technique).",
+      "La rétention par défaut est de 365 jours. Si une purge des événements anciens est nécessaire, elle se fait via une intervention SQL directe sur le serveur (opération technique réservée à l'administrateur système, hors de l'interface de l'application).",
       "Voir aussi la section Sécurité et sauvegardes pour la stratégie globale de protection des données.",
     ],
     panel: {
       summary:
-        "Trace de toutes les mutations finance-sensibles. Filtres par entité, action, utilisateur et période ; diff complet sur clic.",
+        "Trace de toutes les mutations finance-sensibles et des événements d'authentification (login, login_failed, logout). Filtres par entité, action, utilisateur et période ; diff complet sur clic.",
       does: [
-        "Filtrez par type d'entité, action, utilisateur, période.",
+        "Filtrez par type d'entité, action (create/update/delete/login/login_failed/logout), utilisateur, période.",
         "Cliquez sur une ligne pour ouvrir le détail (avant / après / diff JSON).",
         "Lisez la colonne Auteur pour identifier qui a fait quoi.",
       ],
@@ -620,6 +621,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Les PDF importés sont stockés à part pour permettre la prévisualisation, et ne sont jamais accessibles en dehors d'une session authentifiée.",
       "Une restauration de la base écrase l'état actuel : c'est une opération irréversible côté production. Toute modification faite depuis le dernier snapshot est perdue.",
       "L'audit (voir section Journal d'audit) couvre les mutations métier ; les sauvegardes couvrent l'intégralité des données. Les deux sont complémentaires.",
+      "Le verrouillage automatique après 5 échecs s'applique même si le bon mot de passe est saisi pendant la période de gel. Ce comportement est intentionnel : il protège contre les attaques par force brute. En cas de gel accidentel, un administrateur peut déverrouiller le compte en réinitialisant le mot de passe depuis Administration > Utilisateurs.",
       "Voir aussi la section Profil pour le changement de mot de passe, et Journal d'audit pour la traçabilité.",
     ],
     panel: {
