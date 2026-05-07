@@ -1,7 +1,7 @@
 """Schémas Pydantic pour les règles de catégorisation."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date as date_type
 from decimal import Decimal
 from typing import Literal, Optional
 
@@ -165,3 +165,23 @@ class RuleReorderItem(BaseModel):
 class BulkCategorizeRequest(BaseModel):
     transaction_ids: list[int] = Field(min_length=1)
     category_id: int
+
+
+class BulkCategorizeFilteredRequest(BaseModel):
+    """Payload pour POST /api/transactions/bulk-categorize-filtered.
+
+    Miroir des critères de TransactionFilter + category_id cible.
+    Tous les champs sauf category_id sont optionnels (aucun filtre = toutes
+    les transactions accessibles).
+    """
+    category_id: int
+    entity_id: int | None = None
+    bank_account_id: int | None = None
+    date_from: "date_type | None" = None
+    date_to: "date_type | None" = None
+    counterparty_id: int | None = None
+    search: str | None = None
+    uncategorized: bool | None = None
+    include_sepa_children: bool = False
+    amount_min: Decimal | None = None
+    amount_max: Decimal | None = None

@@ -16,7 +16,7 @@ from app.models.category import Category
 from app.models.entity import Entity
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User, UserRole
-from app.schemas.categorization_rule import BulkCategorizeRequest
+from app.schemas.categorization_rule import BulkCategorizeRequest, BulkCategorizeFilteredRequest
 from app.schemas.transaction import (
     TransactionFilter,
     TransactionListResponse,
@@ -166,6 +166,94 @@ def bulk_categorize(
             after={
                 "operation": "bulk_categorize",
                 "transaction_ids": [tx.id for tx in txs],
+                "category_id": payload.category_id,
+                "count": len(txs),
+            },
+        )
+    session.commit()
+    return {"updated_count": len(txs)}
+
+
+@router.post("/bulk-categorize-filtered")
+def bulk_categorize_filtered(
+    payload: BulkCategorizeFilteredRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Catégorise toutes les transactions correspondant aux filtres sans limite de pagination.
+
+    E6 — Multi-tenant : seules les transactions appartenant aux entités
+    accessibles de l'utilisateur courant sont modifiées.
+    """
+    if user.role == UserRole.READER:
+        raise HTTPException(status_code=403, detail="Droits éditeur requis")
+
+    cat = session.get(Category, payload.category_id)
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Catégorie introuvable")
+
+    accessible_entity_ids = accessible_entity_ids_subquery(session=session, user=user)
+
+    conditions = [
+        BankAccount.entity_id.in_(accessible_entity_ids),
+        Transaction.is_aggregation_parent.is_(False),
+    ]
+
+    # E7 — masquer les enfants SEPA par défaut
+    if not payload.include_sepa_children:
+        conditions.append(Transaction.parent_transaction_id.is_(None))
+
+    if payload.entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=payload.entity_id)
+        conditions.append(BankAccount.entity_id == payload.entity_id)
+    if payload.bank_account_id:
+        conditions.append(Transaction.bank_account_id == payload.bank_account_id)
+    if payload.date_from:
+        conditions.append(Transaction.operation_date >= payload.date_from)
+    if payload.date_to:
+        conditions.append(Transaction.operation_date <= payload.date_to)
+    if payload.counterparty_id:
+        conditions.append(Transaction.counterparty_id == payload.counterparty_id)
+    if payload.search:
+        like = f"%{payload.search.lower()}%"
+        conditions.append(
+            or_(
+                func.lower(Transaction.label).like(like),
+                func.lower(Transaction.raw_label).like(like),
+            )
+        )
+    if payload.uncategorized:
+        conditions.append(
+            Transaction.categorized_by == TransactionCategorizationSource.NONE
+        )
+    # E8 — filtres montant (valeur absolue)
+    if payload.amount_min is not None:
+        conditions.append(func.abs(Transaction.amount) >= payload.amount_min)
+    if payload.amount_max is not None:
+        conditions.append(func.abs(Transaction.amount) <= payload.amount_max)
+
+    txs = session.execute(
+        select(Transaction)
+        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
+        .where(and_(*conditions))
+    ).scalars().all()
+
+    for tx in txs:
+        tx.category_id = payload.category_id
+        tx.categorized_by = TransactionCategorizationSource.MANUAL
+
+    if txs:
+        record_batch_audit(
+            session,
+            user=user,
+            request=request,
+            action="update",
+            entity_type="Transaction",
+            entity_id=f"bulk-filtered({len(txs)})",
+            after={
+                "operation": "bulk_categorize_filtered",
+                "filters": payload.model_dump(exclude={"category_id"}, mode="json"),
                 "category_id": payload.category_id,
                 "count": len(txs),
             },
