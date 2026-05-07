@@ -160,7 +160,7 @@ def get_pivot(
         for pt in result.forecast_series
     ]
 
-    response.headers["Cache-Control"] = "private, max-age=30"
+    response.headers["Cache-Control"] = "private, max-age=5"
 
     return PivotResponse(
         months=result.months,
