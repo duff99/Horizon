@@ -475,8 +475,11 @@ def _combine_total(
     if month < current_month:
         return realized
     if month > current_month:
-        return forecast
-    # mois courant
+        # Si une ForecastLine couvre ce mois (forecast != 0), respecter le choix
+        # de l'utilisateur. Si aucune ligne (forecast == 0), remonter les
+        # engagements PENDING pour ne pas les masquer visuellement.
+        return forecast if forecast != 0 else committed
+    # Mois courant : réalisé + engagé + reste prévisionnel non couvert
     remaining = forecast - realized - committed
     if remaining < 0:
         remaining = 0
