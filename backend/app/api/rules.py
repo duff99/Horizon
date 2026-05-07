@@ -63,7 +63,24 @@ def list_rules(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> list[RuleRead]:
-    q = select(CategorizationRule)
+    # Sous-requête : nombre de transactions catégorisées par chaque règle.
+    hit_count_sq = (
+        select(
+            Transaction.categorization_rule_id,
+            sqlfunc.count(Transaction.id).label("cnt"),
+        )
+        .where(Transaction.categorization_rule_id.isnot(None))
+        .group_by(Transaction.categorization_rule_id)
+        .subquery()
+    )
+
+    q = select(
+        CategorizationRule,
+        sqlfunc.coalesce(hit_count_sq.c.cnt, 0).label("hit_count"),
+    ).outerjoin(
+        hit_count_sq,
+        hit_count_sq.c.categorization_rule_id == CategorizationRule.id,
+    )
 
     if entity_id is not None:
         require_entity_access(session=session, user=user, entity_id=entity_id)
@@ -85,8 +102,13 @@ def list_rules(
         CategorizationRule.priority.asc(),
     )
     q = q.limit(limit).offset(offset)
-    rows = session.execute(q).scalars().all()
-    return [RuleRead.model_validate(r) for r in rows]
+    rows = session.execute(q).all()
+    result = []
+    for rule, hit_count in rows:
+        rd = RuleRead.model_validate(rule)
+        rd.hit_count = hit_count
+        result.append(rd)
+    return result
 
 
 class AutoSuggestItem(BaseModel):
