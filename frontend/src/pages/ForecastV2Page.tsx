@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { todayISO } from "@/api/exports";
+import { ExportButton } from "@/components/ExportButton";
 import { EntitySelector } from "@/components/EntitySelector";
 import {
   PeriodSelector,
@@ -225,13 +227,24 @@ export function ForecastV2Page() {
             />
           </div>
 
-          <PivotTable
-            result={pivotQuery.data}
-            onCellClick={(month, categoryId) =>
-              setDrawer({ month, categoryId })
-            }
-            currentMonth={currentMonth}
-          />
+          <div>
+            <PivotTable
+              result={pivotQuery.data}
+              onCellClick={(month, categoryId) =>
+                setDrawer({ month, categoryId })
+              }
+              currentMonth={currentMonth}
+            />
+            {effectiveEntityId != null && scenarioId != null && (
+              <div className="mt-2 flex justify-end">
+                <ExportButton
+                  url={`/api/forecast/pivot/export?scenario_id=${scenarioId}&entity_id=${effectiveEntityId}&from=${period.from}&to=${period.to}`}
+                  filename={`previsionnel-pivot_${todayISO()}.csv`}
+                  label="Exporter le pivot CSV"
+                />
+              </div>
+            )}
+          </div>
 
           {/* G2 — Rolling 13-week */}
           {effectiveEntityId != null && (

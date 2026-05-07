@@ -155,6 +155,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour identifier en un coup d'œil les postes qui décalent votre résultat : lisez la colonne « Dérive » du tableau Dérives par catégorie, puis le widget Top mouvements pour confirmer la tendance.",
       "Pour évaluer un risque commercial : ouvrez Concentration clients ; un indice HHI supérieur à 2500 signale une dépendance forte à quelques clients (le marché américain considère 2500 comme le seuil d'alerte antitrust).",
       "Pour comparer vos sociétés entre elles : descendez jusqu'au tableau Comparaison des sociétés (masqué si vous n'avez accès qu'à une seule entité).",
+      "Pour exporter les données d'un widget : utilisez les boutons 'Exporter CSV' placés sous chaque tableau (Dérives par catégorie, Top mouvements, YoY). Le fichier CSV est téléchargé avec les données filtrées sur la société sélectionnée.",
     ],
     tips: [
       "Le widget Comparaison des sociétés se masque automatiquement si une seule société est accessible (sinon il n'aurait rien à comparer).",
@@ -194,6 +195,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour ajuster la fenêtre temporelle : utilisez le PeriodSelector en haut à droite, en granularité mois (presets : 12 m, Année, Mois-1, Perso.).",
       "Pour fermer le tiroir d'édition sans enregistrer : cliquez en dehors ou utilisez le bouton Annuler du tiroir.",
       "Pour supprimer une entrée prévisionnelle existante : ouvrez le tiroir sur la cellule concernée (la ligne actuelle est pré-chargée), puis cliquez sur Supprimer la ligne en bas à gauche du formulaire. Une confirmation est demandée. La cellule retombera sur le calcul par défaut (souvent 0) tant qu'aucune autre méthode n'est définie pour cette catégorie.",
+      "Pour exporter le tableau pivot : cliquez sur le bouton 'Exporter le pivot CSV' placé sous le tableau. Le fichier contient toutes les colonnes catégorie × mois (réalisé, engagé, prévisionnel) pour le scénario et la période sélectionnés.",
     ],
     tips: [
       "Les mois passés du pivot sont remplis à partir des transactions réelles ; les mois futurs combinent les engagements existants et les saisies prévisionnelles manuelles.",
@@ -244,6 +246,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour créer une règle depuis la suggestion automatique : si un bandeau ambre apparaît en haut de la page, cliquez sur « Créer une règle ». Le formulaire de règle s'ouvre pré-rempli avec le libellé et la catégorie détectés. Cliquez sur « Plus tard » pour ignorer la suggestion jusqu'au prochain rechargement de page.",
       "Pour naviguer rapidement dans la liste : la barre de pagination en bas du tableau propose plusieurs raccourcis. Cliquez directement sur un numéro de page, ou utilisez « (début), ‹ (précédente), › (suivante), » (fin). Au-delà de 5 pages, le champ Aller à : permet de sauter à une page précise (validez avec Entrée).",
       "Pour afficher plus de transactions par écran : changez le sélecteur Lignes : (25 / 50 / 100 / 200) dans la barre de pagination. À 200, vous parcourez plus vite un gros volume sans recharger.",
+      "Pour exporter la liste des transactions filtrées : cliquez sur le bouton 'Exporter CSV' en haut à droite. Toutes les lignes correspondant aux filtres actifs (société, période, catégorie, montant, etc.) sont exportées, quelle que soit la page affichée. Le fichier CSV est encodé UTF-8 avec BOM pour Excel et utilise le point-virgule comme séparateur.",
     ],
     tips: [
       "Les filtres actifs sont mémorisés dans l'URL de la page. Vous pouvez copier-coller l'URL pour partager une vue filtrée avec un collègue, ou retrouver votre contexte après un rechargement de page.",
@@ -587,6 +590,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour cibler une catégorie d'événements : utilisez le filtre Type d'entité (par ex. Transaction, Commitment, User) puis le filtre Action.",
       "Pour identifier qui a fait une modification donnée : filtrez par utilisateur, ou trouvez la ligne dans la table puis lisez la colonne Auteur.",
       "Pour reconstituer un changement problématique : ouvrez la ligne, lisez le diff champ par champ ou comparez les JSON avant / après.",
+      "Pour exporter le journal (avec les filtres actifs) : cliquez sur le bouton 'Exporter CSV' en haut à droite. Le fichier CSV contient les colonnes Date/heure, Utilisateur, Action, Type entité, ID entité, Adresse IP. Il est encodé UTF-8 avec BOM pour Excel.",
     ],
     tips: [
       "Les mots de passe et secrets sont toujours masqués (« <redacted> ») dans les snapshots : aucune donnée sensible n'est exposée dans le journal, même pour un administrateur.",
@@ -975,6 +979,31 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     whenToUse: [
       "Pour comparer visuellement un scenario optimiste et un scenario pessimiste sur la meme periode.",
       "Pour preparer une presentation a un investisseur ou un banquier en montrant l'amplitude des incertitudes.",
+    ],
+  },
+  // ---------------------------------------------------------------------------
+  // G11 — Export CSV generalisé
+  // ---------------------------------------------------------------------------
+  {
+    id: "export-csv",
+    title: "Export CSV des données",
+    whatItDoes:
+      "Permet de télécharger les données affichées sur les pages clés (Transactions, Journal d'audit, Analyse — dérives, top movers, YoY — et Prévisionnel pivot) sous forme de fichier CSV. Le fichier est encodé en UTF-8 avec BOM pour une ouverture correcte dans Excel sur Windows, et utilise le point-virgule comme séparateur (standard FR).",
+    whatItChanges: [
+      "Déclenche un appel GET vers l'endpoint d'export correspondant avec les filtres actifs au moment du clic.",
+      "Génère un fichier .csv dans le dossier Téléchargements du navigateur.",
+      "Le nom du fichier inclut la date du jour (ex : transactions_2026-05-07.csv).",
+    ],
+    whatItDoesNotChange: [
+      "Aucune donnée en base n'est modifiée : l'export est une lecture seule.",
+      "Les filtres actifs sur la page sont respectés : seules les données visibles sont exportées.",
+      "Les permissions multi-tenant sont appliquées : un utilisateur n'exporte que les données auxquelles il a accès.",
+    ],
+    whenToUse: [
+      "Pour réaliser une clôture mensuelle ou préparer un reporting comptable.",
+      "Pour fournir un extract de données à un expert-comptable ou un auditeur.",
+      "Pour analyser les transactions dans un tableur (Excel, Calc) avec des formules personnalisées.",
+      "Pour archiver l'état du journal d'audit à une date donnée.",
     ],
   },
   // ---------------------------------------------------------------------------

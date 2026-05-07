@@ -11,8 +11,10 @@
  */
 import { useEffect } from "react";
 
+import { todayISO } from "@/api/exports";
 import { useEntities } from "@/api/entities";
 import { EntitySelector } from "@/components/EntitySelector";
+import { ExportButton } from "@/components/ExportButton";
 import { CategoryDriftTable } from "@/components/analyse/CategoryDriftTable";
 import { ClientConcentrationCard } from "@/components/analyse/ClientConcentrationCard";
 import { EntitiesComparisonTable } from "@/components/analyse/EntitiesComparisonTable";
@@ -85,9 +87,27 @@ export function AnalysePage() {
         {/* Ligne 2 : analyse de coûts */}
         <div className="col-span-12">
           <CategoryDriftTable entityId={entityId ?? undefined} />
+          {entityId != null && (
+            <div className="mt-2 flex justify-end">
+              <ExportButton
+                url={`/api/analysis/drift/export?entity_id=${entityId}`}
+                filename={`analyse-drift_${todayISO()}.csv`}
+                label="Exporter dérives CSV"
+              />
+            </div>
+          )}
         </div>
         <div className="col-span-12 md:col-span-6">
           <TopMoversCard entityId={entityId ?? undefined} />
+          {entityId != null && (
+            <div className="mt-2 flex justify-end">
+              <ExportButton
+                url={`/api/analysis/top-movers/export?entity_id=${entityId}`}
+                filename={`analyse-top-movers_${todayISO()}.csv`}
+                label="Exporter top movers CSV"
+              />
+            </div>
+          )}
         </div>
         <div className="col-span-12 md:col-span-6">
           <ClientConcentrationCard entityId={entityId ?? undefined} />
@@ -95,6 +115,15 @@ export function AnalysePage() {
         {/* Ligne 4 : tendance long terme + comparaison */}
         <div className="col-span-12">
           <YoYChart entityId={entityId ?? undefined} />
+          {entityId != null && (
+            <div className="mt-2 flex justify-end">
+              <ExportButton
+                url={`/api/analysis/yoy/export?entity_id=${entityId}`}
+                filename={`analyse-yoy_${todayISO()}.csv`}
+                label="Exporter YoY CSV"
+              />
+            </div>
+          )}
         </div>
         <div className="col-span-12">
           <EntitiesComparisonTable />

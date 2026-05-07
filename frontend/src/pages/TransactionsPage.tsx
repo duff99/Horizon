@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { fetchTransactions, useBulkCategorize, useBulkCategorizeFiltered, type BulkCategorizeFilteredPayload } from "../api/transactions";
+import { todayISO } from "@/api/exports";
+import { ExportButton } from "@/components/ExportButton";
 import { useEntityFilter } from "../stores/entityFilter";
 import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
@@ -90,6 +92,23 @@ function filtersToSearchParams(f: TransactionFilter): URLSearchParams {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+function buildTxExportUrl(filters: TransactionFilter & { entity_id?: number | null }): string {
+  const p = new URLSearchParams();
+  if (filters.entity_id != null) p.set("entity_id", String(filters.entity_id));
+  if (filters.date_from) p.set("date_from", filters.date_from);
+  if (filters.date_to) p.set("date_to", filters.date_to);
+  if (filters.bank_account_id) p.set("bank_account_id", String(filters.bank_account_id));
+  if (filters.category_id) p.set("category_id", String(filters.category_id));
+  if (filters.counterparty_id) p.set("counterparty_id", String(filters.counterparty_id));
+  if (filters.search) p.set("search", filters.search);
+  if (filters.uncategorized) p.set("uncategorized", "true");
+  if (filters.amount_min != null) p.set("amount_min", String(filters.amount_min));
+  if (filters.amount_max != null) p.set("amount_max", String(filters.amount_max));
+  if (filters.include_sepa_children) p.set("include_sepa_children", "true");
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
 
 export function TransactionsPage() {
   // E8 — tous les filtres persistés en URL
@@ -350,7 +369,13 @@ export function TransactionsPage() {
               : ""}
           </p>
         </div>
-        <EntitySelector />
+        <div className="flex items-center gap-2">
+          <EntitySelector />
+          <ExportButton
+            url={`/api/transactions/export${buildTxExportUrl(queryFilters)}`}
+            filename={`transactions_${todayISO()}.csv`}
+          />
+        </div>
       </div>
 
       {/* Card: filters + bulk + table */}

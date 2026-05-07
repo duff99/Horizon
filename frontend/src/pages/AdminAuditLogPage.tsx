@@ -16,6 +16,8 @@ import { useMemo, useState } from 'react';
 
 import { listAuditLog } from '@/api/auditLog';
 import { listUsers } from '@/api/users';
+import { todayISO } from '@/api/exports';
+import { ExportButton } from '@/components/ExportButton';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
   computeRange,
@@ -216,6 +218,22 @@ function AuditDetailDrawer({
   );
 }
 
+function buildExportParams(opts: {
+  entityType: string;
+  action: string;
+  userId: string;
+  period: PeriodValue;
+}): string {
+  const p = new URLSearchParams();
+  if (opts.entityType) p.set("entity_type", opts.entityType);
+  if (opts.action) p.set("action", opts.action);
+  if (opts.userId) p.set("user_id", opts.userId);
+  if (opts.period.from) p.set("from", `${opts.period.from}T00:00:00`);
+  if (opts.period.to) p.set("to", `${opts.period.to}T23:59:59`);
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
 export function AdminAuditLogPage() {
   const [entityType, setEntityType] = useState<string>('');
   const [action, setAction] = useState<string>('');
@@ -272,13 +290,19 @@ export function AdminAuditLogPage() {
             réalisées sur les données finance-sensibles. Rétention : 365 jours.
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-[11px] uppercase tracking-wider text-slate-500">
-            Total filtré
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-[11px] uppercase tracking-wider text-slate-500">
+              Total filtré
+            </div>
+            <div className="font-mono text-[18px] font-semibold tabular-nums text-ink">
+              {total.toLocaleString('fr-FR')}
+            </div>
           </div>
-          <div className="font-mono text-[18px] font-semibold tabular-nums text-ink">
-            {total.toLocaleString('fr-FR')}
-          </div>
+          <ExportButton
+            url={`/api/admin/audit-log/export${buildExportParams({ entityType, action, userId, period })}`}
+            filename={`audit-log_${todayISO()}.csv`}
+          />
         </div>
       </header>
 
