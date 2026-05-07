@@ -28,6 +28,16 @@ from app.api import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+
+# Alias legacy : /healthz à la racine pour les sondes nginx / kubelet existantes
+# qui ne passent pas par le préfixe /api.
+root_router = APIRouter()
+
+
+@root_router.get("/healthz", include_in_schema=False, tags=["health"])
+def healthz_legacy() -> dict[str, str]:
+    """Alias de /api/healthz pour les sondes qui ne connaissent pas le préfixe /api."""
+    return health.healthz()
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
 api_router.include_router(bootstrap.router)
