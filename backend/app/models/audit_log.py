@@ -27,7 +27,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('create', 'update', 'delete', 'merge')",
+            "action IN ('create','update','delete','merge','login','login_failed','logout')",
             name="ck_audit_log_action",
         ),
     )

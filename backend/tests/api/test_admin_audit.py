@@ -61,12 +61,14 @@ def test_admin_audit_list_returns_rows(
         entity_id="1", action="update", offset_min=10,
     )
 
-    resp = client.get("/api/admin/audit-log")
+    resp = client.get("/api/admin/audit-log", params={"entity_type": "Entity"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] >= 2
-    # Tri desc occurred_at : update en premier (plus récent)
-    assert body["items"][0]["action"] == "update"
+    actions = [item["action"] for item in body["items"]]
+    # Le tri est desc occurred_at : update (offset_min=10) avant create (offset_min=60)
+    assert actions[0] == "update"
+    assert "create" in actions
 
 
 def test_admin_audit_filters_by_entity_type(

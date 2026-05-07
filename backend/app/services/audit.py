@@ -33,7 +33,7 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-AuditAction = Literal["create", "update", "delete"]
+AuditAction = Literal["create", "update", "delete", "merge", "login", "login_failed", "logout"]
 
 # Ne jamais sérialiser ces champs en clair — masqués en "<redacted>".
 _SENSITIVE_FIELDS: set[str] = {
