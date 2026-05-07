@@ -87,6 +87,15 @@ function Skeleton() {
   );
 }
 
+function formatWindowMonth(ym: string): string {
+  // "2026-04" → "avr. 2026"
+  const [year, month] = ym.split("-");
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString("fr-FR", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function TopMoversCardInner({ entityId, limit = 5 }: Props) {
   const query = useTopMovers({ entityId, limit });
   const increases = query.data?.increases ?? [];
@@ -98,6 +107,11 @@ function TopMoversCardInner({ entityId, limit = 5 }: Props) {
         <div className="text-[15px] font-semibold text-ink">Top mouvements</div>
         <div className="mt-0.5 text-[12.5px] text-muted-foreground">
           Variations les plus fortes vs mois précédent
+          {query.data?.window_month && (
+            <span className="ml-1 font-mono text-[11px]">
+              ({formatWindowMonth(query.data.window_month)})
+            </span>
+          )}
         </div>
       </div>
 

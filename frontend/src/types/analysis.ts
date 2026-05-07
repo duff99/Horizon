@@ -39,6 +39,7 @@ export interface TopMoverRow {
 export interface TopMoversResponse {
   increases: TopMoverRow[];
   decreases: TopMoverRow[];
+  window_month?: string | null; // "YYYY-MM" du mois courant utilisé comme ancre
 }
 
 // ---------------------------------------------------------------------------
