@@ -54,3 +54,6 @@ class ClientError(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     context_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

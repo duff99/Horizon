@@ -49,6 +49,7 @@ class ClientErrorRead(BaseModel):
     user_agent: str | None
     request_id: str | None
     context_json: dict[str, Any] | None
+    acknowledged_at: datetime | None = None
 
 
 class ClientErrorListResponse(BaseModel):
@@ -56,3 +57,8 @@ class ClientErrorListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class ClientErrorAcknowledgeResponse(BaseModel):
+    id: int
+    acknowledged_at: datetime
