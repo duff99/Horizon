@@ -18,6 +18,8 @@ router = APIRouter(
     prefix="/api/users", tags=["users"], dependencies=[Depends(require_admin)]
 )
 
+_USER_UPDATABLE_FIELDS = {"role", "full_name", "is_active"}
+
 
 def _would_leave_no_active_admin(
     db: Session,
@@ -98,7 +100,8 @@ def update_user(
         )
     before_snapshot = to_dict_for_audit(user)
     for field, value in data.items():
-        setattr(user, field, value)
+        if field in _USER_UPDATABLE_FIELDS:
+            setattr(user, field, value)
     db.flush()
     record_audit(
         db, user=current, action="update", entity=user,

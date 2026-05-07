@@ -18,6 +18,8 @@ from app.services.audit import record_audit, to_dict_for_audit
 
 router = APIRouter(prefix="/api/forecast/scenarios", tags=["forecast-scenarios"])
 
+_SCENARIO_UPDATABLE_FIELDS = {"name", "description", "is_default"}
+
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
@@ -125,7 +127,8 @@ def update_scenario(
         _unset_other_defaults(session, sc.entity_id, except_id=sc.id)
 
     for field, value in updates.items():
-        setattr(sc, field, value)
+        if field in _SCENARIO_UPDATABLE_FIELDS:
+            setattr(sc, field, value)
     session.flush()
     record_audit(
         session, user=user, action="update", entity=sc,

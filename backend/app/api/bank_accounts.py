@@ -20,6 +20,8 @@ router = APIRouter(
     tags=["bank-accounts"],
 )
 
+_BANK_ACCOUNT_UPDATABLE_FIELDS = {"name", "bic", "bank_name", "bank_code", "is_active"}
+
 
 @router.get("", response_model=list[BankAccountRead])
 def list_bank_accounts(
@@ -77,7 +79,8 @@ def update_bank_account(
         raise HTTPException(status_code=404, detail="Compte bancaire introuvable")
     before_snapshot = to_dict_for_audit(ba)
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(ba, field, value)
+        if field in _BANK_ACCOUNT_UPDATABLE_FIELDS:
+            setattr(ba, field, value)
     db.flush()
     record_audit(
         db, user=current, action="update", entity=ba,

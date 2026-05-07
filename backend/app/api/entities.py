@@ -15,6 +15,8 @@ router = APIRouter(
     prefix="/api/entities", tags=["entities"], dependencies=[Depends(require_admin)]
 )
 
+_ENTITY_UPDATABLE_FIELDS = {"name", "legal_name", "siret", "parent_entity_id"}
+
 
 @router.get("", response_model=list[EntityRead])
 def list_entities(db: Session = Depends(get_db)) -> list[Entity]:
@@ -61,7 +63,8 @@ def update_entity(
         raise HTTPException(status_code=404, detail="Société introuvable")
     before_snapshot = to_dict_for_audit(e)
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(e, field, value)
+        if field in _ENTITY_UPDATABLE_FIELDS:
+            setattr(e, field, value)
     try:
         validate_entity_tree(e, session=db)
     except ValueError as exc:

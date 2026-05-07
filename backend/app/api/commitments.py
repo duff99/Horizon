@@ -37,6 +37,13 @@ from app.services.commitment_matching import suggest_matches
 
 router = APIRouter(prefix="/api/commitments", tags=["commitments"])
 
+_COMMITMENT_UPDATABLE_FIELDS = {
+    "counterparty_id", "category_id", "bank_account_id",
+    "direction", "status", "amount_cents",
+    "issue_date", "expected_date",
+    "reference", "description", "pdf_attachment_id",
+}
+
 
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
@@ -280,6 +287,8 @@ def update_commitment(
             detail="L'écart entre issue_date et expected_date ne doit pas dépasser 365 jours",
         )
     for field, value in updates.items():
+        if field not in _COMMITMENT_UPDATABLE_FIELDS:
+            continue
         if field == "direction" and value is not None:
             setattr(c, field, CommitmentDirection(value))
         elif field == "status" and value is not None:
