@@ -65,11 +65,21 @@ def build_rule_filter(rule: CategorizationRule) -> ColumnElement[bool]:
     if rule.bank_account_id is not None:
         clauses.append(Transaction.bank_account_id == rule.bank_account_id)
 
-    return and_(*clauses) if clauses else (Transaction.id == Transaction.id)
+    # Garde universelle : ne JAMAIS matcher les enfants d'agrégat. Les règles
+    # opèrent sur les transactions de premier niveau uniquement (le parent
+    # porte le total ; les enfants sont des fragments masqués UI).
+    clauses.append(Transaction.parent_transaction_id.is_(None))
+
+    return and_(*clauses)
 
 
 def matches_transaction(rule: CategorizationRule, tx: Transaction) -> bool:
     """Évalue une règle contre une Transaction chargée (en Python, sans SQL)."""
+    # Garde universelle : les enfants d'agrégat (parent_transaction_id non NULL)
+    # sont des fragments masqués UI — les règles ne doivent jamais les capter.
+    if tx.parent_transaction_id is not None:
+        return False
+
     if rule.label_operator is not None and rule.label_value:
         nl = (tx.normalized_label or "").upper()
         patterns = [p.strip().upper() for p in rule.label_value.split(",") if p.strip()]
