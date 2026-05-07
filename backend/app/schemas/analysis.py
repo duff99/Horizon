@@ -20,13 +20,14 @@ class CategoryDriftRow(BaseModel):
     current_cents: int
     avg3m_cents: int
     delta_cents: int
-    delta_pct: float
-    status: Literal["alert", "normal"]
+    delta_pct: float | None
+    status: Literal["alert", "normal", "insufficient"]
 
 
 class CategoryDriftResponse(BaseModel):
     rows: list[CategoryDriftRow]
     seuil_pct: float
+    window_month: str | None = None  # "YYYY-MM" du mois de référence (M-1 de l'ancre)
 
 
 class CategoryDriftTransaction(BaseModel):
@@ -107,6 +108,7 @@ class TopMoverRow(BaseModel):
 class TopMoversResponse(BaseModel):
     increases: list[TopMoverRow]
     decreases: list[TopMoverRow]
+    window_month: str | None = None  # "YYYY-MM" du mois courant utilisé comme ancre
 
 
 # ---------------------------------------------------------------------------

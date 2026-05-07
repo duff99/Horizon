@@ -80,6 +80,26 @@ def _bank_account_ids_for_entity(session: Session, entity_id: int) -> list[int]:
     )
 
 
+def _resolve_anchor_month(session: Session, entity_id: int) -> date | None:
+    """Retourne le 1er du mois de la dernière transaction de l'entité.
+
+    None si aucune data. Ancrer sur la data plutôt que sur date.today()
+    évite que les widgets pointent sur un mois vide entre deux imports.
+    """
+    ba_ids = _bank_account_ids_for_entity(session, entity_id)
+    if not ba_ids:
+        return None
+    max_op = session.execute(
+        select(func.max(Transaction.operation_date)).where(
+            Transaction.bank_account_id.in_(ba_ids),
+            Transaction.is_aggregation_parent.is_(False),
+        )
+    ).scalar()
+    if max_op is None:
+        return None
+    return _first_of_month(max_op)
+
+
 def _accessible_entity_ids(session: Session, user: User) -> list[int]:
     return list(
         session.scalars(accessible_entity_ids_subquery(session=session, user=user))
@@ -91,27 +111,38 @@ def _accessible_entity_ids(session: Session, user: User) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
+DRIFT_AVG3M_THRESHOLD_CENTS = 5000  # 50 € : en dessous, le % n'est pas fiable
+DRIFT_MIN_ACTIVE_PREV_MONTHS = 2   # nb minimum de mois actifs sur les 3 précédents
+
+
 def compute_category_drift(
     session: Session, *, entity_id: int, seuil_pct: float,
 ) -> CategoryDriftResponse:
     """Compare chaque catégorie : M-1 (dernier mois complet) vs moyenne
     des 3 mois antérieurs (M-2, M-3, M-4).
 
-    Le mois en cours est exclu volontairement : les utilisateurs importent
-    les relevés bancaires une fois le mois terminé, donc le mois courant
-    est toujours partiellement vide et fausserait la comparaison. M-1 est
-    pris comme référence "fraîche complète" et comparé aux 3 mois précédents
-    pour repérer les dérives.
+    Ancrage : le mois de référence est déduit de MAX(operation_date) de
+    l'entité, pas de date.today(). Cela évite que les widgets pointent sur
+    un mois vide entre deux imports.
+
+    Pour les catégories peu actives (avg3m < 50 € ou < 2 mois actifs sur 3),
+    delta_pct = None et status = "insufficient" pour éviter les pourcentages
+    aberrants (ex. -1272 %).
     """
-    today = date.today()
-    current_first = _first_of_month(today)
-    target_first = _add_months(current_first, -1)  # M-1 (mois de référence)
-    earliest = _add_months(current_first, -4)  # M-4 (borne basse incluse)
-    latest = current_first  # exclusive : on n'inclut pas le mois en cours
+    anchor = _resolve_anchor_month(session, entity_id)
+    if anchor is None:
+        return CategoryDriftResponse(rows=[], seuil_pct=seuil_pct, window_month=None)
+
+    # anchor = 1er du mois de la dernière tx.
+    # target_first = M-1 par rapport à l'ancre : c'est le mois de référence "courant".
+    # On exclut l'ancre (peut être partiel) et on compare M-1 vs [M-2, M-3, M-4].
+    target_first = _add_months(anchor, -1)  # M-1 (mois de référence)
+    earliest = _add_months(anchor, -4)      # M-4 (borne basse incluse)
+    latest = anchor                          # exclusive : n'inclut pas le mois ancre
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     if not ba_ids:
-        return CategoryDriftResponse(rows=[], seuil_pct=seuil_pct)
+        return CategoryDriftResponse(rows=[], seuil_pct=seuil_pct, window_month=None)
 
     month_col = func.date_trunc("month", Transaction.operation_date)
     rows = session.execute(
@@ -150,17 +181,27 @@ def compute_category_drift(
     out: list[CategoryDriftRow] = []
     for cat_id, months_map in by_cat.items():
         current = months_map.get(current_key, 0)
-        prev_sum = sum(months_map.get(k, 0) for k in prev_keys)
+        prev_values = [months_map.get(k, 0) for k in prev_keys]
+        active_prev = sum(1 for v in prev_values if v != 0)
+        prev_sum = sum(prev_values)
         avg3m = prev_sum // 3 if prev_sum else 0
+
         # Skip si zéro partout : pas d'activité
         if current == 0 and avg3m == 0:
             continue
+
         delta = current - avg3m
-        if avg3m == 0:
-            delta_pct = 0.0
+        insufficient = (
+            abs(avg3m) < DRIFT_AVG3M_THRESHOLD_CENTS
+            or active_prev < DRIFT_MIN_ACTIVE_PREV_MONTHS
+        )
+        if insufficient:
+            delta_pct: float | None = None
+            status = "insufficient"
         else:
             delta_pct = (current - avg3m) / abs(avg3m) * 100.0
-        status = "alert" if abs(delta_pct) > seuil_pct else "normal"
+            status = "alert" if abs(delta_pct) > seuil_pct else "normal"
+
         out.append(
             CategoryDriftRow(
                 category_id=cat_id,
@@ -168,13 +209,14 @@ def compute_category_drift(
                 current_cents=current,
                 avg3m_cents=avg3m,
                 delta_cents=delta,
-                delta_pct=round(delta_pct, 2),
+                delta_pct=round(delta_pct, 2) if delta_pct is not None else None,
                 status=status,
             )
         )
 
-    out.sort(key=lambda r: abs(r.delta_pct), reverse=True)
-    return CategoryDriftResponse(rows=out, seuil_pct=seuil_pct)
+    # Tri : insufficient en bas, puis par |delta_pct| décroissant
+    out.sort(key=lambda r: (r.status == "insufficient", -abs(r.delta_pct or 0)))
+    return CategoryDriftResponse(rows=out, seuil_pct=seuil_pct, window_month=_month_key(target_first))
 
 
 def compute_category_drift_detail(
@@ -192,12 +234,15 @@ def compute_category_drift_detail(
         CategoryDriftTransaction,
     )
 
-    today = date.today()
-    current_first = _first_of_month(today)
-    # On affiche les transactions de M-1 (mois de référence du widget Dérive),
-    # pas du mois en cours qui est partiellement importé.
-    target_first = _add_months(current_first, -1)
-    next_first = current_first  # borne haute exclusive = 1er du mois courant
+    # Ancrage sur MAX(operation_date) plutôt que date.today().
+    anchor = _resolve_anchor_month(session, entity_id)
+    if anchor is None:
+        # Fallback sur today si aucune data (cas limite)
+        anchor = _first_of_month(date.today())
+    # On affiche les transactions de M-1 par rapport à l'ancre,
+    # mois de référence du widget Dérive.
+    target_first = _add_months(anchor, -1)
+    next_first = anchor  # borne haute exclusive = 1er du mois ancre
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     cat = session.get(Category, category_id)
@@ -262,17 +307,23 @@ def compute_category_drift_detail(
 def compute_top_movers(
     session: Session, *, entity_id: int, limit: int,
 ) -> TopMoversResponse:
-    """Top N catégories par |delta vs mois précédent| avec sparkline 3m."""
-    today = date.today()
-    current_first = _first_of_month(today)
-    # On récupère 4 mois : courant + 3 précédents (pour sparkline 3m et delta)
-    # Sparkline = [m-3, m-2, m-1] (3 derniers mois finis), delta = current - (m-1)
+    """Top N catégories par |delta vs mois précédent| avec sparkline 3m.
+
+    Ancrage : current_first = mois de MAX(operation_date), pas date.today().
+    Cela évite de comparer un mois courant vide à un mois précédent plein.
+    """
+    current_first = _resolve_anchor_month(session, entity_id)
+    if current_first is None:
+        return TopMoversResponse(increases=[], decreases=[], window_month=None)
+
+    # On récupère 4 mois : courant (ancre) + 3 précédents (pour sparkline 3m et delta)
+    # Sparkline = [m-3, m-2, m-1] (3 mois avant l'ancre), delta = current - (m-1)
     earliest = _add_months(current_first, -3)
-    latest = _add_months(current_first, 1)  # exclusive (inclut mois courant)
+    latest = _add_months(current_first, 1)  # exclusive (inclut mois ancre)
 
     ba_ids = _bank_account_ids_for_entity(session, entity_id)
     if not ba_ids:
-        return TopMoversResponse(increases=[], decreases=[])
+        return TopMoversResponse(increases=[], decreases=[], window_month=None)
 
     month_col = func.date_trunc("month", Transaction.operation_date)
     rows = session.execute(
@@ -356,7 +407,11 @@ def compute_top_movers(
         [c for c in candidates if c.delta_cents < 0],
         key=lambda r: r.delta_cents,
     )[:limit]
-    return TopMoversResponse(increases=increases, decreases=decreases)
+    return TopMoversResponse(
+        increases=increases,
+        decreases=decreases,
+        window_month=_month_key(current_first),
+    )
 
 
 # ---------------------------------------------------------------------------

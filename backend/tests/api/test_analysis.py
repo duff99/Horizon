@@ -124,10 +124,19 @@ class TestCategoryDrift:
     ) -> None:
         e = auth_user_with_bank_account["entity"]
         ba = auth_user_with_bank_account["bank_account"]
-        current = _today_first()
+        current = _today_first()  # anchor = mois courant (tx sur today)
 
-        # Sales : 1000 en moyenne sur 3m, 5000 ce mois → alert
-        for i in range(1, 4):
+        # Ancrage : 1 tx sur le mois courant (today) pour que MAX(op_date) = mois courant.
+        # target = M-1. Les 5000 de Sales doivent être sur target (M-1).
+        # Les 1000 (avg) sur M-2, M-3, M-4 (prev du target).
+        _mk_tx(
+            db_session, ba,
+            amount=Decimal("5000"),
+            op_date=_add_months(current, -1) + (date.today() - current),
+            category_id=categories["sales"].id,
+            label="s-target",
+        )
+        for i in range(2, 5):  # M-2, M-3, M-4 par rapport à l'anchor
             _mk_tx(
                 db_session, ba,
                 amount=Decimal("1000"),
@@ -135,20 +144,20 @@ class TestCategoryDrift:
                 category_id=categories["sales"].id,
                 label=f"s-{i}",
             )
+        # Tx anchor (today) pour fixer l'ancrage au mois courant
         _mk_tx(
             db_session, ba,
-            amount=Decimal("5000"),
+            amount=Decimal("1"),
             op_date=date.today(),
             category_id=categories["sales"].id,
-            label="s-cur",
+            label="s-anchor",
         )
-        # Loyer : stable à -1500
-        for i in range(0, 4):
+        # Loyer : stable à -1500 sur M-1, M-2, M-3, M-4 (target + 3 prev)
+        for i in range(1, 5):
             _mk_tx(
                 db_session, ba,
                 amount=Decimal("-1500"),
-                op_date=_add_months(current, -i) + (date.today() - current)
-                if i > 0 else date.today(),
+                op_date=_add_months(current, -i) + (date.today() - current),
                 category_id=categories["rent"].id,
                 label=f"r-{i}",
             )
@@ -159,7 +168,7 @@ class TestCategoryDrift:
         assert body["seuil_pct"] == 20.0
         labels = [row["label"] for row in body["rows"]]
         assert "Ventes" in labels
-        # Ventes : current 500000, avg3m 100000 → delta 400%
+        # Ventes : current (M-1) 500000, avg3m (M-2,M-3,M-4) 100000 → delta 400%
         sales = next(r for r in body["rows"] if r["label"] == "Ventes")
         assert sales["status"] == "alert"
         assert sales["current_cents"] == 500000
@@ -179,7 +188,10 @@ class TestCategoryDrift:
         e = auth_user_with_bank_account["entity"]
         r = client.get(f"/api/analysis/category-drift?entity_id={e.id}")
         assert r.status_code == 200
-        assert r.json() == {"rows": [], "seuil_pct": 20.0}
+        body = r.json()
+        assert body["rows"] == []
+        assert body["seuil_pct"] == 20.0
+        assert body["window_month"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +262,10 @@ class TestTopMovers:
         e = auth_user_with_bank_account["entity"]
         r = client.get(f"/api/analysis/top-movers?entity_id={e.id}")
         assert r.status_code == 200
-        assert r.json() == {"increases": [], "decreases": []}
+        body = r.json()
+        assert body["increases"] == []
+        assert body["decreases"] == []
+        assert body["window_month"] is None
 
 
 # ---------------------------------------------------------------------------

@@ -77,11 +77,14 @@ def test_drift_detail_returns_current_month_transactions(
     db_session.add(cat); db_session.commit()
 
     today = date.today()
-    cm = today.replace(day=1)
-    # 2 transactions ce mois, 1 le mois précédent (ne doit pas apparaître)
-    _mk_tx(db_session, ba, amount=Decimal("-500"), op_date=cm, label="Loyer juin", category_id=cat.id)
-    _mk_tx(db_session, ba, amount=Decimal("-250"), op_date=cm, label="Charges", category_id=cat.id)
-    _mk_tx(db_session, ba, amount=Decimal("-500"), op_date=_add_months(cm, -1), label="Loyer mai", category_id=cat.id)
+    cm = today.replace(day=1)  # mois courant = anchor
+    # Ancrage : MAX(op_date) dans le mois courant (cm) → anchor = cm, target = M-1
+    # 2 transactions sur target (M-1), 1 sur M-2 (ne doit pas apparaître)
+    _mk_tx(db_session, ba, amount=Decimal("-500"), op_date=_add_months(cm, -1), label="Loyer juin", category_id=cat.id)
+    _mk_tx(db_session, ba, amount=Decimal("-250"), op_date=_add_months(cm, -1), label="Charges", category_id=cat.id)
+    _mk_tx(db_session, ba, amount=Decimal("-500"), op_date=_add_months(cm, -2), label="Loyer mai", category_id=cat.id)
+    # Tx anchor pour fixer MAX(op_date) sur le mois courant
+    _mk_tx(db_session, ba, amount=Decimal("-1"), op_date=cm, label="anchor", category_id=cat.id)
 
     resp = client.get(
         f"/api/analysis/category-drift/{cat.id}/transactions?entity_id={e.id}"
