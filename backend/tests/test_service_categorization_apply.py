@@ -1,4 +1,5 @@
 """Tests de preview_rule et apply_rule."""
+import secrets
 from datetime import date
 from decimal import Decimal
 
@@ -21,7 +22,7 @@ def _mk_tx(db_session, bank_account, label: str, row_idx: int,
            amount: Decimal = Decimal("-50")) -> Transaction:
     imp = ImportRecord(
         bank_account_id=bank_account.id, filename="p.pdf",
-        file_sha256="b"*64, bank_code="DELUBAC", status=ImportStatus.COMPLETED,
+        file_sha256=secrets.token_hex(32), bank_code="DELUBAC", status=ImportStatus.COMPLETED,
     )
     db_session.add(imp); db_session.commit()
     tx = Transaction(

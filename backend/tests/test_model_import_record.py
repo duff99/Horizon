@@ -2,6 +2,9 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.models.bank_account import BankAccount
 from app.models.entity import Entity
 from app.models.import_record import ImportRecord, ImportStatus
@@ -62,17 +65,45 @@ def test_import_record_status_enum(db_session) -> None:
     assert len(rows) == 3
 
 
-def test_import_record_allows_reimport_same_sha(db_session) -> None:
-    """Deux imports avec même hash et même compte : autorisés (réimport avec override)
-    mais détectables via la colonne. Contrainte soft applicative, pas DB."""
+def test_import_record_unique_per_account_sha(db_session) -> None:
+    """Deux imports avec même (bank_account_id, file_sha256) doivent lever
+    IntegrityError — contrainte uq_imports_account_sha256 (migration E2)."""
     u, ba = _seed(db_session)
-    for i in range(2):
+    db_session.add(ImportRecord(
+        bank_account_id=ba.id, uploaded_by_id=u.id,
+        filename="f0.pdf", file_size_bytes=1,
+        file_sha256="b" * 64, bank_code="delubac",
+        status=ImportStatus.COMPLETED,
+    ))
+    db_session.commit()
+
+    db_session.add(ImportRecord(
+        bank_account_id=ba.id, uploaded_by_id=u.id,
+        filename="f1.pdf", file_size_bytes=1,
+        file_sha256="b" * 64, bank_code="delubac",
+        status=ImportStatus.COMPLETED,
+    ))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+
+def test_import_record_same_sha_different_accounts_allowed(db_session) -> None:
+    """Deux comptes bancaires différents peuvent partager le même file_sha256 —
+    l'index unique est partial sur (bank_account_id, file_sha256)."""
+    u, ba1 = _seed(db_session)
+    ba2 = BankAccount(entity_id=ba1.entity_id, name="Autre compte",
+                      iban="FR7699999", bank_name="Autre", bank_code="autre")
+    db_session.add(ba2)
+    db_session.commit()
+
+    for ba in (ba1, ba2):
         db_session.add(ImportRecord(
             bank_account_id=ba.id, uploaded_by_id=u.id,
-            filename=f"f{i}.pdf", file_size_bytes=1,
-            file_sha256="b" * 64, bank_code="delubac",
+            filename="releve.pdf", file_size_bytes=1,
+            file_sha256="c" * 64, bank_code="delubac",
             status=ImportStatus.COMPLETED,
         ))
-    db_session.commit()
-    rows = db_session.query(ImportRecord).filter_by(file_sha256="b" * 64).all()
+    db_session.commit()  # ne doit pas lever d'erreur
+
+    rows = db_session.query(ImportRecord).filter_by(file_sha256="c" * 64).all()
     assert len(rows) == 2

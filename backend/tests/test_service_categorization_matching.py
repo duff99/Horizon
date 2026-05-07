@@ -1,4 +1,5 @@
 """Tests de build_rule_filter et matches_transaction (moteur pur)."""
+import secrets
 from datetime import date
 from decimal import Decimal
 
@@ -28,7 +29,7 @@ def _mk_tx(
 ) -> Transaction:
     imp = ImportRecord(
         bank_account_id=bank_account.id, filename="t.pdf",
-        file_sha256="f" * 64, bank_code="DELUBAC", status=ImportStatus.COMPLETED,
+        file_sha256=secrets.token_hex(32), bank_code="DELUBAC", status=ImportStatus.COMPLETED,
     )
     db_session.add(imp); db_session.commit()
     tx = Transaction(
