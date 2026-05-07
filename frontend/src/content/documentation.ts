@@ -600,14 +600,17 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Une rotation locale : les sauvegardes sont conservées sur le serveur avec une rotation pour limiter l'espace disque.",
       "Une page d'administration dédiée Sauvegardes (groupe Administration de la sidebar, réservée aux administrateurs) qui liste les sauvegardes disponibles avec leurs métadonnées (date, taille, statut, hash) et permet de déclencher manuellement un backup ou un test de restauration.",
       "Des en-têtes HTTP de sécurité renforcés appliqués par nginx : HSTS (force HTTPS), X-Frame-Options (anti-clickjacking), X-Content-Type-Options, Referrer-Policy, Permissions-Policy.",
+      "Un mécanisme de révocation de session par version de token : chaque utilisateur possède un compteur de version interne. Quand un administrateur réinitialise le mot de passe d'un utilisateur, ce compteur est incrémenté. Tous les cookies de session émis avant cette incrémentation deviennent immédiatement invalides, quelle que soit leur date d'expiration nominale.",
     ],
     does: [
       "Pour vérifier la santé des sauvegardes : un administrateur ouvre la page Sauvegardes (groupe Administration) et lit les 4 cartes en haut. Si la dernière sauvegarde réussie a plus de 26h ou que le dernier test de restauration a plus de 8 jours, un bandeau rouge s'affiche.",
       "Pour déclencher une restauration en cas d'incident : demandez à l'administrateur technique. La restauration se fait à partir du dump le plus récent (perte maximale = activité depuis le dernier snapshot nocturne).",
-      "Pour réagir à une compromission soupçonnée de votre compte : changez immédiatement votre mot de passe depuis la page Profil, puis prévenez un administrateur qui pourra forcer une invalidation des sessions actives si nécessaire.",
+      "Pour réagir à une compromission soupçonnée d'un compte utilisateur : un administrateur réinitialise immédiatement le mot de passe de l'utilisateur concerné depuis la page Administration > Utilisateurs (action Réinitialiser le mot de passe). Cette action change le mot de passe ET invalide instantanément toutes les sessions actives de cet utilisateur. L'utilisateur sera automatiquement déconnecté lors de sa prochaine requête et devra se reconnecter avec le nouveau mot de passe.",
+      "Pour réagir à une compromission soupçonnée de votre propre compte : changez immédiatement votre mot de passe depuis la page Profil. Cette action invalide également vos autres sessions actives. Prévenez ensuite un administrateur.",
     ],
     tips: [
       "Les sessions reposent sur un cookie HTTP-only : il ne peut pas être lu depuis du JavaScript exécuté dans le navigateur, ce qui bloque les attaques XSS classiques.",
+      "La révocation de session fonctionne même si l'utilisateur n'a pas encore fermé son navigateur ou que son cookie n'est pas encore expiré : la version embarquée dans le token est vérifiée à chaque requête authentifiée.",
       "Les PDF importés sont stockés à part pour permettre la prévisualisation, et ne sont jamais accessibles en dehors d'une session authentifiée.",
       "Une restauration de la base écrase l'état actuel : c'est une opération irréversible côté production. Toute modification faite depuis le dernier snapshot est perdue.",
       "L'audit (voir section Journal d'audit) couvre les mutations métier ; les sauvegardes couvrent l'intégralité des données. Les deux sont complémentaires.",
@@ -615,11 +618,12 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     panel: {
       summary:
-        "Sauvegarde nocturne automatique de la base, en-têtes HTTP de sécurité renforcés, sessions par cookie HTTP-only.",
+        "Sauvegarde nocturne automatique de la base, en-têtes HTTP de sécurité renforcés, sessions par cookie HTTP-only avec révocation instantanée au reset de mot de passe.",
       does: [
         "Vérifiez régulièrement la page Sauvegardes (groupe Administration) pour la santé des snapshots.",
         "Lancez un test de restore régulièrement depuis la page Sauvegardes pour vous assurer qu'un backup est exploitable.",
-        "Changez votre mot de passe depuis Profil au moindre doute.",
+        "En cas de compte compromis, réinitialisez le mot de passe depuis Administration > Utilisateurs : le compte et toutes ses sessions actives sont immédiatement bloqués.",
+        "Changez votre mot de passe depuis Profil au moindre doute sur votre propre compte.",
       ],
       hide: ["tips"],
     },

@@ -132,6 +132,7 @@ def reset_user_password(
     # mais on trace tout de même l'action.
     before_snapshot = to_dict_for_audit(user)
     user.password_hash = hash_password(new_pw)
+    user.session_token_version = (user.session_token_version or 1) + 1
     db.flush()
     record_audit(
         db, user=current, action="update", entity=user,

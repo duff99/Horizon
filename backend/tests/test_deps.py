@@ -62,7 +62,7 @@ def test_valid_cookie_admits(db_session: Session) -> None:
 
     app = _make_app(db_session)
     client = TestClient(app)
-    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    token = encode_session_token(user_id=user.id, version=1, secret="x" * 32)
     client.cookies.set(COOKIE_NAME, token)
     r = client.get("/protected")
     assert r.status_code == 200
@@ -76,7 +76,7 @@ def test_reader_cannot_reach_admin_route(db_session: Session) -> None:
 
     app = _make_app(db_session)
     client = TestClient(app)
-    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    token = encode_session_token(user_id=user.id, version=1, secret="x" * 32)
     client.cookies.set(COOKIE_NAME, token)
     r = client.get("/admin-only")
     assert r.status_code == 403
@@ -91,7 +91,7 @@ def test_deactivated_user_rejected(db_session: Session) -> None:
 
     app = _make_app(db_session)
     client = TestClient(app)
-    token = encode_session_token(user_id=user.id, secret="x" * 32)
+    token = encode_session_token(user_id=user.id, version=1, secret="x" * 32)
     client.cookies.set(COOKIE_NAME, token)
     r = client.get("/protected")
     assert r.status_code == 401

@@ -33,7 +33,11 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiants invalides"
         )
-    token = encode_session_token(user_id=user.id, secret=settings.secret_key)
+    token = encode_session_token(
+        user_id=user.id,
+        version=user.session_token_version,
+        secret=settings.secret_key,
+    )
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,

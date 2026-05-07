@@ -35,7 +35,7 @@ def _try_resolve_user(
     if not session_cookie:
         return None
     try:
-        user_id = decode_session_token(
+        user_id, version = decode_session_token(
             session_cookie,
             secret=settings.secret_key,
             max_age_seconds=settings.session_hours * 3600,
@@ -44,6 +44,8 @@ def _try_resolve_user(
         return None
     user = db.get(User, user_id)
     if user is None or not user.is_active:
+        return None
+    if user.session_token_version != version:
         return None
     return user
 

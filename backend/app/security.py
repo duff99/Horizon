@@ -1,3 +1,5 @@
+import json
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
@@ -35,14 +37,25 @@ class SessionTokenError(Exception):
     """Token de session invalide ou expiré."""
 
 
-def encode_session_token(*, user_id: int, secret: str) -> str:
-    """Encode un token horodaté (l'expiration est vérifiée au décodage)."""
+def encode_session_token(*, user_id: int, version: int, secret: str) -> str:
+    """Encode un token horodaté contenant user_id et session_token_version.
+
+    Le payload est un objet JSON compact signé par TimestampSigner.
+    """
     signer = TimestampSigner(secret)
-    return signer.sign(str(user_id)).decode("utf-8")
+    payload = json.dumps({"u": user_id, "v": version}, separators=(",", ":"))
+    return signer.sign(payload).decode("utf-8")
 
 
-def decode_session_token(token: str, *, secret: str, max_age_seconds: int) -> int:
-    """Décode un token ; lève SessionTokenError s'il est invalide ou trop vieux."""
+def decode_session_token(
+    token: str, *, secret: str, max_age_seconds: int
+) -> tuple[int, int]:
+    """Décode un token ; lève SessionTokenError s'il est invalide ou trop vieux.
+
+    Retourne (user_id, version).
+    Compat descendante : les anciens tokens au format "<user_id>" brut sont
+    acceptés et traités comme version=1.
+    """
     signer = TimestampSigner(secret)
     try:
         raw = signer.unsign(token, max_age=max_age_seconds).decode("utf-8")
@@ -51,6 +64,10 @@ def decode_session_token(token: str, *, secret: str, max_age_seconds: int) -> in
     except BadSignature as exc:
         raise SessionTokenError("Token invalide") from exc
     try:
-        return int(raw)
-    except ValueError as exc:
+        # Compat descendante : ancien format "user_id" brut → version=1.
+        if raw.isdigit():
+            return int(raw), 1
+        data = json.loads(raw)
+        return int(data["u"]), int(data["v"])
+    except (ValueError, KeyError, TypeError) as exc:
         raise SessionTokenError("Format de token invalide") from exc

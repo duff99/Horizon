@@ -22,7 +22,7 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Non authentifié"
         )
     try:
-        user_id = decode_session_token(
+        user_id, version = decode_session_token(
             session,
             secret=settings.secret_key,
             max_age_seconds=settings.session_hours * 3600,
@@ -36,6 +36,11 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Utilisateur inconnu ou désactivé",
+        )
+    if user.session_token_version != version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session révoquée",
         )
     return user
 

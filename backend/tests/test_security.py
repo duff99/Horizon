@@ -41,13 +41,23 @@ def test_policy_accepts_minimum_length() -> None:
 
 def test_session_token_roundtrip() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=42, secret=secret)
-    assert decode_session_token(token, secret=secret, max_age_seconds=3600) == 42
+    token = encode_session_token(user_id=42, version=1, secret=secret)
+    user_id, version = decode_session_token(token, secret=secret, max_age_seconds=3600)
+    assert user_id == 42
+    assert version == 1
+
+
+def test_session_token_roundtrip_version() -> None:
+    secret = "x" * 32
+    token = encode_session_token(user_id=99, version=7, secret=secret)
+    user_id, version = decode_session_token(token, secret=secret, max_age_seconds=3600)
+    assert user_id == 99
+    assert version == 7
 
 
 def test_session_token_expired() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=7, secret=secret)
+    token = encode_session_token(user_id=7, version=1, secret=secret)
     time.sleep(2)
     with pytest.raises(SessionTokenError, match="expirée"):
         decode_session_token(token, secret=secret, max_age_seconds=1)
@@ -55,12 +65,24 @@ def test_session_token_expired() -> None:
 
 def test_session_token_tampered() -> None:
     secret = "x" * 32
-    token = encode_session_token(user_id=7, secret=secret)
+    token = encode_session_token(user_id=7, version=1, secret=secret)
     with pytest.raises(SessionTokenError):
         decode_session_token(token + "tamper", secret=secret, max_age_seconds=3600)
 
 
 def test_session_token_wrong_secret() -> None:
-    token = encode_session_token(user_id=7, secret="a" * 32)
+    token = encode_session_token(user_id=7, version=1, secret="a" * 32)
     with pytest.raises(SessionTokenError):
         decode_session_token(token, secret="b" * 32, max_age_seconds=3600)
+
+
+def test_session_token_legacy_format_compat() -> None:
+    """Un token au format brut (juste l'id, sans JSON) est accepté comme version=1."""
+    from itsdangerous import TimestampSigner
+
+    secret = "x" * 32
+    signer = TimestampSigner(secret)
+    legacy_token = signer.sign("42").decode("utf-8")
+    user_id, version = decode_session_token(legacy_token, secret=secret, max_age_seconds=3600)
+    assert user_id == 42
+    assert version == 1
