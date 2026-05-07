@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.deps import accessible_entity_ids_subquery
 from app.models.bank_account import BankAccount
 from app.models.category import Category
+from app.models.drift_ack import DriftAck
 from app.models.commitment import (
     Commitment,
     CommitmentDirection,
@@ -185,6 +186,17 @@ def compute_category_drift(
     if not ba_ids:
         return CategoryDriftResponse(rows=[], seuil_pct=seuil_pct, window_month=None)
 
+    today = date.today()
+    snoozed_category_ids: set[int] = set(
+        session.scalars(
+            select(DriftAck.category_id)
+            .where(
+                DriftAck.entity_id == entity_id,
+                DriftAck.snoozed_until >= today,
+            )
+        ).all()
+    )
+
     month_col = func.date_trunc("month", Transaction.operation_date)
     rows = session.execute(
         select(
@@ -241,7 +253,12 @@ def compute_category_drift(
             status = "insufficient"
         else:
             delta_pct = (current - avg3m) / abs(avg3m) * 100.0
-            status = "alert" if abs(delta_pct) > seuil_pct else "normal"
+            if cat_id in snoozed_category_ids:
+                status = "snoozed"
+            elif abs(delta_pct) > seuil_pct:
+                status = "alert"
+            else:
+                status = "normal"
 
         out.append(
             CategoryDriftRow(
@@ -255,8 +272,8 @@ def compute_category_drift(
             )
         )
 
-    # Tri : insufficient en bas, puis par |delta_pct| décroissant
-    out.sort(key=lambda r: (r.status == "insufficient", -abs(r.delta_pct or 0)))
+    # Tri : alert en tête, snoozed après normal, insufficient en bas
+    out.sort(key=lambda r: (r.status == "insufficient", r.status == "snoozed", -abs(r.delta_pct or 0)))
     return CategoryDriftResponse(rows=out, seuil_pct=seuil_pct, window_month=_month_key(target_first))
 
 

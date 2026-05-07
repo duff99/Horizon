@@ -1,4 +1,5 @@
 from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.drift_ack import DriftAck  # noqa: F401
 from app.models.backup_history import BackupHistory  # noqa: F401
 from app.models.client_error import ClientError  # noqa: F401
 from app.models.bank_account import BankAccount

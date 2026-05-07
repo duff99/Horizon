@@ -21,7 +21,7 @@ class CategoryDriftRow(BaseModel):
     avg3m_cents: int
     delta_cents: int
     delta_pct: float | None
-    status: Literal["alert", "normal", "insufficient"]
+    status: Literal["alert", "normal", "insufficient", "snoozed"]
 
 
 class CategoryDriftResponse(BaseModel):

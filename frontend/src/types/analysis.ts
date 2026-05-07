@@ -16,7 +16,7 @@ export interface CategoryDriftRow {
   avg3m_cents: number;
   delta_cents: number;
   delta_pct: number;
-  status: "alert" | "normal";
+  status: "alert" | "normal" | "insufficient" | "snoozed";
 }
 
 export interface CategoryDriftResponse {
