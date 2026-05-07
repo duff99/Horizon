@@ -66,6 +66,14 @@ def list_transactions(
         conditions.append(
             Transaction.categorized_by == TransactionCategorizationSource.NONE
         )
+    # E7 — masquer les enfants SEPA par défaut (parent_transaction_id IS NULL)
+    if not filters.include_sepa_children:
+        conditions.append(Transaction.parent_transaction_id.is_(None))
+    # E8 — filtres montant (valeur absolue, cohérent avec RuleForm)
+    if filters.amount_min is not None:
+        conditions.append(func.abs(Transaction.amount) >= filters.amount_min)
+    if filters.amount_max is not None:
+        conditions.append(func.abs(Transaction.amount) <= filters.amount_max)
 
     base_q = (
         select(Transaction, Entity.id.label("entity_id"), Entity.name.label("entity_name"))

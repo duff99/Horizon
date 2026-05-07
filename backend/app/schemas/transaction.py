@@ -49,6 +49,11 @@ class TransactionFilter(BaseModel):
     category_id: int | None = None
     search: str | None = None
     uncategorized: bool | None = None
+    # E8 — filtres montant (en cents / unité monétaire, valeur absolue)
+    amount_min: Decimal | None = None
+    amount_max: Decimal | None = None
+    # E7 — toggle enfants SEPA (masqués par défaut)
+    include_sepa_children: bool = False
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=50, ge=1, le=500)
 
