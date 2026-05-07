@@ -124,6 +124,7 @@ class RuleRead(BaseModel):
     category_id: int
     created_at: datetime
     updated_at: datetime
+    hit_count: int = 0
 
 
 class RulePreviewRequest(RuleBase):
