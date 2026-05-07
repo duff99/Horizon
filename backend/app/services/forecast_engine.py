@@ -583,51 +583,22 @@ def compute_cell(
 # ---------------------------------------------------------------------------
 
 
-def _infer_direction(session: Session, entity_id: int, category_id: int) -> str:
-    """Infère "in" ou "out" en regardant la somme historique des transactions.
-
-    Si la somme est >= 0 → "in", sinon "out". En cas d'absence d'historique,
-    défaut à "in". Ce choix est pragmatique car Horizon n'a pas de champ
-    Category.kind (cf. Concerns dans le rapport).
-    """
-    total = session.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
-        .where(
-            and_(
-                BankAccount.entity_id == entity_id,
-                Transaction.category_id == category_id,
-            )
-        )
-    ).scalar_one()
-    return "in" if Decimal(total) >= 0 else "out"
-
-
 def _directions_by_category(
-    session: Session, entity_id: int
+    session: Session, entity_id: int  # entity_id conservé pour compatibilité signature
 ) -> dict[int, str]:
-    """Version batch : 1 seule requête, renvoie la direction pour toutes les
-    catégories ayant de l'historique sur cette entité."""
-    rows = session.execute(
-        select(
-            Transaction.category_id,
-            func.coalesce(func.sum(Transaction.amount), 0),
-        )
-        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
-        .where(
-            and_(
-                BankAccount.entity_id == entity_id,
-                Transaction.category_id.is_not(None),
-            )
-        )
-        .group_by(Transaction.category_id)
-    ).all()
-    out: dict[int, str] = {}
-    for cat_id, total in rows:
-        if cat_id is None:
-            continue
-        out[int(cat_id)] = "in" if Decimal(total or 0) >= 0 else "out"
-    return out
+    """Retourne la direction de chaque catégorie selon Category.kind.
+
+    kind='in'  → 'in'
+    kind='out' → 'out'
+    kind='both' → 'in' (convention pivot : pas de double-ligne pour les
+                        catégories neutres, cohérent avec l'ancien fallback)
+    """
+    rows = session.execute(select(Category.id, Category.kind)).all()
+    return {
+        int(cat_id): ("out" if kind == "out" else "in")
+        for cat_id, kind in rows
+        if cat_id is not None
+    }
 
 
 def _months_range(from_month: date, to_month: date) -> list[date]:

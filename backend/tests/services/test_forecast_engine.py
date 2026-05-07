@@ -55,8 +55,8 @@ def engine_ctx(db_session: Session) -> dict:
     db_session.add(sc)
     db_session.flush()
 
-    salaires = Category(name="Salaires", slug="salaires-engine")
-    ventes = Category(name="Ventes", slug="ventes-engine")
+    salaires = Category(name="Salaires", slug="salaires-engine", kind="out")
+    ventes = Category(name="Ventes", slug="ventes-engine", kind="in")
     db_session.add_all([salaires, ventes])
     db_session.flush()
 

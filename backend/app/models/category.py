@@ -21,6 +21,9 @@ class Category(Base):
         ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
     )
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kind: Mapped[str] = mapped_column(
+        String(4), nullable=False, default="both", server_default="both"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
