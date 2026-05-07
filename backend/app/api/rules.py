@@ -1,11 +1,13 @@
 """Endpoints /api/rules — CRUD + preview + apply + reorder."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func as sqlfunc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -85,6 +87,105 @@ def list_rules(
     q = q.limit(limit).offset(offset)
     rows = session.execute(q).scalars().all()
     return [RuleRead.model_validate(r) for r in rows]
+
+
+class AutoSuggestItem(BaseModel):
+    normalized_label: str
+    category_id: int
+    category_name: str
+    manual_count: int
+
+
+@router.get("/auto-suggest", response_model=list[AutoSuggestItem])
+def auto_suggest(
+    entity_id: int | None = Query(default=None),
+    min_count: int = Query(default=3, ge=2, le=20),
+    days: int = Query(default=30, ge=7, le=90),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> list[AutoSuggestItem]:
+    """Retourne les patterns MANUAL répétés qui méritent une règle automatique.
+
+    Interroge la table transactions pour les transactions catégorisées manuellement
+    (categorized_by=MANUAL, categorization_rule_id IS NULL) dans les <days> derniers
+    jours. Regroupe par (normalized_label, category_id), filtre >= min_count
+    occurrences. Exclut les patterns déjà couverts par une règle existante.
+    Multi-tenant : seules les entités accessibles de l'utilisateur sont scannées.
+    """
+    from app.models.category import Category as CategoryModel
+    from app.models.transaction import TransactionCategorizationSource
+
+    since = datetime.utcnow() - timedelta(days=days)
+    accessible_ids = _accessible_entity_ids(session, user)
+
+    conditions = [
+        Transaction.categorized_by == TransactionCategorizationSource.MANUAL,
+        Transaction.categorization_rule_id.is_(None),
+        Transaction.normalized_label.isnot(None),
+        Transaction.normalized_label != "",
+        Transaction.updated_at >= since,
+        BankAccount.entity_id.in_(accessible_ids),
+    ]
+    if entity_id is not None:
+        require_entity_access(session=session, user=user, entity_id=entity_id)
+        conditions.append(BankAccount.entity_id == entity_id)
+
+    rows = session.execute(
+        select(
+            Transaction.normalized_label.label("norm_label"),
+            Transaction.category_id.label("cat_id"),
+            sqlfunc.count(Transaction.id).label("cnt"),
+        )
+        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
+        .where(sa.and_(*conditions))
+        .group_by(Transaction.normalized_label, Transaction.category_id)
+        .having(sqlfunc.count(Transaction.id) >= min_count)
+        .order_by(sqlfunc.count(Transaction.id).desc())
+        .limit(10)
+    ).all()
+
+    if not rows:
+        return []
+
+    # Charger les catégories pour les noms
+    cat_ids = {r.cat_id for r in rows if r.cat_id is not None}
+    cats = {}
+    if cat_ids:
+        cats = {
+            c.id: c.name
+            for c in session.execute(
+                select(CategoryModel).where(CategoryModel.id.in_(cat_ids))
+            ).scalars().all()
+        }
+
+    # Filtrer les labels déjà couverts par une règle existante (CONTAINS/EQUALS)
+    existing_label_values = set(
+        session.execute(
+            select(CategorizationRule.label_value).where(
+                CategorizationRule.label_value.isnot(None)
+            )
+        ).scalars().all()
+    )
+
+    result = []
+    for r in rows:
+        if r.cat_id is None:
+            continue
+        # Exclure si déjà couvert par une règle (label_value est contenu dans le pattern)
+        if any(
+            (r.norm_label or "").upper() in (lv or "").upper()
+            or (lv or "").upper() in (r.norm_label or "").upper()
+            for lv in existing_label_values
+        ):
+            continue
+        result.append(AutoSuggestItem(
+            normalized_label=r.norm_label,
+            category_id=r.cat_id,
+            category_name=cats.get(r.cat_id, f"#{r.cat_id}"),
+            manual_count=r.cnt,
+        ))
+
+    return result
 
 
 @router.post("", response_model=RuleRead, status_code=status.HTTP_201_CREATED)
