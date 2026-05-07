@@ -5,6 +5,8 @@ import { useLines } from "@/api/forecastLines";
 import { fetchTransactions } from "@/api/transactions";
 import { useCategories } from "@/api/categories";
 import { MethodForm } from "./MethodForm";
+import { RecurringSuggestionPicker } from "./RecurringSuggestionPicker";
+import type { DetectedRecurrenceSuggestion } from "@/api/forecast";
 import {
   firstDayOfMonth,
   formatCents,
@@ -41,6 +43,8 @@ export function CellEditorDrawer({
   onClose,
 }: Props) {
   const [tab, setTab] = useState<Tab>("forecast");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [prefillAmountCents, setPrefillAmountCents] = useState<number | null>(null);
 
   // Close on ESC
   useEffect(() => {
@@ -51,6 +55,14 @@ export function CellEditorDrawer({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // Reset suggestion state when drawer closes
+  useEffect(() => {
+    if (!open) {
+      setShowSuggestions(false);
+      setPrefillAmountCents(null);
+    }
+  }, [open]);
 
   const categoriesQuery = useCategories();
   const categoryName = useMemo(() => {
@@ -179,13 +191,35 @@ export function CellEditorDrawer({
             />
           )}
           {tab === "forecast" && (
-            <MethodForm
-              scenarioId={scenarioId}
-              categoryId={categoryId}
-              cellMonth={month}
-              line={currentLine}
-              onSave={onClose}
-            />
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowSuggestions((v) => !v)}
+                title="Analyser les 6 derniers mois de transactions pour détecter les flux récurrents et pré-remplir cette ligne prévisionnelle avec le montant médian détecté."
+                className="inline-flex items-center gap-1.5 rounded-md border border-line-soft px-2.5 py-1.5 text-[12px] font-medium text-ink-2 transition-colors hover:bg-panel-2 hover:text-ink"
+              >
+                Suggérer depuis l'historique
+              </button>
+              {showSuggestions && (
+                <RecurringSuggestionPicker
+                  entityId={entityId}
+                  onSelect={(s: DetectedRecurrenceSuggestion) => {
+                    const cents = Math.round(Number(s.average_amount) * 100);
+                    setPrefillAmountCents(cents);
+                    setShowSuggestions(false);
+                  }}
+                  onClose={() => setShowSuggestions(false)}
+                />
+              )}
+              <MethodForm
+                scenarioId={scenarioId}
+                categoryId={categoryId}
+                cellMonth={month}
+                line={currentLine}
+                onSave={onClose}
+                prefillAmountCents={prefillAmountCents ?? undefined}
+              />
+            </div>
           )}
         </div>
       </div>

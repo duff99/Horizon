@@ -26,6 +26,8 @@ interface Props {
   cellMonth?: string;
   line?: ForecastLine | null;
   onSave: () => void;
+  /** D6 — pré-remplissage depuis RecurringSuggestionPicker (montant en centimes). */
+  prefillAmountCents?: number;
 }
 
 interface MethodOption {
@@ -90,11 +92,17 @@ export function MethodForm({
   cellMonth,
   line,
   onSave,
+  prefillAmountCents,
 }: Props) {
   const [method, setMethod] = useState<ForecastMethod>(
-    line?.method ?? "RECURRING_FIXED",
+    prefillAmountCents != null
+      ? "RECURRING_FIXED"
+      : (line?.method ?? "RECURRING_FIXED"),
   );
   const [amountStr, setAmountStr] = useState<string>(() => {
+    if (prefillAmountCents != null) {
+      return String(prefillAmountCents / 100);
+    }
     if (
       (line?.method === "RECURRING_FIXED" || line?.method === "SINGLE_MONTH_FIXED") &&
       line?.amount_cents != null
