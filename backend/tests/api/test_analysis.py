@@ -285,6 +285,13 @@ class TestRunway:
         ba = auth_user_with_bank_account["bank_account"]
         current = _today_first()
 
+        # Ancrage : tx today pour que data_anchor = today et current_first = mois courant.
+        _mk_tx(
+            db_session, ba, amount=Decimal("1"),
+            op_date=date.today(),
+            label="anchor-today",
+        )
+
         # 3 mois passés : flux net = -1000 chacun → burn = -1000 → -100000 cents
         for i in range(1, 4):
             m = _add_months(current, -i)
@@ -294,7 +301,8 @@ class TestRunway:
                 category_id=categories["salaries"].id, label=f"b-{i}",
             )
 
-        # Solde actuel : 5000€
+        # Solde actuel : 5000€ (l'import avec closing=5000 et le +1 ci-dessus
+        # s'annulent dans le calcul balance — on utilise le closing_balance d'ImportRecord)
         _mk_import(
             db_session, ba,
             closing=Decimal("5000"),
@@ -331,11 +339,11 @@ class TestRunway:
 
 
 # ---------------------------------------------------------------------------
-# 4. YoY
+# 4. MoM 6 mois (remplace YoY — Plan I2)
 # ---------------------------------------------------------------------------
 
 
-class TestYoY:
+class TestMoM:
     def test_happy_path(
         self,
         client: TestClient,
@@ -346,51 +354,43 @@ class TestYoY:
         ba = auth_user_with_bank_account["bank_account"]
         current = _today_first()
 
-        # Revenus ce mois : 2000
+        # Ancrage : tx today → anchor = today
         _mk_tx(
             db_session, ba, amount=Decimal("2000"),
-            op_date=date.today(), label="r-cur",
+            op_date=date.today(), label="r-anchor",
         )
-        # Revenus mois-12 : 1500
-        m_minus_12 = _add_months(current, -12)
-        _mk_tx(
-            db_session, ba, amount=Decimal("1500"),
-            op_date=m_minus_12, label="r-prev",
-        )
-        # Dépenses ce mois : -500
-        _mk_tx(
-            db_session, ba, amount=Decimal("-500"),
-            op_date=date.today(), label="e-cur",
-        )
+        # Tx dans M-1 : revenus 3000, dépenses -1000
+        m1 = _add_months(current, -1)
+        _mk_tx(db_session, ba, amount=Decimal("3000"), op_date=m1, label="r-m1")
+        _mk_tx(db_session, ba, amount=Decimal("-1000"), op_date=m1, label="e-m1")
 
-        r = client.get(f"/api/analysis/yoy?entity_id={e.id}")
+        r = client.get(f"/api/analysis/mom?entity_id={e.id}")
         assert r.status_code == 200, r.text
         body = r.json()
-        assert len(body["months"]) == 12
-        assert len(body["series"]) == 12
+        assert len(body["series"]) == 6
+        assert body["available_months"] >= 1
+        # Dernier slot = M-1 (chronological order)
         last = body["series"][-1]
-        assert last["revenues_current"] == 200000
-        assert last["revenues_previous"] == 150000
-        assert last["expenses_current"] == 50000
+        assert last["revenues_cents"] == 300000
+        assert last["expenses_cents"] == 100000
+        assert last["net_cents"] == 200000
 
     def test_403(
         self, client: TestClient, auth_user_reader: User, other_entity: Entity,
     ) -> None:
-        r = client.get(f"/api/analysis/yoy?entity_id={other_entity.id}")
+        r = client.get(f"/api/analysis/mom?entity_id={other_entity.id}")
         assert r.status_code == 403
 
     def test_empty(
         self, client: TestClient, auth_user_with_bank_account: dict,
     ) -> None:
         e = auth_user_with_bank_account["entity"]
-        r = client.get(f"/api/analysis/yoy?entity_id={e.id}")
+        r = client.get(f"/api/analysis/mom?entity_id={e.id}")
         assert r.status_code == 200
         body = r.json()
-        assert len(body["months"]) == 12
-        # All zeros
-        for pt in body["series"]:
-            assert pt["revenues_current"] == 0
-            assert pt["revenues_previous"] == 0
+        # 6 slots même sans data (fenêtre fixe)
+        assert len(body["series"]) == 6
+        assert body["available_months"] == 0
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ import { RunwayCard } from "@/components/analyse/RunwayCard";
 import { SeasonalityCard } from "@/components/analyse/SeasonalityCard";
 import { TopMoversCard } from "@/components/analyse/TopMoversCard";
 import { WorkingCapitalCard } from "@/components/analyse/WorkingCapitalCard";
-import { YoYChart } from "@/components/analyse/YoYChart";
+import { MoMChart } from "@/components/analyse/MoMChart";
 import { useEntityFilter } from "@/stores/entityFilter";
 
 export function AnalysePage() {
@@ -69,7 +69,7 @@ export function AnalysePage() {
             Analyse
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Indicateurs clés, dérives et comparaisons sur les 12 derniers mois.
+            Indicateurs clés, dérives et tendance mensuelle sur les mois disponibles.
           </p>
         </div>
 
@@ -118,15 +118,15 @@ export function AnalysePage() {
         <div className="col-span-12 md:col-span-6">
           <ClientConcentrationCard entityId={entityId ?? undefined} />
         </div>
-        {/* Ligne 4 : tendance long terme + comparaison */}
+        {/* Ligne 4 : tendance mensuelle MoM 6 mois */}
         <div className="col-span-12">
-          <YoYChart entityId={entityId ?? undefined} />
+          <MoMChart entityId={entityId ?? undefined} />
           {entityId != null && (
             <div className="mt-2 flex justify-end">
               <ExportButton
-                url={`/api/analysis/yoy/export?entity_id=${entityId}`}
-                filename={`analyse-yoy_${todayISO()}.csv`}
-                label="Exporter YoY CSV"
+                url={`/api/analysis/mom/export?entity_id=${entityId}`}
+                filename={`analyse-mom_${todayISO()}.csv`}
+                label="Exporter MoM CSV"
               />
             </div>
           )}
@@ -167,12 +167,13 @@ export function AnalysePage() {
           </div>
           <div>
             <dt className="font-semibold text-ink">
-              YoY (Year over Year, année sur année)
+              MoM (Month over Month, mois sur mois)
             </dt>
             <dd>
-              Comparaison d'un indicateur entre une période et la même
-              période l'année précédente. Permet d'isoler la tendance de
-              fond des effets saisonniers.
+              Comparaison d'un indicateur entre un mois et le mois
+              précédent. Le graphique MoM 6 mois affiche les encaissements,
+              décaissements et le net sur les 6 derniers mois complets avant
+              le dernier import, avec la variation en % entre chaque mois.
             </dd>
           </div>
           <div>

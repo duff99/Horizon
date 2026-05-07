@@ -1,5 +1,9 @@
 /**
- * YoYChart — ComposedChart comparant 12 mois glissants vs Y-1.
+ * MoMChart — ComposedChart affichant les 6 mois glissants finis (MoM).
+ *
+ * Barres : encaissements (vert) et décaissements (rouge).
+ * Ligne : net mensuel.
+ * Tooltip : montants en euros + variation mensuelle en %.
  */
 import { memo, useMemo } from "react";
 import {
@@ -14,9 +18,9 @@ import {
   YAxis,
 } from "recharts";
 
-import { useYoY } from "@/api/analysis";
+import { useMoM } from "@/api/analysis";
 import { formatMonthLabel } from "@/lib/forecastFormat";
-import type { YoYPoint } from "../../types/analysis";
+import type { MoMPoint } from "../../types/analysis";
 
 interface Props {
   entityId?: number;
@@ -25,13 +29,14 @@ interface Props {
 interface ChartRow {
   month: string;
   monthLabel: string;
-  revenues_current: number;
-  revenues_previous: number;
-  expenses_current: number;
-  expenses_previous: number;
+  revenues: number;
+  expenses: number;
+  net: number;
+  delta_revenues_pct: number | null;
+  delta_expenses_pct: number | null;
 }
 
-const EUR_AXIS = new Intl.NumberFormat("fr-FR", {
+const EUR_FMT = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 0,
   notation: "compact",
 });
@@ -46,7 +51,6 @@ function Skeleton() {
 
 interface TooltipPayloadItem {
   name: string;
-  dataKey: string;
   value: number;
   color: string;
 }
@@ -55,32 +59,19 @@ function CustomTooltip({
   active,
   payload,
   label,
-  fullRow,
+  row,
 }: {
   active?: boolean;
   payload?: TooltipPayloadItem[];
   label?: string;
-  fullRow?: ChartRow;
+  row?: ChartRow;
 }) {
-  if (!active || !payload || !fullRow) return null;
+  if (!active || !payload || !row) return null;
 
-  const revDelta = fullRow.revenues_current - fullRow.revenues_previous;
-  const revPct =
-    fullRow.revenues_previous === 0
-      ? null
-      : (revDelta / Math.abs(fullRow.revenues_previous)) * 100;
-  const expDelta = fullRow.expenses_current - fullRow.expenses_previous;
-  const expPct =
-    fullRow.expenses_previous === 0
-      ? null
-      : (expDelta / Math.abs(fullRow.expenses_previous)) * 100;
-
-  const fmtPct = (p: number | null) =>
-    p === null ? "n/a" : `${p > 0 ? "+" : ""}${p.toFixed(1)} %`;
-  const fmtDelta = (c: number) => {
-    const euros = toEuros(c);
-    const sign = euros > 0 ? "+" : euros < 0 ? "−" : "";
-    return `${sign}${EUR_AXIS.format(Math.abs(euros))} €`;
+  const fmtEur = (v: number) => `${EUR_FMT.format(Math.abs(v))} €`;
+  const fmtPct = (p: number | null) => {
+    if (p === null) return "—";
+    return `${p > 0 ? "+" : ""}${p.toFixed(1)} %`;
   };
 
   return (
@@ -88,15 +79,32 @@ function CustomTooltip({
       <div className="mb-1.5 font-semibold text-ink">{label}</div>
       <div className="space-y-1 tabular-nums">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-emerald-700">Revenus</span>
+          <span className="text-emerald-700">Encaissements</span>
           <span className="font-mono text-emerald-700">
-            {fmtDelta(revDelta)} ({fmtPct(revPct)})
+            {fmtEur(row.revenues)}{" "}
+            <span className="text-[11px] opacity-70">
+              ({fmtPct(row.delta_revenues_pct)})
+            </span>
           </span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-rose-700">Dépenses</span>
+          <span className="text-rose-700">Décaissements</span>
           <span className="font-mono text-rose-700">
-            {fmtDelta(expDelta)} ({fmtPct(expPct)})
+            {fmtEur(row.expenses)}{" "}
+            <span className="text-[11px] opacity-70">
+              ({fmtPct(row.delta_expenses_pct)})
+            </span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-1">
+          <span className={row.net >= 0 ? "text-emerald-800" : "text-rose-800"}>
+            Net
+          </span>
+          <span
+            className={`font-mono font-semibold ${row.net >= 0 ? "text-emerald-800" : "text-rose-800"}`}
+          >
+            {row.net >= 0 ? "+" : ""}
+            {EUR_FMT.format(row.net)} €
           </span>
         </div>
       </div>
@@ -104,38 +112,42 @@ function CustomTooltip({
   );
 }
 
-function YoYChartInner({ entityId }: Props) {
-  const query = useYoY({ entityId });
+function MoMChartInner({ entityId }: Props) {
+  const query = useMoM({ entityId });
 
   const rows = useMemo<ChartRow[]>(() => {
-    const series: YoYPoint[] = query.data?.series ?? [];
+    const series: MoMPoint[] = query.data?.series ?? [];
     return series.map((p) => ({
       month: p.month,
       monthLabel: formatMonthLabel(p.month, "short"),
-      revenues_current: toEuros(p.revenues_current),
-      revenues_previous: toEuros(p.revenues_previous),
-      expenses_current: toEuros(p.expenses_current),
-      expenses_previous: toEuros(p.expenses_previous),
+      revenues: toEuros(p.revenues_cents),
+      expenses: toEuros(p.expenses_cents),
+      net: toEuros(p.net_cents),
+      delta_revenues_pct: p.delta_revenues_pct,
+      delta_expenses_pct: p.delta_expenses_pct,
     }));
   }, [query.data]);
 
-  const byMonth = useMemo(() => {
-    const m: Record<string, ChartRow> = {};
-    for (const r of rows) m[r.month] = r;
-    return m;
-  }, [rows]);
+  const availableMonths = query.data?.available_months ?? 0;
+  const hasData = availableMonths > 0;
 
   return (
     <div className="rounded-xl border border-line-soft bg-panel p-5 shadow-card">
       <div className="mb-4">
         <div className="text-[15px] font-semibold text-ink">
-          Comparaison année sur année{" "}
+          Tendance mensuelle{" "}
           <span className="text-[12px] font-normal text-muted-foreground">
-            (YoY)
+            (MoM — 6 derniers mois complets)
           </span>
         </div>
         <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-          Revenus et dépenses sur 12 mois glissants comparés à l'année précédente
+          Encaissements et décaissements sur les 6 mois finis avant le dernier
+          import, avec variation mensuelle en %.
+          {availableMonths > 0 && availableMonths < 6 && (
+            <span className="ml-1 text-amber-700">
+              ({availableMonths} mois disponibles sur 6)
+            </span>
+          )}
         </div>
       </div>
 
@@ -146,11 +158,12 @@ function YoYChartInner({ entityId }: Props) {
           role="alert"
           className="rounded-md bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900"
         >
-          Impossible de charger la comparaison année sur année (YoY).
+          Impossible de charger la tendance mensuelle.
         </div>
-      ) : rows.length === 0 ? (
+      ) : !hasData ? (
         <div className="flex h-[220px] items-center justify-center text-[13px] text-muted-foreground">
-          Aucune donnée sur la période.
+          Aucune donnée sur les 6 derniers mois. Importez vos relevés pour voir
+          ce graphique.
         </div>
       ) : (
         <div style={{ width: "100%", height: 300 }}>
@@ -170,29 +183,29 @@ function YoYChartInner({ entityId }: Props) {
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-fg))" }}
                 axisLine={{ stroke: "hsl(var(--line))" }}
                 tickLine={false}
-                interval="preserveStartEnd"
-                minTickGap={16}
               />
               <YAxis
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-fg))" }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `${EUR_AXIS.format(Number(v))} €`}
+                tickFormatter={(v) => `${EUR_FMT.format(Number(v))} €`}
                 width={64}
               />
               <Tooltip
                 cursor={{ fill: "hsl(var(--line) / 0.25)" }}
                 content={(props) => {
                   const label = props.label as string | undefined;
-                  const row = label
+                  const matchedRow = label
                     ? rows.find((r) => r.monthLabel === label)
                     : undefined;
                   return (
                     <CustomTooltip
                       active={props.active}
-                      payload={props.payload as unknown as TooltipPayloadItem[]}
+                      payload={
+                        props.payload as unknown as TooltipPayloadItem[]
+                      }
                       label={label}
-                      fullRow={row ?? (label ? byMonth[label] : undefined)}
+                      row={matchedRow}
                     />
                   );
                 }}
@@ -202,37 +215,26 @@ function YoYChartInner({ entityId }: Props) {
                 iconType="square"
               />
               <Bar
-                dataKey="revenues_current"
-                name="Revenus (courant)"
+                dataKey="revenues"
+                name="Encaissements"
                 fill="#059669"
                 radius={[2, 2, 0, 0]}
-                maxBarSize={18}
+                maxBarSize={24}
               />
               <Bar
-                dataKey="expenses_current"
-                name="Dépenses (courant)"
+                dataKey="expenses"
+                name="Décaissements"
                 fill="#e11d48"
                 radius={[2, 2, 0, 0]}
-                maxBarSize={18}
+                maxBarSize={24}
               />
               <Line
                 type="monotone"
-                dataKey="revenues_previous"
-                name="Revenus (N-1)"
-                stroke="#059669"
-                strokeDasharray="4 3"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="expenses_previous"
-                name="Dépenses (N-1)"
-                stroke="#e11d48"
-                strokeDasharray="4 3"
-                strokeWidth={1.5}
-                dot={false}
+                dataKey="net"
+                name="Net"
+                stroke="#6366f1"
+                strokeWidth={2}
+                dot={{ r: 3, fill: "#6366f1" }}
                 isAnimationActive={false}
               />
             </ComposedChart>
@@ -243,4 +245,4 @@ function YoYChartInner({ entityId }: Props) {
   );
 }
 
-export const YoYChart = memo(YoYChartInner);
+export const MoMChart = memo(MoMChartInner);

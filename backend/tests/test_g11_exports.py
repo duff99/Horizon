@@ -5,7 +5,7 @@ Couvre :
 - GET /api/transactions/export (multi-tenant)
 - GET /api/analysis/drift/export
 - GET /api/analysis/top-movers/export
-- GET /api/analysis/yoy/export
+- GET /api/analysis/mom/export (remplace yoy/export — Plan I2)
 - GET /api/forecast/pivot/export
 - 400 si format=xlsx demandé (openpyxl absent en test)
 - 403 si entité non accessible
@@ -271,24 +271,25 @@ def test_top_movers_export_csv(
 
 
 # ---------------------------------------------------------------------------
-# 5. Analysis — yoy export
+# 5. Analysis — mom export (remplace yoy export — Plan I2)
 # ---------------------------------------------------------------------------
 
-def test_yoy_export_csv(
+def test_mom_export_csv(
     client: TestClient,
     auth_user: User,
     db_session: Session,
 ) -> None:
-    """Export CSV YoY — 13 lignes (header + 12 mois)."""
-    entity, _ba = _make_entity_with_access(db_session, auth_user, "G11 YoY")
+    """Export CSV MoM 6 mois — header + jusqu'à 6 mois."""
+    entity, _ba = _make_entity_with_access(db_session, auth_user, "G11 MoM")
     db_session.commit()
 
-    resp = client.get(f"/api/analysis/yoy/export?entity_id={entity.id}")
+    resp = client.get(f"/api/analysis/mom/export?entity_id={entity.id}")
     assert resp.status_code == 200
     rows = _parse_csv(resp.content)
-    # header + 12 points mois glissants
-    assert len(rows) == 13
+    # header + jusqu'à 6 mois (0 si pas de data, mais header présent)
+    assert len(rows) >= 1
     assert rows[0][0] == "Mois"
+    assert rows[0][1] == "Encaissements (EUR)"
 
 
 # ---------------------------------------------------------------------------

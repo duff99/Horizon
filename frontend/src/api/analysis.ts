@@ -10,10 +10,10 @@ import type {
   ClientConcentrationResponse,
   EntitiesComparisonResponse,
   ForecastVarianceResponse,
+  MoMResponse,
   RunwayResponse,
   TopMoversResponse,
   WorkingCapitalResponse,
-  YoYResponse,
 } from "../types/analysis";
 
 // ---------------------------------------------------------------------------
@@ -62,9 +62,9 @@ export function fetchRunway(args: { entityId?: number }): Promise<RunwayResponse
   );
 }
 
-export function fetchYoY(args: { entityId?: number }): Promise<YoYResponse> {
-  return apiFetch<YoYResponse>(
-    `/api/analysis/yoy${buildParams([["entity_id", args.entityId]])}`,
+export function fetchMoM(args: { entityId?: number }): Promise<MoMResponse> {
+  return apiFetch<MoMResponse>(
+    `/api/analysis/mom${buildParams([["entity_id", args.entityId]])}`,
   );
 }
 
@@ -130,10 +130,10 @@ export function useRunway(args: { entityId?: number }) {
   });
 }
 
-export function useYoY(args: { entityId?: number }) {
+export function useMoM(args: { entityId?: number }) {
   return useQuery({
-    queryKey: ["analysis", "yoy", args.entityId],
-    queryFn: () => fetchYoY(args),
+    queryKey: ["analysis", "mom", args.entityId],
+    queryFn: () => fetchMoM(args),
     staleTime: STALE,
     enabled: args.entityId !== undefined,
   });

@@ -137,7 +137,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     id: "analyse",
     title: "Analyse",
     subtitle:
-      "Six widgets KPI pour détecter dérives, tendances et concentrations sur les 12 derniers mois.",
+      "Six widgets KPI pour détecter dérives, tendances et concentrations sur les mois disponibles.",
     sees: [
       "Autonomie de trésorerie (Runway) : nombre de mois pendant lesquels la société peut tenir si elle continue à dépenser au rythme actuel. Phrase d'interprétation contextuelle (Stable / Vigilance / Critique), consommation mensuelle (Burn rate), trésorerie disponible aujourd'hui, courbe projetée sur 6 mois.",
       "Besoin en fonds de roulement (BFR) : trois métriques combinées — DSO (délai moyen de paiement client), DPO (délai moyen de paiement fournisseur), BFR (créances clients à encaisser moins dettes fournisseurs à payer). Le widget reste vide tant qu'aucun engagement n'a été saisi sur la page Engagements.",
@@ -145,9 +145,9 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Dérives par catégorie : tableau qui compare le mois précédent (M-1, dernier mois complet) à la moyenne des trois mois antérieurs (M-2 à M-4). Le mois en cours est volontairement exclu, car les relevés bancaires sont importés une fois le mois terminé : son inclusion fausserait la comparaison. Un badge « Dérive » apparaît au-delà de 20 % d'écart. Cliquez sur une ligne pour voir les transactions de M-1 qui expliquent l'écart.",
       "Top mouvements : catégories en plus forte hausse et plus forte baisse sur les trois derniers mois, avec une mini-courbe (sparkline) pour visualiser la trajectoire. Les libellés longs sont affichés en entier (passez la souris pour le tooltip).",
       "Concentration clients : part du top 5 dans le chiffre d'affaires, indice HHI (Herfindahl-Hirschman, mesure standard de la concentration) et niveau de risque (faible, moyen, élevé).",
-      "Comparaison année sur année (YoY) : graphique des revenus et dépenses mois par mois, comparés à l'année précédente.",
+      "Tendance mensuelle (MoM 6 mois) : graphique barres + ligne affichant encaissements, décaissements et net sur les 6 derniers mois complets avant le dernier import. La variation mensuelle en % est lisible au survol de chaque barre. Si moins de 6 mois de data sont disponibles, le graphique affiche les mois existants avec un avertissement.",
       "Comparaison des sociétés : pour chaque entité accessible, revenus, dépenses, variation nette, solde, consommation mensuelle et autonomie.",
-      "En bas de page : un accordéon Lexique des sigles (Runway, Burn rate, YoY, HHI, DSO, DPO, BFR) explicitant chaque terme financier utilisé.",
+      "En bas de page : un accordéon Lexique des sigles (Runway, Burn rate, MoM, HHI, DSO, DPO, BFR) explicitant chaque terme financier utilisé.",
     ],
     does: [
       "L'analyse se fait toujours sur une société à la fois : à votre arrivée, la première société accessible est sélectionnée automatiquement (ordre alphabétique). Pour basculer sur une autre société, utilisez l'EntitySelector en haut à droite. La page n'a pas de mode « Toutes les sociétés » car un agrégat cross-entité n'a pas de sens financier (chaque société a son propre business et ses propres tendances).",
@@ -155,7 +155,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour identifier en un coup d'œil les postes qui décalent votre résultat : lisez la colonne « Dérive » du tableau Dérives par catégorie, puis le widget Top mouvements pour confirmer la tendance.",
       "Pour évaluer un risque commercial : ouvrez Concentration clients ; un indice HHI supérieur à 2500 signale une dépendance forte à quelques clients (le marché américain considère 2500 comme le seuil d'alerte antitrust).",
       "Pour comparer vos sociétés entre elles : descendez jusqu'au tableau Comparaison des sociétés (masqué si vous n'avez accès qu'à une seule entité).",
-      "Pour exporter les données d'un widget : utilisez les boutons 'Exporter CSV' placés sous chaque tableau (Dérives par catégorie, Top mouvements, YoY). Le fichier CSV est téléchargé avec les données filtrées sur la société sélectionnée.",
+      "Pour exporter les données d'un widget : utilisez les boutons 'Exporter CSV' placés sous chaque tableau (Dérives par catégorie, Top mouvements, MoM). Le fichier CSV est téléchargé avec les données filtrées sur la société sélectionnée.",
     ],
     tips: [
       "Le widget Comparaison des sociétés se masque automatiquement si une seule société est accessible (sinon il n'aurait rien à comparer).",
@@ -166,7 +166,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     panel: {
       summary:
-        "Indicateurs clés (par société, sélection auto de la 1ère accessible) : autonomie (Runway), BFR (DSO/DPO), précision du prévisionnel, dérives par catégorie avec drill-down, top mouvements, concentration clients, YoY, comparaison entre sociétés.",
+        "Indicateurs clés (par société, sélection auto de la 1ère accessible) : autonomie (Runway), BFR (DSO/DPO), précision du prévisionnel, dérives par catégorie avec drill-down, top mouvements, concentration clients, MoM 6 mois, comparaison entre sociétés.",
       does: [
         "Choisissez la société analysée dans l'EntitySelector (la première accessible est pré-sélectionnée).",
         "Cliquez une ligne du tableau Dérives pour voir les transactions de M-1 qui l'expliquent.",
@@ -696,7 +696,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Cette section regroupe les sigles et acronymes que vous pouvez croiser dans l'application, classés par catégorie. Quand un sigle est utilisé dans une page, il est suivi de sa traduction française entre parenthèses (ex. « Autonomie de trésorerie (Runway) »).",
     ],
     does: [
-      "Termes financiers — Runway (autonomie de trésorerie) : nombre de mois pendant lesquels la société peut tenir à son rythme actuel de consommation de cash. Burn rate (consommation mensuelle) : différence moyenne entre les sorties et les entrées de cash sur la période récente. YoY (Year over Year, année sur année) : comparaison d'un indicateur entre l'année courante et la même période l'année précédente. KPI (Key Performance Indicator, indicateur clé de performance) : chiffre synthétique mesurant la santé d'un aspect de l'activité.",
+      "Termes financiers — Runway (autonomie de trésorerie) : nombre de mois pendant lesquels la société peut tenir à son rythme actuel de consommation de cash. Burn rate (consommation mensuelle) : différence moyenne entre les sorties et les entrées de cash sur la période récente. MoM (Month over Month, mois sur mois) : comparaison d'un indicateur entre un mois et le mois précédent — permet de suivre les tendances court terme sans avoir besoin d'un historique annuel. KPI (Key Performance Indicator, indicateur clé de performance) : chiffre synthétique mesurant la santé d'un aspect de l'activité.",
       "Concentration et risque — HHI (Herfindahl-Hirschman Index, indice de concentration de Herfindahl-Hirschman) : somme des carrés des parts de marché. Varie de 0 (parfaitement diversifié) à 10 000 (un seul acteur). Repères : moins de 1500 = concentration faible, 1500 à 2500 = modérée, plus de 2500 = forte (seuil d'alerte antitrust américain).",
       "Identifiants bancaires — IBAN (International Bank Account Number, numéro de compte bancaire international) : identifiant standardisé d'un compte bancaire. BIC (Bank Identifier Code, code identifiant bancaire) : identifie l'établissement bancaire à l'échelle internationale. SIREN (Système d'Identification du Répertoire des Entreprises) : identifiant à 9 chiffres d'une entreprise française. SIRET (Système d'Identification du Répertoire des Établissements) : identifiant à 14 chiffres d'un établissement (SIREN + 5 chiffres NIC).",
       "Fiscal et social — DGFIP (Direction Générale des Finances Publiques) : administration fiscale française qui collecte les impôts (TVA, IS, taxes) et le prélèvement à la source. URSSAF (Union de Recouvrement des cotisations de Sécurité Sociale et d'Allocations Familiales) : collecte les cotisations sociales sur les salaires. PAS (Prélèvement À la Source) : retenue d'impôt sur le revenu opérée par l'employeur sur les salaires des employés et reversée à la DGFIP — apparaît dans les libellés bancaires sous la forme PAS-DSN ou IMPOT-PAS-DSN. DSN (Déclaration Sociale Nominative) : déclaration mensuelle unifiée des cotisations sociales et fiscales. IS (Impôt sur les Sociétés) : impôt sur les bénéfices des entreprises. TVA (Taxe sur la Valeur Ajoutée) : taxe sur la consommation collectée puis reversée à la DGFIP. CFE/CVAE (Cotisation Foncière des Entreprises / Cotisation sur la Valeur Ajoutée des Entreprises) : composantes de la contribution économique territoriale.",
@@ -704,7 +704,7 @@ export const DOC_SECTIONS: DocSectionData[] = [
     ],
     tips: [
       "Si vous croisez un terme non listé ici, signalez-le à un administrateur — il sera ajouté au lexique pour les autres utilisateurs.",
-      "Les acronymes anglais conservés (Runway, Burn rate, YoY, HHI) sont des standards de la finance d'entreprise : les rapports d'audit, les analystes financiers et les outils tiers (Agicap, Pennylane, etc.) utilisent les mêmes termes. Connaître la version anglaise vous évite d'être perdu dans ces contextes.",
+      "Les acronymes anglais conservés (Runway, Burn rate, MoM, HHI) sont des standards de la finance d'entreprise : les rapports d'audit, les analystes financiers et les outils tiers (Agicap, Pennylane, etc.) utilisent les mêmes termes. Connaître la version anglaise vous évite d'être perdu dans ces contextes.",
     ],
     panel: {
       summary:
@@ -988,7 +988,7 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     id: "export-csv",
     title: "Export CSV des données",
     whatItDoes:
-      "Permet de télécharger les données affichées sur les pages clés (Transactions, Journal d'audit, Analyse — dérives, top movers, YoY — et Prévisionnel pivot) sous forme de fichier CSV. Le fichier est encodé en UTF-8 avec BOM pour une ouverture correcte dans Excel sur Windows, et utilise le point-virgule comme séparateur (standard FR).",
+      "Permet de télécharger les données affichées sur les pages clés (Transactions, Journal d'audit, Analyse — dérives, top movers, MoM 6 mois — et Prévisionnel pivot) sous forme de fichier CSV. Le fichier est encodé en UTF-8 avec BOM pour une ouverture correcte dans Excel sur Windows, et utilise le point-virgule comme séparateur (standard FR).",
     whatItChanges: [
       "Déclenche un appel GET vers l'endpoint d'export correspondant avec les filtres actifs au moment du clic.",
       "Génère un fichier .csv dans le dossier Téléchargements du navigateur.",

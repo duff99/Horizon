@@ -125,21 +125,23 @@ class RunwayResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 4. Year-over-year
+# 4. MoM 6 mois glissants finis
 # ---------------------------------------------------------------------------
 
 
-class YoYPoint(BaseModel):
+class MoMPoint(BaseModel):
     month: str  # "YYYY-MM"
-    revenues_current: int
-    revenues_previous: int
-    expenses_current: int
-    expenses_previous: int
+    revenues_cents: int
+    expenses_cents: int
+    net_cents: int
+    delta_revenues_pct: float | None  # None pour le 1er mois (pas de précédent)
+    delta_expenses_pct: float | None
 
 
-class YoYResponse(BaseModel):
+class MoMResponse(BaseModel):
     months: list[str]
-    series: list[YoYPoint]
+    series: list[MoMPoint]
+    available_months: int
 
 
 # ---------------------------------------------------------------------------

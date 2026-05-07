@@ -17,22 +17,22 @@ from app.schemas.analysis import (
     CategoryDriftResponse,
     ClientConcentrationResponse,
     EntitiesComparisonResponse,
+    MoMResponse,
     RunwayResponse,
     SeasonalityResponse,
     TopMoversResponse,
     WorkingCapitalResponse,
-    YoYResponse,
 )
 from app.services.analysis import (
     compute_category_drift,
     compute_category_drift_detail,
     compute_client_concentration,
     compute_entities_comparison,
+    compute_mom_6m,
     compute_runway,
     compute_seasonality,
     compute_top_movers,
     compute_working_capital,
-    compute_yoy,
 )
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
@@ -94,14 +94,14 @@ def get_runway(
     return compute_runway(session, entity_id=entity_id)
 
 
-@router.get("/yoy", response_model=YoYResponse)
-def get_yoy(
+@router.get("/mom", response_model=MoMResponse)
+def get_mom(
     entity_id: int = Query(...),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
-) -> YoYResponse:
+) -> MoMResponse:
     require_entity_access(session=session, user=user, entity_id=entity_id)
-    return compute_yoy(session, entity_id=entity_id)
+    return compute_mom_6m(session, entity_id=entity_id)
 
 
 @router.get("/client-concentration", response_model=ClientConcentrationResponse)
@@ -222,41 +222,44 @@ def export_top_movers(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/yoy/export")
-def export_yoy(
+@router.get("/mom/export")
+def export_mom(
     entity_id: int = Query(...),
     format: Literal["csv", "xlsx"] = Query(default="csv"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """Export CSV de l'analyse YoY (G11).
+    """Export CSV de l'analyse MoM 6 mois (G11).
 
-    Colonnes : Mois, Encaissements N, Encaissements N-1, Décaissements N, Décaissements N-1.
+    Colonnes : Mois, Encaissements (EUR), Decaissements (EUR), Net (EUR),
+    Var. Encaissements %, Var. Decaissements %.
     """
     _check_xlsx(format)
     require_entity_access(session=session, user=user, entity_id=entity_id)
-    result = compute_yoy(session, entity_id=entity_id)
+    result = compute_mom_6m(session, entity_id=entity_id)
 
     headers = [
         "Mois",
-        "Encaissements N (EUR)",
-        "Encaissements N-1 (EUR)",
-        "Decaissements N (EUR)",
-        "Decaissements N-1 (EUR)",
+        "Encaissements (EUR)",
+        "Decaissements (EUR)",
+        "Net (EUR)",
+        "Var. Encaissements %",
+        "Var. Decaissements %",
     ]
     rows = [
         [
             pt.month,
-            f"{pt.revenues_current / 100:.2f}",
-            f"{pt.revenues_previous / 100:.2f}",
-            f"{pt.expenses_current / 100:.2f}",
-            f"{pt.expenses_previous / 100:.2f}",
+            f"{pt.revenues_cents / 100:.2f}",
+            f"{pt.expenses_cents / 100:.2f}",
+            f"{pt.net_cents / 100:.2f}",
+            f"{pt.delta_revenues_pct:.1f}" if pt.delta_revenues_pct is not None else "",
+            f"{pt.delta_expenses_pct:.1f}" if pt.delta_expenses_pct is not None else "",
         ]
         for pt in result.series
     ]
 
     today = date.today().isoformat()
-    filename_base = f"analyse-yoy_{today}"
+    filename_base = f"analyse-mom_{today}"
     try:
         return export_response(headers, rows, filename_base, format)
     except ValueError as exc:

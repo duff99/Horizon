@@ -8,9 +8,9 @@ import type {
   CategoryDriftResponse,
   ClientConcentrationResponse,
   EntitiesComparisonResponse,
+  MoMResponse,
   RunwayResponse,
   TopMoversResponse,
-  YoYResponse,
 } from "../types/analysis";
 
 function renderPage() {
@@ -79,31 +79,59 @@ const runway: RunwayResponse = {
   status: "ok",
 };
 
-const yoy: YoYResponse = {
-  months: ["2025-05", "2025-06", "2026-04"],
+const mom: MoMResponse = {
+  months: ["2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04"],
   series: [
     {
-      month: "2025-05",
-      revenues_current: 200000,
-      revenues_previous: 180000,
-      expenses_current: 100000,
-      expenses_previous: 90000,
+      month: "2025-11",
+      revenues_cents: 200000,
+      expenses_cents: 100000,
+      net_cents: 100000,
+      delta_revenues_pct: null,
+      delta_expenses_pct: null,
     },
     {
-      month: "2025-06",
-      revenues_current: 220000,
-      revenues_previous: 200000,
-      expenses_current: 110000,
-      expenses_previous: 100000,
+      month: "2025-12",
+      revenues_cents: 220000,
+      expenses_cents: 110000,
+      net_cents: 110000,
+      delta_revenues_pct: 10.0,
+      delta_expenses_pct: 10.0,
+    },
+    {
+      month: "2026-01",
+      revenues_cents: 210000,
+      expenses_cents: 105000,
+      net_cents: 105000,
+      delta_revenues_pct: -4.55,
+      delta_expenses_pct: -4.55,
+    },
+    {
+      month: "2026-02",
+      revenues_cents: 230000,
+      expenses_cents: 115000,
+      net_cents: 115000,
+      delta_revenues_pct: 9.52,
+      delta_expenses_pct: 9.52,
+    },
+    {
+      month: "2026-03",
+      revenues_cents: 240000,
+      expenses_cents: 120000,
+      net_cents: 120000,
+      delta_revenues_pct: 4.35,
+      delta_expenses_pct: 4.35,
     },
     {
       month: "2026-04",
-      revenues_current: 260000,
-      revenues_previous: 200000,
-      expenses_current: 130000,
-      expenses_previous: 105000,
+      revenues_cents: 260000,
+      expenses_cents: 130000,
+      net_cents: 130000,
+      delta_revenues_pct: 8.33,
+      delta_expenses_pct: 8.33,
     },
   ],
+  available_months: 6,
 };
 
 const concentration: ClientConcentrationResponse = {
@@ -156,11 +184,15 @@ describe("AnalysePage", () => {
           if (s.includes("/api/analysis/category-drift")) return drift;
           if (s.includes("/api/analysis/top-movers")) return movers;
           if (s.includes("/api/analysis/runway")) return runway;
-          if (s.includes("/api/analysis/yoy")) return yoy;
+          if (s.includes("/api/analysis/mom")) return mom;
           if (s.includes("/api/analysis/client-concentration"))
             return concentration;
           if (s.includes("/api/analysis/entities-comparison")) return comparison;
           if (s.includes("/api/entities")) return [];
+          if (s.includes("/api/categories")) return [];
+          if (s.includes("/api/anomalies")) return { entity_id: 1, days_analyzed: 180, anomaly_count: 0, rows: [] };
+          if (s.includes("/api/analysis/working-capital")) return { dso_days: null, dpo_days: null, bfr_cents: null, receivables_cents: 0, payables_cents: 0, matched_in_count: 0, matched_out_count: 0, has_data: false };
+          if (s.includes("/api/analysis/forecast-variance")) return { points: [], has_forecast: false };
           return {};
         },
       });
@@ -182,7 +214,7 @@ describe("AnalysePage", () => {
     expect(screen.getByText(/Top mouvements/i)).toBeInTheDocument();
     expect(screen.getByText(/^Runway$/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Comparaison année \/ année/i),
+      screen.getByText(/Tendance mensuelle/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Concentration clients/i)).toBeInTheDocument();
     expect(screen.getByText(/Comparaison des sociétés/i)).toBeInTheDocument();
@@ -206,12 +238,16 @@ describe("AnalysePage", () => {
           if (s.includes("/api/analysis/category-drift")) return drift;
           if (s.includes("/api/analysis/top-movers")) return movers;
           if (s.includes("/api/analysis/runway")) return runway;
-          if (s.includes("/api/analysis/yoy")) return yoy;
+          if (s.includes("/api/analysis/mom")) return mom;
           if (s.includes("/api/analysis/client-concentration"))
             return concentration;
           if (s.includes("/api/analysis/entities-comparison"))
             return { entities: [comparison.entities[0]] };
           if (s.includes("/api/entities")) return [];
+          if (s.includes("/api/categories")) return [];
+          if (s.includes("/api/anomalies")) return { entity_id: 1, days_analyzed: 180, anomaly_count: 0, rows: [] };
+          if (s.includes("/api/analysis/working-capital")) return { dso_days: null, dpo_days: null, bfr_cents: null, receivables_cents: 0, payables_cents: 0, matched_in_count: 0, matched_out_count: 0, has_data: false };
+          if (s.includes("/api/analysis/forecast-variance")) return { points: [], has_forecast: false };
           return {};
         },
       });

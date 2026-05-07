@@ -55,20 +55,22 @@ export interface RunwayResponse {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Year-over-year
+// 4. MoM 6 mois glissants finis
 // ---------------------------------------------------------------------------
 
-export interface YoYPoint {
+export interface MoMPoint {
   month: string; // "YYYY-MM"
-  revenues_current: number;
-  revenues_previous: number;
-  expenses_current: number;
-  expenses_previous: number;
+  revenues_cents: number;
+  expenses_cents: number;
+  net_cents: number;
+  delta_revenues_pct: number | null;
+  delta_expenses_pct: number | null;
 }
 
-export interface YoYResponse {
+export interface MoMResponse {
   months: string[];
-  series: YoYPoint[];
+  series: MoMPoint[];
+  available_months: number;
 }
 
 // ---------------------------------------------------------------------------
