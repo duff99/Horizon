@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
+import { AdminRoute } from '@/components/AdminRoute';
 import { Layout } from '@/components/Layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
@@ -169,49 +170,61 @@ export const router = createBrowserRouter([
       {
         path: '/administration/utilisateurs',
         element: (
-          <LazyPage>
-            <AdminUsersPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminUsersPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {
         path: '/administration/societes',
         element: (
-          <LazyPage>
-            <AdminEntitiesPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminEntitiesPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {
         path: '/administration/comptes-bancaires',
         element: (
-          <LazyPage>
-            <AdminBankAccountsPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminBankAccountsPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {
         path: '/administration/categories',
         element: (
-          <LazyPage>
-            <AdminCategoriesPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminCategoriesPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {
         path: '/administration/sauvegardes',
         element: (
-          <LazyPage>
-            <AdminBackupsPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminBackupsPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {
         path: '/administration/audit',
         element: (
-          <LazyPage>
-            <AdminAuditLogPage />
-          </LazyPage>
+          <AdminRoute>
+            <LazyPage>
+              <AdminAuditLogPage />
+            </LazyPage>
+          </AdminRoute>
         ),
       },
       {

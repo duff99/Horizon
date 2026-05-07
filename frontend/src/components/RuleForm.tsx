@@ -33,13 +33,13 @@ export function RuleForm(props: Props) {
   );
   const [labelValue, setLabelValue] = useState(init?.label_value ?? "");
   const [direction, setDirection] = useState<RuleDirection>(init?.direction ?? "ANY");
-  const [amountOp] = useState<RuleAmountOperator | "">(
+  const [amountOp, setAmountOp] = useState<RuleAmountOperator | "">(
     (init?.amount_operator as RuleAmountOperator) ?? ""
   );
-  const [amountVal] = useState(init?.amount_value ?? "");
-  const [amountVal2] = useState(init?.amount_value2 ?? "");
-  const [counterpartyId] = useState<number | null>(init?.counterparty_id ?? null);
-  const [bankAccountId] = useState<number | null>(init?.bank_account_id ?? null);
+  const [amountVal, setAmountVal] = useState(init?.amount_value ?? "");
+  const [amountVal2, setAmountVal2] = useState(init?.amount_value2 ?? "");
+  const [counterpartyId, setCounterpartyId] = useState<number | null>(init?.counterparty_id ?? null);
+  const [bankAccountId, setBankAccountId] = useState<number | null>(init?.bank_account_id ?? null);
   const [categoryId, setCategoryId] = useState<number | null>(init?.category_id ?? null);
   const [preview, setPreview] = useState<RulePreviewResponse | null>(null);
 
@@ -188,6 +188,108 @@ export function RuleForm(props: Props) {
             value={labelValue}
             onChange={(e) => setLabelValue(e.target.value)}
           />
+        </div>
+      </div>
+
+      {/* Ligne 3bis : filtre montant */}
+      <div className="space-y-1">
+        <Label className="text-[12.5px] text-ink-2">Filtre sur le montant (€)</Label>
+        <div className="flex gap-2">
+          <Select
+            value={amountOp || "__none__"}
+            onValueChange={(v) => {
+              const next = v === "__none__" ? "" : (v as RuleAmountOperator);
+              setAmountOp(next);
+              if (next !== "BETWEEN") setAmountVal2("");
+              if (next === "") {
+                setAmountVal("");
+                setAmountVal2("");
+              }
+            }}
+          >
+            <SelectTrigger className="w-[180px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Aucun filtre</SelectItem>
+              <SelectItem value="EQ">égal à</SelectItem>
+              <SelectItem value="NE">différent de</SelectItem>
+              <SelectItem value="GT">supérieur à</SelectItem>
+              <SelectItem value="LT">inférieur à</SelectItem>
+              <SelectItem value="BETWEEN">entre</SelectItem>
+            </SelectContent>
+          </Select>
+          {amountOp && (
+            <Input
+              aria-label="Montant"
+              type="number"
+              step="0.01"
+              placeholder="ex. 100.00"
+              value={amountVal}
+              onChange={(e) => setAmountVal(e.target.value)}
+            />
+          )}
+          {amountOp === "BETWEEN" && (
+            <Input
+              aria-label="Montant max"
+              type="number"
+              step="0.01"
+              placeholder="et"
+              value={amountVal2}
+              onChange={(e) => setAmountVal2(e.target.value)}
+            />
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Le montant est comparé en valeur absolue (signe ignoré).
+        </p>
+      </div>
+
+      {/* Ligne 3ter : tiers + compte bancaire */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-[12.5px] text-ink-2">Tiers (counterparty)</Label>
+          <Select
+            value={counterpartyId != null ? String(counterpartyId) : "__none__"}
+            onValueChange={(v) =>
+              setCounterpartyId(v === "__none__" ? null : Number(v))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Tous" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Tous les tiers</SelectItem>
+              {props.counterparties.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[12.5px] text-ink-2">Compte bancaire</Label>
+          <Select
+            value={bankAccountId != null ? String(bankAccountId) : "__none__"}
+            onValueChange={(v) =>
+              setBankAccountId(v === "__none__" ? null : Number(v))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Tous" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Tous les comptes</SelectItem>
+              {props.bankAccounts
+                .filter((b) => entityId == null || b.entity_id === entityId)
+                .map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
