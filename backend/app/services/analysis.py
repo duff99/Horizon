@@ -968,9 +968,15 @@ def compute_working_capital(
     Si aucun commitment n'existe pour l'entité, has_data=False : l'UI
     affichera un état vide avec un lien vers la page Engagements.
     """
+    # On exclut les commitments cancelled : un engagement annulé n'est pas
+    # une donnée de pilotage et ne doit pas activer has_data, sinon l'UI
+    # affiche BFR=0 et DSO/DPO=— au lieu du CTA "Aller aux Engagements".
     total_commitments = session.scalar(
         select(func.count(Commitment.id))
-        .where(Commitment.entity_id == entity_id)
+        .where(
+            Commitment.entity_id == entity_id,
+            Commitment.status != CommitmentStatus.CANCELLED,
+        )
     ) or 0
     if total_commitments == 0:
         return WorkingCapitalResponse(
