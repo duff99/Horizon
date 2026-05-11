@@ -7,12 +7,14 @@ import {
   type PeriodValue,
 } from "./PeriodSelector";
 import { CategoryCombobox, type CategoryOption } from "./CategoryCombobox";
+import { CounterpartyCombobox, type CounterpartyOption } from "./CounterpartyCombobox";
 import { X } from "lucide-react";
 
 export interface TransactionFiltersProps {
   value: TransactionFilter;
   onChange: (patch: TransactionFilter) => void;
   categories?: CategoryOption[];
+  counterparties?: CounterpartyOption[];
   /**
    * Si true, masque le champ de recherche (le parent l'affiche déjà
    * ailleurs pour avoir un layout en deux rangées propre). Quand false
@@ -56,6 +58,7 @@ export function TransactionFilters({
   value,
   onChange,
   categories,
+  counterparties,
   hideSearch = false,
 }: TransactionFiltersProps) {
   const periodValue = useMemo(
@@ -74,6 +77,10 @@ export function TransactionFilters({
 
   const handleCategoryChange = (id: number | null) => {
     onChange({ ...value, category_id: id ?? undefined, page: 1 });
+  };
+
+  const handleCounterpartyChange = (id: number | null) => {
+    onChange({ ...value, counterparty_id: id ?? undefined, page: 1 });
   };
 
   function handleAmountMinChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -140,6 +147,14 @@ export function TransactionFilters({
             </button>
           )}
         </div>
+      )}
+      {counterparties && counterparties.length > 0 && (
+        <CounterpartyCombobox
+          counterparties={counterparties}
+          value={value.counterparty_id ?? null}
+          onChange={handleCounterpartyChange}
+          placeholder="Filtrer par tiers…"
+        />
       )}
       {/* Filtres montant min / max (E8) */}
       <div className="flex items-center gap-1">

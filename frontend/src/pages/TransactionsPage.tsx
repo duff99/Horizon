@@ -432,6 +432,9 @@ export function TransactionsPage() {
               value={filters}
               onChange={setFilters}
               categories={categories}
+              counterparties={counterparties
+                .filter((cp) => cp.status !== "ignored")
+                .map((cp) => ({ id: cp.id, name: cp.name }))}
               hideSearch
             />
           </div>

@@ -833,6 +833,28 @@ export const FEATURE_DOCS: FeatureDoc[] = [
     ],
   },
   {
+    id: "filtre-tiers-transactions",
+    title: "Filtre par tiers sur la page Transactions",
+    whatItDoes:
+      "Permet de restreindre la liste des transactions a celles rattachees a un tiers (client ou fournisseur) donne. Le selecteur propose tous les tiers actifs de la societe selectionnee, avec recherche par nom.",
+    whatItChanges: [
+      "Passe le parametre counterparty_id a l'API GET /api/transactions.",
+      "Le backend filtre les transactions dont counterparty_id correspond.",
+      "Quand le filtre est actif, les sous-transactions SEPA enfants sont incluses automatiquement, meme si le toggle Afficher les virements SEPA detailles est desactive — sans cela, un tiers paye exclusivement par virement SEPA de masse ne renverrait aucune ligne, car les batch parents SEPA n'ont pas de tier rattache.",
+      "Le filtre est persiste dans l'URL via le parametre counterparty et est restaure au rechargement de la page.",
+    ],
+    whatItDoesNotChange: [
+      "Ne modifie aucune transaction.",
+      "Le filtre tiers s'applique en supplement des autres filtres (periode, categorie, montant, recherche, non categorisees) — ils sont tous combines avec un ET logique.",
+      "Le selecteur masque les tiers en statut ignore : pour les retrouver, passer par la page Clients et fournisseurs avec l'option Inclure les tiers ignores.",
+    ],
+    whenToUse: [
+      "Pour verifier les paiements recus d'un client ou envoyes a un fournisseur sur une periode donnee.",
+      "Pour rapprocher un releve fournisseur avec les transactions effectivement passees en banque.",
+      "Pour preparer une categorisation en masse de toutes les transactions d'un tiers (par exemple, requalifier les paiements de salaire d'un employe).",
+    ],
+  },
+  {
     id: "bulk-categorize-filtre",
     title: "Categoriser tous les resultats d'un filtre (sans limite de page)",
     whatItDoes:
