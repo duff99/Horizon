@@ -238,7 +238,7 @@ export function ForecastV2Page() {
             {effectiveEntityId != null && scenarioId != null && (
               <div className="mt-2 flex justify-end">
                 <ExportButton
-                  url={`/api/forecast/pivot/export?scenario_id=${scenarioId}&entity_id=${effectiveEntityId}&from=${period.from}&to=${period.to}`}
+                  url={`/api/forecast/pivot/export?scenario_id=${scenarioId}&entity_id=${effectiveEntityId}&from=${period.from}&to=${period.to}${accountIds && accountIds.length > 0 ? `&accounts=${accountIds.join(",")}` : ""}`}
                   filename={`previsionnel-pivot_${todayISO()}.csv`}
                   label="Exporter le pivot CSV"
                 />
