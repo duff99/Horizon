@@ -481,6 +481,61 @@ class TestCurrentMonthSplit:
 
 
 class TestComputePivot:
+    def test_pivot_closing_balance_includes_uncategorized(
+        self, db_session: Session, engine_ctx: dict
+    ) -> None:
+        """Regression BUG-D-003 : la closing_balance_projection doit inclure
+        les transactions non-catégorisées, sinon elle diverge de la réalité
+        bancaire en proportion du volume non-catégorisé.
+        """
+        sc = engine_ctx["scenario"]
+        e = engine_ctx["entity"]
+        ba = engine_ctx["bank_account"]
+        current_first = engine_ctx["current_month"]
+
+        # Ajoute un import couvrant le mois M-1, et 1000 € de transactions
+        # NON catégorisées dans ce mois (en plus des Salaires/Ventes déjà là).
+        m_prev = _add_months(current_first, -1)
+        ir = ImportRecord(
+            bank_account_id=ba.id, bank_code="delubac", filename="uncat.pdf",
+            status=ImportStatus.COMPLETED, imported_count=0,
+        )
+        db_session.add(ir)
+        db_session.flush()
+        db_session.add(
+            Transaction(
+                bank_account_id=ba.id, import_id=ir.id,
+                operation_date=date(m_prev.year, m_prev.month, 20),
+                value_date=date(m_prev.year, m_prev.month, 20),
+                amount=Decimal("1000.00"),
+                label="Versement non catégorisé",
+                raw_label="Versement non catégorisé",
+                dedup_key=f"uncat-{m_prev.isoformat()}",
+                statement_row_index=9999,
+                normalized_label="uncat",
+                # category_id=None volontairement
+            )
+        )
+        db_session.commit()
+
+        result = compute_pivot(
+            db_session,
+            scenario_id=sc.id, entity_id=e.id,
+            from_month=m_prev, to_month=m_prev,
+        )
+        assert result.uncategorized_net_cents == [100000], (
+            f"Net non-catégorisé M-1 attendu 1000€=100000c, observé "
+            f"{result.uncategorized_net_cents}"
+        )
+        # La projection inclut bien les +1000€ non catégorisés
+        salaires_ventes_net = -300000 + 500000  # -3000 + 5000 en cents
+        expected_running = result.opening_balance_cents + salaires_ventes_net + 100000
+        assert result.closing_balance_projection_cents[0] == expected_running, (
+            f"Closing projection M-1 doit inclure les tx non-cat : "
+            f"attendu {expected_running}c, observé "
+            f"{result.closing_balance_projection_cents[0]}c"
+        )
+
     def test_pivot_shape(self, db_session: Session, engine_ctx: dict) -> None:
         sc = engine_ctx["scenario"]
         e = engine_ctx["entity"]

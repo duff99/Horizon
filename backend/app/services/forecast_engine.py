@@ -72,6 +72,11 @@ class PivotResult:
     rows: list[PivotRow]
     realized_series: list[dict]
     forecast_series: list[dict]
+    # Net mensuel des tx sans catégorie. Inclus dans la projection mais
+    # absent de `rows` (pas une catégorie). Permet à l'UI d'afficher un
+    # avertissement si > 0 — sinon l'utilisateur ne voit pas pourquoi la
+    # projection diverge de la réalité.
+    uncategorized_net_cents: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -85,6 +90,10 @@ class Preloaded:
     commitments_by_cat_month: dict[tuple[int, str], int]
     lines_by_cat: dict[int, "ForecastLine"]
     categories_by_name: dict[str, int]
+    # Net mensuel des transactions sans catégorie. Indispensable pour que
+    # la closing_balance_projection reflète la trésorerie réelle, sinon
+    # elle diverge de la réalité en proportion des tx non-catégorisées.
+    uncategorized_net_by_month: dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +181,36 @@ def _preload(
         key = (int(cat_id), _month_key(month))
         transactions_by_cat_month[key] = _eur_to_cents(Decimal(total))
 
+    # 1bis) Transactions sans catégorie : SUM(amount) group by month
+    # Indispensable pour la projection de solde (sinon écart vs réalité
+    # proportionnel au volume non-catégorisé).
+    uncat_stmt = (
+        select(
+            tx_month_col.label("month"),
+            func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+        )
+        .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
+        .where(
+            and_(
+                BankAccount.entity_id == entity_id,
+                Transaction.operation_date >= earliest,
+                Transaction.operation_date < latest,
+                Transaction.is_aggregation_parent.is_(False),
+                Transaction.category_id.is_(None),
+            )
+        )
+        .group_by(tx_month_col)
+    )
+    if account_ids is not None:
+        uncat_stmt = uncat_stmt.where(BankAccount.id.in_(account_ids))
+    uncategorized_net_by_month: dict[str, int] = {}
+    for month, total in session.execute(uncat_stmt).all():
+        if month is None:
+            continue
+        uncategorized_net_by_month[_month_key(month)] = _eur_to_cents(
+            Decimal(total)
+        )
+
     # 2) Commitments (pending) : SUM(amount_cents) group by (cat, month, direction)
     cm_month_col = func.date_trunc("month", Commitment.expected_date)
     cm_stmt = (
@@ -222,6 +261,7 @@ def _preload(
         commitments_by_cat_month=commitments_by_cat_month,
         lines_by_cat=lines_by_cat,
         categories_by_name=categories_by_name,
+        uncategorized_net_by_month=uncategorized_net_by_month,
     )
 
 
@@ -755,6 +795,7 @@ def compute_pivot(
     projection: list[int] = []
     realized_series: list[dict] = []
     forecast_series: list[dict] = []
+    uncategorized_series: list[int] = []
     running = opening
     for idx, m in enumerate(months):
         month_in = 0
@@ -773,7 +814,13 @@ def compute_pivot(
                 month_out += cell.total_cents
                 month_realized_out += cell.realized_cents
                 month_forecast_out += cell.forecast_cents
-        running = running + month_in + month_out  # out déjà signé négatif
+        # Inclure le net des transactions non-catégorisées dans la projection,
+        # sinon le solde projeté diverge de la réalité bancaire (les imports
+        # `opening` reflètent toutes les tx, alors que les `rows` filtrent les
+        # tx catégorisées uniquement).
+        uncat_net = preloaded.uncategorized_net_by_month.get(month_labels[idx], 0)
+        uncategorized_series.append(uncat_net)
+        running = running + month_in + month_out + uncat_net  # out déjà signé négatif
         projection.append(running)
         realized_series.append(
             {
@@ -794,6 +841,7 @@ def compute_pivot(
         months=month_labels,
         opening_balance_cents=opening,
         closing_balance_projection_cents=projection,
+        uncategorized_net_cents=uncategorized_series,
         rows=rows,
         realized_series=realized_series,
         forecast_series=forecast_series,

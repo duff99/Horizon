@@ -173,6 +173,7 @@ def get_pivot(
         rows=rows,
         realized_series=realized_series,
         forecast_series=forecast_series,
+        uncategorized_net_cents=result.uncategorized_net_cents,
     )
 
 

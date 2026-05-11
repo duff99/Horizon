@@ -200,3 +200,8 @@ class PivotResponse(BaseModel):
     rows: list[PivotRowRead]
     realized_series: list[SeriesPointRead]
     forecast_series: list[SeriesPointRead]
+    # Net mensuel des transactions sans catégorie (inclus dans la
+    # projection mais absent de `rows`). > 0 → l'UI peut afficher un
+    # avertissement "Vous avez X € de transactions non catégorisées sur
+    # cette période". Liste de la même longueur que `months`.
+    uncategorized_net_cents: list[int] = []
