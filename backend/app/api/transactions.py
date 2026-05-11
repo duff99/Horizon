@@ -73,7 +73,11 @@ def list_transactions(
             Transaction.categorized_by == TransactionCategorizationSource.NONE
         )
     # E7 — masquer les enfants SEPA par défaut (parent_transaction_id IS NULL)
-    if not filters.include_sepa_children:
+    # Exception : si l'appelant filtre explicitement par counterparty_id, on
+    # inclut les enfants SEPA. Les batch parents SEPA n'ont pas de tier, donc
+    # demander "tx de ce tiers" sans les enfants renverrait souvent 0 ligne
+    # (cas des salaires/fournisseurs payés par lot SEPA).
+    if not filters.include_sepa_children and not filters.counterparty_id:
         conditions.append(Transaction.parent_transaction_id.is_(None))
     # E8 — filtres montant (valeur absolue, cohérent avec RuleForm)
     if filters.amount_min is not None:

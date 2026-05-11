@@ -229,3 +229,49 @@ def test_sepa_children_visible_when_toggled(client, db_session):
     assert resp.status_code == 200
     ids = [i["id"] for i in resp.json()["items"]]
     assert child_tx.id in ids
+
+
+def test_counterparty_filter_includes_sepa_children_implicitly(client, db_session):
+    """Regression : filtrer par counterparty_id doit inclure les enfants SEPA.
+
+    Cas observé en prod : un tier (ACRONOS, NIZAR MOUADDEB...) dont toutes
+    les transactions sont des enfants SEPA. Sans cette exception, la page
+    /transactions?counterparty=X renvoyait toujours 0 ligne car les enfants
+    SEPA étaient masqués par défaut et les batch parents n'ont pas de tier.
+    """
+    from app.models.counterparty import Counterparty
+
+    entity = _create_entity(db_session)
+    ba = _create_bank_account(db_session, entity.id)
+    imp = _create_import(db_session, ba.id)
+    user = _setup_user_with_access(db_session, entity.id)
+    cp = Counterparty(entity_id=entity.id, name=f"Tiers {_unique()}", normalized_name="tiers")
+    db_session.add(cp)
+    db_session.flush()
+    db_session.commit()
+
+    parent_tx = _create_transaction(db_session, ba.id, imp.id, Decimal("-1000.00"))
+    db_session.commit()
+    child_tx = _create_transaction(
+        db_session, ba.id, imp.id, Decimal("-250.00"), parent_id=parent_tx.id,
+    )
+    child_tx.counterparty_id = cp.id
+    db_session.commit()
+
+    _login_user(client, user.email)
+
+    # Sans counterparty_id : enfant SEPA masqué (comportement E7 inchangé)
+    resp = client.get(f"/api/transactions?entity_id={entity.id}")
+    assert resp.status_code == 200
+    assert child_tx.id not in [i["id"] for i in resp.json()["items"]]
+
+    # Avec counterparty_id : enfant SEPA exposé même sans toggle SEPA
+    resp = client.get(
+        f"/api/transactions?entity_id={entity.id}&counterparty_id={cp.id}",
+    )
+    assert resp.status_code == 200
+    ids = [i["id"] for i in resp.json()["items"]]
+    assert child_tx.id in ids, (
+        "Le filtre counterparty doit afficher tous les tx du tiers, "
+        "y compris les enfants SEPA"
+    )
