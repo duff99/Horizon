@@ -9,6 +9,7 @@ import {
   updateUser,
   type User,
 } from '@/api/users';
+import { AdminUsersEntityAccessDialog } from '@/pages/AdminUsersEntityAccessDialog';
 import { AdminUsersResetPasswordDialog } from '@/pages/AdminUsersResetPasswordDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ export function AdminUsersPage() {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [resetUserId, setResetUserId] = useState<number | null>(null);
+  const [accessUserId, setAccessUserId] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -110,6 +112,14 @@ export function AdminUsersPage() {
         <p className="mt-0.5 text-[13px] text-muted-foreground">
           {users?.length ?? 0} utilisateur{(users?.length ?? 0) > 1 ? 's' : ''}
         </p>
+      </div>
+
+      <div className="rounded-md border border-line-soft bg-panel-2 px-4 py-3 text-[12.5px] text-ink-2">
+        <strong className="font-semibold text-ink">Rôles et accès aux entités.</strong>{' '}
+        Les administrateurs ont accès à toutes les sociétés. Les utilisateurs de
+        rôle « Lecture » (reader) ne voient que les sociétés explicitement
+        cochées via le bouton <em>Accès entités</em>. Sans accès accordé, un
+        reader voit une application vide.
       </div>
 
       <div className="rounded-xl border border-line-soft bg-panel p-6 shadow-card">
@@ -306,6 +316,16 @@ export function AdminUsersPage() {
                       >
                         Réinit. mdp
                       </Button>
+                      {u.role === 'reader' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAccessUserId(u.id)}
+                          title="Accorde ou révoque l'accès de ce reader à des entités précises. Sans accès, le reader ne voit aucune donnée."
+                        >
+                          Accès entités
+                        </Button>
+                      )}
                       {u.isActive && (
                         <Button
                           variant="ghost"
@@ -335,6 +355,15 @@ export function AdminUsersPage() {
           userEmail={users?.find((u) => u.id === resetUserId)?.email ?? ''}
           open={resetUserId !== null}
           onClose={() => setResetUserId(null)}
+        />
+      )}
+
+      {accessUserId !== null && (
+        <AdminUsersEntityAccessDialog
+          userId={accessUserId}
+          userEmail={users?.find((u) => u.id === accessUserId)?.email ?? ''}
+          open={accessUserId !== null}
+          onClose={() => setAccessUserId(null)}
         />
       )}
     </section>

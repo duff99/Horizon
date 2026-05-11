@@ -37,3 +37,7 @@ class PasswordChangePayload(BaseModel):
 
 class AdminPasswordResetPayload(BaseModel):
     new_password: SecretStr = Field(min_length=12)
+
+
+class EntityAccessGrant(BaseModel):
+    entity_id: int

@@ -4,9 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import require_admin
+from app.models.entity import Entity
 from app.models.user import User, UserRole
+from app.models.user_entity_access import UserEntityAccess
 from app.schemas.user import (
     AdminPasswordResetPayload,
+    EntityAccessGrant,
     UserCreate,
     UserRead,
     UserUpdate,
@@ -167,5 +170,94 @@ def deactivate_user(
     record_audit(
         db, user=current, action="update", entity=user,
         before=before_snapshot, after=to_dict_for_audit(user), request=request,
+    )
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Entity access (grant / revoke / list) — HIGH-01
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{user_id}/entity-access", response_model=list[int])
+def list_user_entity_access(
+    user_id: int,
+    db: Session = Depends(get_db),
+) -> list[int]:
+    """IDs des entités auxquelles le user a un accès explicite (table user_entity_access).
+
+    Pour les admins, cette liste est typiquement vide : ils voient toutes les
+    entités via leur rôle, pas via user_entity_access.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    return list(
+        db.scalars(
+            select(UserEntityAccess.entity_id).where(UserEntityAccess.user_id == user_id)
+        )
+    )
+
+
+@router.post("/{user_id}/entity-access", status_code=status.HTTP_201_CREATED)
+def grant_user_entity_access(
+    user_id: int,
+    payload: EntityAccessGrant,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
+) -> dict[str, int]:
+    """Accorde à un user l'accès à une entité. Idempotent : 409 si déjà accordé."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    entity = db.get(Entity, payload.entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entité introuvable")
+    existing = db.scalar(
+        select(UserEntityAccess).where(
+            UserEntityAccess.user_id == user_id,
+            UserEntityAccess.entity_id == payload.entity_id,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Accès déjà accordé")
+    access = UserEntityAccess(user_id=user_id, entity_id=payload.entity_id)
+    db.add(access)
+    db.flush()
+    record_audit(
+        db, user=current, action="create", entity=access,
+        before=None, after=to_dict_for_audit(access), request=request,
+    )
+    db.commit()
+    db.refresh(access)
+    return {"id": access.id, "user_id": access.user_id, "entity_id": access.entity_id}
+
+
+@router.delete(
+    "/{user_id}/entity-access/{entity_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def revoke_user_entity_access(
+    user_id: int,
+    entity_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_admin),
+) -> None:
+    """Révoque l'accès d'un user à une entité."""
+    access = db.scalar(
+        select(UserEntityAccess).where(
+            UserEntityAccess.user_id == user_id,
+            UserEntityAccess.entity_id == entity_id,
+        )
+    )
+    if access is None:
+        raise HTTPException(status_code=404, detail="Accès introuvable")
+    before_snapshot = to_dict_for_audit(access)
+    db.delete(access)
+    db.flush()
+    record_audit(
+        db, user=current, action="delete", entity=access,
+        before=before_snapshot, after=None, request=request,
     )
     db.commit()

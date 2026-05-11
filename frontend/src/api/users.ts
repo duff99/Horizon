@@ -71,3 +71,26 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Us
 export async function deactivateUser(id: number): Promise<void> {
   await apiFetch<unknown>(`/api/users/${id}`, { method: 'DELETE' });
 }
+
+export async function listUserEntityAccess(userId: number): Promise<number[]> {
+  return apiFetch<number[]>(`/api/users/${userId}/entity-access`);
+}
+
+export async function grantUserEntityAccess(
+  userId: number,
+  entityId: number,
+): Promise<void> {
+  await apiFetch<unknown>(`/api/users/${userId}/entity-access`, {
+    method: 'POST',
+    body: JSON.stringify({ entity_id: entityId }),
+  });
+}
+
+export async function revokeUserEntityAccess(
+  userId: number,
+  entityId: number,
+): Promise<void> {
+  await apiFetch<unknown>(`/api/users/${userId}/entity-access/${entityId}`, {
+    method: 'DELETE',
+  });
+}

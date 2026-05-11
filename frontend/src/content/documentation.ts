@@ -1127,4 +1127,26 @@ export const FEATURE_DOCS: FeatureDoc[] = [
       "Lorsqu'une catégorie est en cours de restructuration et que les chiffres du mois sont transitoires.",
     ],
   },
+  {
+    id: "acces-entites-reader",
+    title: "Accorder ou révoquer l'accès d'un reader à une entité",
+    whatItDoes:
+      "Détermine quelles entités (sociétés) un utilisateur de rôle Lecture (reader) peut consulter. Sans entrée dans cette liste, un reader ne voit aucune donnée — ni transactions, ni comptes, ni dashboard. Les administrateurs voient toutes les entités quelle que soit cette configuration.",
+    whatItChanges: [
+      "Accorder appelle POST /api/users/{id}/entity-access et crée une ligne dans la table user_entity_access. À partir de cet instant, le reader voit l'entité dans le sélecteur EntitySelector et dans tous les écrans filtrés par entité (Dashboard, Transactions, Forecast, Analyse, Engagements).",
+      "Révoquer appelle DELETE /api/users/{id}/entity-access/{entity_id} et supprime cette ligne. Le reader perd immédiatement l'accès aux données de cette entité ; les pages qui n'ont plus aucune entité accessible affichent une liste vide.",
+      "Chaque action est tracée dans le journal d'audit (action create ou delete sur l'objet UserEntityAccess).",
+    ],
+    whatItDoesNotChange: [
+      "Ne modifie ni ne supprime aucune transaction, aucune catégorie, aucun engagement. C'est uniquement un droit de consultation.",
+      "N'a aucun effet sur les administrateurs : un admin voit toujours toutes les entités, indépendamment de cette liste.",
+      "Ne déclenche aucun email ni notification : le reader doit se reconnecter ou rafraîchir la page pour voir le changement.",
+      "Ne modifie pas le rôle de l'utilisateur. Pour passer un reader en admin, utiliser le formulaire d'édition de l'utilisateur.",
+    ],
+    whenToUse: [
+      "À la création d'un nouveau reader : attribuer immédiatement les entités auxquelles il doit accéder, sinon il voit une application vide.",
+      "Lors d'un changement d'organisation (nouveau collaborateur sur une filiale, départ d'un comptable, séparation de périmètres).",
+      "Pour restreindre temporairement un reader à un sous-ensemble d'entités sans changer son rôle.",
+    ],
+  },
 ];
