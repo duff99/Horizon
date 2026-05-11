@@ -68,6 +68,43 @@ def test_me_password_new_too_short(
     assert resp.status_code == 422
 
 
+def test_me_password_bumps_session_token_version(
+    client: TestClient, auth_user_admin: User, db_session
+) -> None:
+    """Changer son mdp doit bumper session_token_version pour révoquer
+    les autres sessions actives (cookies volés). La session courante doit
+    être réémise pour ne pas auto-déconnecter l'utilisateur.
+    """
+    initial_version = auth_user_admin.session_token_version
+
+    resp = client.post(
+        "/api/me/password",
+        json={
+            "current_password": "test-password-123",
+            "new_password": "new-super-password-456",
+        },
+    )
+    assert resp.status_code == 204, resp.text
+
+    db_session.refresh(auth_user_admin)
+    assert auth_user_admin.session_token_version == initial_version + 1, (
+        "session_token_version doit être bumpée pour révoquer les cookies volés"
+    )
+
+    # Le cookie réémis doit contenir la nouvelle version (sinon l'utilisateur
+    # serait déconnecté immédiatement par sa propre action de changement).
+    set_cookie_header = resp.headers.get("set-cookie", "")
+    assert "session" in set_cookie_header.lower(), (
+        "Un nouveau cookie de session doit être réémis"
+    )
+
+    # La requête authentifiée suivante doit toujours passer (200 sur /api/me)
+    me_resp = client.get("/api/me")
+    assert me_resp.status_code == 200, (
+        f"Session courante invalidée par son propre changement de mdp : {me_resp.status_code}"
+    )
+
+
 def test_me_password_unauthenticated(client: TestClient) -> None:
     """Sans session → 401."""
     resp = client.post(

@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import COOKIE_NAME, get_current_user
 from app.models.user import User
 from app.schemas.user import PasswordChangePayload, UserRead
-from app.security import hash_password, validate_password_policy, verify_password
+from app.security import (
+    encode_session_token,
+    hash_password,
+    validate_password_policy,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
@@ -18,8 +24,10 @@ def me(current: User = Depends(get_current_user)) -> User:
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     payload: PasswordChangePayload,
+    response: Response,
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> None:
     """Change le mot de passe de l'utilisateur authentifié."""
     current_pw = payload.current_password.get_secret_value()
@@ -39,4 +47,23 @@ def change_password(
         ) from exc
 
     current.password_hash = hash_password(new_pw)
+    # Révoque toutes les sessions actives (y compris cookies volés) en bumpant
+    # la version du token. La session courante est immédiatement réémise avec
+    # la nouvelle version pour éviter de déconnecter l'utilisateur qui vient
+    # de changer son mot de passe.
+    current.session_token_version = (current.session_token_version or 1) + 1
     db.commit()
+
+    new_token = encode_session_token(
+        user_id=current.id,
+        version=current.session_token_version,
+        secret=settings.secret_key,
+    )
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=new_token,
+        max_age=settings.session_hours * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
