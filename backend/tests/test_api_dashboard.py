@@ -232,3 +232,82 @@ def test_summary_daily_series_sorted(
     body = r.json()
     dates = [d["date"] for d in body["daily"]]
     assert dates == sorted(dates)
+
+
+# ---------------------------------------------------------------------------
+# /api/dashboard/bank-balances — Δ vs mois précédent (BUG-D-001)
+# ---------------------------------------------------------------------------
+
+
+def test_bank_balances_delta_uses_asof_not_calendar_today(
+    client: TestClient, auth_user_with_bank_account, db_session: Session
+) -> None:
+    """Regression BUG-D-001 : le delta vs mois-1 doit utiliser le 1er du
+    mois du dernier import du compte, pas le 1er du mois calendaire courant.
+
+    Sinon, un compte dont le dernier import a period_end < today.replace(day=1)
+    est comparé à lui-même → delta = 0.
+
+    Setup : un compte avec 2 imports (mars 31 closing=7133.82,
+    avril 30 closing=7933.72) et today situé en mai. Attendu : delta=+799.90.
+    Avant le fix : delta=0.
+    """
+    ba = auth_user_with_bank_account["bank_account"]
+    _mk_import(db_session, bank_account=ba, closing=Decimal("7133.82"), period_end=date(2026, 3, 31))
+    _mk_import(db_session, bank_account=ba, closing=Decimal("7933.72"), period_end=date(2026, 4, 30))
+    db_session.commit()
+
+    r = client.get("/api/dashboard/bank-balances")
+    assert r.status_code == 200, r.text
+    rows = r.json()
+    target = [row for row in rows if row["bank_account_id"] == ba.id]
+    assert len(target) == 1, target
+    assert Decimal(target[0]["balance"]) == Decimal("7933.72")
+    assert target[0]["delta_vs_prev_month"] is not None
+    assert Decimal(target[0]["delta_vs_prev_month"]) == Decimal("799.90"), (
+        f"delta attendu +799.90, observé {target[0]['delta_vs_prev_month']}"
+    )
+
+
+def test_bank_balances_delta_none_when_no_previous_import(
+    client: TestClient, auth_user_with_bank_account, db_session: Session
+) -> None:
+    """Un seul import (pas de mois précédent) → delta = None (pas 0)."""
+    ba = auth_user_with_bank_account["bank_account"]
+    _mk_import(db_session, bank_account=ba, closing=Decimal("1000.00"), period_end=date(2026, 4, 30))
+    db_session.commit()
+
+    r = client.get("/api/dashboard/bank-balances")
+    rows = r.json()
+    target = [row for row in rows if row["bank_account_id"] == ba.id][0]
+    assert target["delta_vs_prev_month"] is None
+
+
+def test_bank_balances_delta_per_account_no_cross_pollution(
+    client: TestClient, auth_user_with_bank_account, db_session: Session
+) -> None:
+    """Regression BUG-D-001 deuxième partie : avec plusieurs comptes ayant
+    des cutoffs différents, le delta de chaque compte ne doit pas être
+    pollué par les dates d'un autre compte (produit cartésien IN()).
+    """
+    e = auth_user_with_bank_account["entity"]
+    ba1 = auth_user_with_bank_account["bank_account"]
+    ba2 = BankAccount(
+        entity_id=e.id, bank_code="delubac", bank_name="Delubac",
+        iban="FR76TEST2NDACCT" + "0" * 10, name="2nd Account",
+    )
+    db_session.add(ba2)
+    db_session.flush()
+
+    # ba1 : dernier import = avril 2026
+    _mk_import(db_session, bank_account=ba1, closing=Decimal("100.00"), period_end=date(2026, 3, 31))
+    _mk_import(db_session, bank_account=ba1, closing=Decimal("200.00"), period_end=date(2026, 4, 30))
+    # ba2 : dernier import = mars 2026 (différent cutoff)
+    _mk_import(db_session, bank_account=ba2, closing=Decimal("5000.00"), period_end=date(2026, 2, 28))
+    _mk_import(db_session, bank_account=ba2, closing=Decimal("5500.00"), period_end=date(2026, 3, 31))
+    db_session.commit()
+
+    r = client.get("/api/dashboard/bank-balances")
+    rows = {row["bank_account_id"]: row for row in r.json()}
+    assert Decimal(rows[ba1.id]["delta_vs_prev_month"]) == Decimal("100.00"), "ba1 : 200 - 100 = 100"
+    assert Decimal(rows[ba2.id]["delta_vs_prev_month"]) == Decimal("500.00"), "ba2 : 5500 - 5000 = 500"

@@ -452,42 +452,31 @@ def _compute_bank_state(
         for r in last_import_rows
     }
 
-    # Δ vs mois précédent : solde actuel - solde du dernier import dont period_end < début du mois courant
-    today = date.today()
-    first_of_month = today.replace(day=1)
-    prev_rows = db.execute(
-        select(
-            ImportRecord.bank_account_id,
-            func.max(ImportRecord.period_end).label("last_end"),
-        )
-        .where(
-            and_(
-                ImportRecord.bank_account_id.in_(bank_account_ids),
-                ImportRecord.status == ImportStatus.COMPLETED,
-                ImportRecord.closing_balance.is_not(None),
-                ImportRecord.period_end < first_of_month,
+    # Δ vs mois précédent : pour chaque compte, on cherche le dernier import
+    # dont period_end est antérieur au 1er du mois du DERNIER import du compte
+    # (pas du 1er du mois courant calendaire). Sinon, un compte dont le
+    # dernier import couvre un mois antérieur à today est comparé à lui-même
+    # → delta=0 (ex. import d'avril, today=mai → cutoff=mai → MAX<mai inclut
+    # le closing d'avril qui est aussi le current → delta=0).
+    # On boucle en Python car N (comptes) reste très petit (typ. < 10).
+    prev_balance_by_ba: dict[int, Decimal] = {}
+    for ba_id, (_curr_bal, asof) in latest_by_ba.items():
+        cutoff = asof.replace(day=1)
+        prev = db.execute(
+            select(ImportRecord.closing_balance)
+            .where(
+                and_(
+                    ImportRecord.bank_account_id == ba_id,
+                    ImportRecord.status == ImportStatus.COMPLETED,
+                    ImportRecord.closing_balance.is_not(None),
+                    ImportRecord.period_end < cutoff,
+                )
             )
-        )
-        .group_by(ImportRecord.bank_account_id)
-    ).all()
-    prev_end_by_ba = {r.bank_account_id: r.last_end for r in prev_rows}
-    prev_balance_rows = db.execute(
-        select(
-            ImportRecord.bank_account_id,
-            ImportRecord.closing_balance,
-        ).where(
-            and_(
-                ImportRecord.bank_account_id.in_(prev_end_by_ba.keys()),
-                ImportRecord.period_end.in_(prev_end_by_ba.values()),
-                ImportRecord.status == ImportStatus.COMPLETED,
-            )
-        )
-    ).all() if prev_end_by_ba else []
-    prev_balance_by_ba: dict[int, Decimal] = {
-        r.bank_account_id: Decimal(r.closing_balance)
-        for r in prev_balance_rows
-        if prev_end_by_ba.get(r.bank_account_id)
-    }
+            .order_by(ImportRecord.period_end.desc())
+            .limit(1)
+        ).scalar()
+        if prev is not None:
+            prev_balance_by_ba[ba_id] = Decimal(prev)
 
     out: list[BankAccountBalance] = []
     for ba, entity_name in accounts:
