@@ -59,6 +59,13 @@ function statusInfo(status: string): StatusInfo {
             ? "Vos entrées couvrent vos sorties — vous ne consommez pas votre trésorerie."
             : `Plus de 12 mois de trésorerie devant vous (${m} mois). Situation saine, vous pouvez investir.`,
       };
+    case "none":
+      return {
+        label: "Excédentaire",
+        className: "bg-emerald-50 text-emerald-900",
+        interpretation: () =>
+          "Sur les 3 derniers mois, vos entrées dépassent vos sorties. Il n'y a pas de consommation à projeter — la trésorerie est stable ou en croissance.",
+      };
     default:
       return {
         label: "N/A",
