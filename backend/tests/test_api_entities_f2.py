@@ -24,9 +24,55 @@ def test_list_entities_admin(client: TestClient, auth_user_admin: User) -> None:
     assert isinstance(resp.json(), list)
 
 
-def test_list_entities_reader_forbidden(client: TestClient, auth_user_reader: User) -> None:
-    """Un reader reçoit 403 sur GET /api/entities."""
+def test_list_entities_reader_no_grants(
+    client: TestClient, auth_user_reader: User,
+) -> None:
+    """Un reader sans grant reçoit 200 + liste vide (pas 403).
+
+    Le sélecteur d'entité côté frontend appelle GET /api/entities pour
+    tous les rôles ; renvoyer 403 le cassait. Le filtrage par accessibilité
+    garantit qu'un reader ne voit que ses entités accordées.
+    """
     resp = client.get("/api/entities")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_entities_reader_with_grant_filtered(
+    client: TestClient,
+    auth_user_reader: User,
+    db_session,
+) -> None:
+    """Un reader avec un grant ne voit QUE son entité, pas les autres."""
+    from app.models.entity import Entity
+    from app.models.user_entity_access import UserEntityAccess
+
+    granted = Entity(name="Reader Granted", legal_name="Reader Granted")
+    other = Entity(name="Reader Hidden", legal_name="Reader Hidden")
+    db_session.add_all([granted, other])
+    db_session.flush()
+    db_session.add(
+        UserEntityAccess(user_id=auth_user_reader.id, entity_id=granted.id)
+    )
+    db_session.commit()
+
+    resp = client.get("/api/entities")
+    assert resp.status_code == 200
+    names = [e["name"] for e in resp.json()]
+    assert granted.name in names
+    assert other.name not in names, (
+        "Le reader voit une entité non grantée → fuite cross-tenant"
+    )
+
+
+def test_create_entity_reader_still_forbidden(
+    client: TestClient, auth_user_reader: User,
+) -> None:
+    """Mutations restent admin-only même si GET est ouvert aux readers."""
+    resp = client.post(
+        "/api/entities",
+        json={"name": "Reader Try Create", "legal_name": "Reader Try Create"},
+    )
     assert resp.status_code == 403
 
 
