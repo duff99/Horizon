@@ -138,8 +138,8 @@ def list_transactions(
 @router.get("/export")
 def export_transactions(
     entity_id: int | None = Query(None),
-    date_from: str | None = Query(None),
-    date_to: str | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     bank_account_id: int | None = Query(None),
     category_id: int | None = Query(None),
     counterparty_id: int | None = Query(None),
@@ -192,7 +192,10 @@ def export_transactions(
         conditions.append(
             Transaction.categorized_by == TransactionCategorizationSource.NONE
         )
-    if not include_sepa_children:
+    # Symétrique avec GET /api/transactions : un filtre counterparty_id
+    # implique d'inclure les enfants SEPA (sinon export vide pour un tier
+    # payé exclusivement par virements SEPA groupés).
+    if not include_sepa_children and not counterparty_id:
         conditions.append(Transaction.parent_transaction_id.is_(None))
     if amount_min is not None:
         conditions.append(func.abs(Transaction.amount) >= amount_min)

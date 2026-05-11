@@ -201,6 +201,60 @@ def test_transactions_export_403_foreign_entity(
     assert resp.status_code == 403
 
 
+def test_transactions_export_with_date_range(
+    client: TestClient,
+    auth_user: User,
+    db_session: Session,
+) -> None:
+    """Regression : un filtre date_from/date_to ne doit pas faire crasher
+    l'endpoint en 500 (le paramètre était typé str → comparaison
+    date >= VARCHAR refusée par SQLAlchemy).
+    """
+    entity, ba = _make_entity_with_access(db_session, auth_user, "G11 DateRange")
+    _make_transaction(db_session, ba, Decimal("-100.00"), "TxDate", 1)
+    db_session.commit()
+
+    today = date.today()
+    resp = client.get(
+        f"/api/transactions/export?entity_id={entity.id}"
+        f"&date_from={today.isoformat()}&date_to={today.isoformat()}"
+    )
+    assert resp.status_code == 200, resp.text
+    rows = _parse_csv(resp.content)
+    assert len(rows) >= 2  # header + 1 tx
+
+
+def test_transactions_export_counterparty_includes_sepa_children(
+    client: TestClient,
+    auth_user: User,
+    db_session: Session,
+) -> None:
+    """Regression : symétrique avec GET /api/transactions. Un filtre par
+    tier doit faire ressortir ses enfants SEPA même sans toggle SEPA.
+    Sans ce fix, le CSV était vide pour les tiers payés en masse SEPA.
+    """
+    from app.models.counterparty import Counterparty
+
+    entity, ba = _make_entity_with_access(db_session, auth_user, "G11 SepaCp")
+    cp = Counterparty(entity_id=entity.id, name="Salarié X", normalized_name="salarie x")
+    db_session.add(cp)
+    db_session.flush()
+    parent = _make_transaction(db_session, ba, Decimal("-3000.00"), "SEPA BATCH", 10)
+    db_session.commit()
+    child = _make_transaction(db_session, ba, Decimal("-1500.00"), "SEPA child", 11)
+    child.parent_transaction_id = parent.id
+    child.counterparty_id = cp.id
+    db_session.commit()
+
+    resp = client.get(
+        f"/api/transactions/export?entity_id={entity.id}&counterparty_id={cp.id}"
+    )
+    assert resp.status_code == 200, resp.text
+    rows = _parse_csv(resp.content)
+    # header + au moins une ligne (l'enfant SEPA)
+    assert len(rows) >= 2, "L'enfant SEPA du tiers doit apparaître dans l'export"
+
+
 def test_transactions_export_bom(
     client: TestClient,
     auth_user: User,
