@@ -422,7 +422,10 @@ export function DashboardPage() {
 
       <AlertsSection entityId={entityIdForQueries} />
 
-      <MonthComparisonCard entityId={entityId} />
+      <MonthComparisonCard
+        entityId={entityId}
+        referenceMonth={period.to.slice(0, 7)}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {data && <BalanceTrendChart summary={data} />}

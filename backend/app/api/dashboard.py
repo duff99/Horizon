@@ -751,15 +751,32 @@ def _previous_first(first_of: date) -> date:
 @router.get("/month-comparison", response_model=MonthComparison)
 def get_month_comparison(
     entity_id: int | None = Query(None),
+    month: str | None = Query(
+        None,
+        pattern=r"^\d{4}-\d{2}$",
+        description=(
+            "Mois de référence au format YYYY-MM. Si fourni, compare ce mois "
+            "vs son mois précédent (utilisé pour suivre le sélecteur de "
+            "période côté UI). Sinon, utilise le mois courant."
+        ),
+    ),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MonthComparison:
-    """Comparaison in/out du mois courant vs mois précédent (en centimes)."""
+    """Comparaison in/out d'un mois donné vs son mois précédent (en centimes).
+
+    Si le paramètre `month` n'est pas fourni, l'ancre est le mois courant
+    (comportement historique).
+    """
     bank_account_ids = _resolve_accessible_bank_accounts(
         db, user=user, entity_id=entity_id,
     )
-    today = date.today()
-    current_first = today.replace(day=1)
+    if month is not None:
+        y, m = month.split("-")
+        current_first = date(int(y), int(m), 1)
+    else:
+        today = date.today()
+        current_first = today.replace(day=1)
     previous_first = _previous_first(current_first)
 
     current_label = f"{_FR_MONTHS_ABBR[current_first.month - 1]} {current_first.year}"

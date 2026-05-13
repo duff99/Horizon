@@ -12,11 +12,20 @@ export interface MonthComparison {
   previous: MonthBlock;
 }
 
-export function useMonthComparison(entityId: number | null) {
+/**
+ * Compare in/out d'un mois vs son mois précédent.
+ * Si `month` (YYYY-MM) est fourni, le widget suit le sélecteur de période
+ * du Dashboard ; sinon il s'ancre sur le mois courant.
+ */
+export function useMonthComparison(
+  entityId: number | null,
+  month?: string | null,
+) {
   const params = new URLSearchParams();
   if (entityId != null) params.set("entity_id", String(entityId));
+  if (month) params.set("month", month);
   return useQuery<MonthComparison>({
-    queryKey: ["dashboard", "month-comparison", entityId],
+    queryKey: ["dashboard", "month-comparison", entityId, month ?? null],
     queryFn: () =>
       apiFetch<MonthComparison>(
         `/api/dashboard/month-comparison?${params.toString()}`,

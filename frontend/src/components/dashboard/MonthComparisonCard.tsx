@@ -37,10 +37,16 @@ interface Row {
 
 interface Props {
   entityId: number | null;
+  /** Mois de référence (YYYY-MM) — pilote l'ancrage de la comparaison.
+   * Si omis, le widget utilise le mois courant. */
+  referenceMonth?: string | null;
 }
 
-export function MonthComparisonCard({ entityId }: Props) {
-  const { data, isLoading, isError } = useMonthComparison(entityId);
+export function MonthComparisonCard({ entityId, referenceMonth }: Props) {
+  const { data, isLoading, isError } = useMonthComparison(
+    entityId,
+    referenceMonth,
+  );
 
   const rows = useMemo<Row[]>(() => {
     if (!data) return [];
