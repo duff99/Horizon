@@ -198,11 +198,15 @@ export const DOC_SECTIONS: DocSectionData[] = [
       "Pour exporter le tableau pivot : cliquez sur le bouton 'Exporter le pivot CSV' placé sous le tableau. Le fichier contient toutes les colonnes catégorie × mois (réalisé, engagé, prévisionnel) pour le scénario et la période sélectionnés.",
     ],
     tips: [
+      "Catégories à double sens (kind='both' : TVA, Flux financiers, Emprunts, Virements internes, Impôts/Taxes, etc.) — elles apparaissent en DEUX lignes dans le pivot, suffixées '(entrées)' et '(sorties)'. La ligne entrées agrège uniquement les transactions positives, la ligne sorties uniquement les négatives. Évite que des décaissements remontent en encaissements négatifs.",
+      "Badge ⚠ (signe inattendu) dans une cellule : une transaction au signe opposé au kind de la catégorie est présente sur ce mois (ex : remboursement client sur une catégorie kind='in', ou avoir fournisseur sur kind='out'). Survole le badge pour le détail. Deux corrections possibles : reclasser la transaction dans une catégorie cohérente, ou changer le kind de la catégorie (admin).",
       "Les mois passés du pivot sont remplis à partir des transactions réelles ; les mois futurs combinent les engagements existants et les saisies prévisionnelles manuelles.",
       "Un scénario est lié à une société : changer de société dans l'EntitySelector ouvre l'autre jeu de scénarios. Vous ne pouvez pas comparer deux scénarios de sociétés différentes côte à côte.",
       "Si vous n'avez accès qu'à une seule société, elle est utilisée automatiquement même sans sélection explicite.",
       "Si vous changez de scénario en cours de saisie, le tiroir se referme : enregistrez avant de basculer.",
       "Voir aussi la section Engagements pour saisir une facture précise à venir, et la section Analyse pour l'autonomie de trésorerie (Runway) calculée à partir de la consommation récente (Burn rate).",
+      "Onglet 'Suivi des écarts' : compare ce qui avait été prévu (snapshot figé au passage du mois) à ce qui a réellement été importé. Le snapshot est pris automatiquement à la première consultation du Suivi pour un mois passé, ou manuellement via le bouton 'Re-clôturer ce mois' (utile si tu as ajouté/modifié des règles prévisionnelles après la première clôture). Couleur des écarts : vert si |écart| < 10 %, ambre < 25 %, rouge au-delà. Une catégorie sans prévision (— dans la colonne Prévu) signifie qu'aucune règle ne couvrait ce mois pour cette catégorie ; le réalisé reste affiché pour signaler les flux imprévus.",
+      "Import d'un mois en cours : tes lignes prévisionnelles ne sont jamais écrasées. Pendant le mois courant, la cellule du pivot affiche le maximum (en magnitude, dans le bon sens) entre ton prévisionnel et le réalisé partiel ; dès le 1er du mois suivant, la cellule bascule sur le réalisé pur et l'onglet 'Suivi des écarts' devient consultable.",
     ],
     panel: {
       summary:

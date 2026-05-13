@@ -31,11 +31,13 @@ export function formatMonthLabel(
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-/** Format an integer cents value as "1 234 €" in French locale. */
+/** Format an integer cents value as "1 234 €" in French locale.
+ *  Utilise une espace insécable (U+00A0) entre le nombre et le symbole € pour
+ *  éviter que "€" parte à la ligne suivante quand la cellule est étroite. */
 export function formatCents(cents: number | null | undefined): string {
   if (cents == null) return "—";
   const v = Math.round(cents / 100);
-  return `${INT_FR.format(v)} €`;
+  return `${INT_FR.format(v)} €`;
 }
 
 /** "2026-04" → "2026-04-01" (first day) as ISO date string. */
