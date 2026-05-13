@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCommitments } from "@/api/commitments";
 import { useLines } from "@/api/forecastLines";
@@ -135,8 +136,15 @@ export function CellEditorDrawer({
   }, [allLinesForCategory, month]);
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  // Rendu via React Portal dans `document.body` : `<main>` du Layout porte
+  // `overflow-x-clip`, qui crée un containing block pour les descendants
+  // `position: fixed` (paint-containment Chrome). Sans Portal, le drawer
+  // était contraint au flux de `<main>` (barre vide en haut, contenu coupé
+  // en bas car la hauteur se calculait sur le scroll de la page, pas sur le
+  // viewport). Même raison que dans `modal.tsx` / `confirm-dialog.tsx`.
+  return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <div
         className="absolute inset-0 bg-black/40"
@@ -200,7 +208,7 @@ export function CellEditorDrawer({
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {tab === "paid" && (
             <PaidTab
               loading={txQuery.isLoading}
@@ -255,7 +263,8 @@ export function CellEditorDrawer({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
