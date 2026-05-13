@@ -4,18 +4,18 @@ import { HelpButton } from '@/components/help/HelpButton';
 import { HelpProvider } from '@/components/help/HelpProvider';
 import { Sidebar } from '@/components/Sidebar';
 
-// Routes qui exploitent toute la largeur disponible (tableaux denses).
-// Les autres restent dans un container max-w-[1320px] pour le confort
-// de lecture (pages éditoriales, formulaires).
-const FULL_WIDTH_PREFIXES = ['/previsionnel'];
+// Pages éditoriales / lecture longue : on conserve un container plus
+// étroit pour le confort de lecture. Toutes les autres pages
+// exploitent toute la largeur disponible.
+const NARROW_PREFIXES = ['/documentation'];
 
-function isFullWidthRoute(pathname: string): boolean {
-  return FULL_WIDTH_PREFIXES.some((p) => pathname.startsWith(p));
+function isNarrowRoute(pathname: string): boolean {
+  return NARROW_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
 export function Layout() {
   const { pathname } = useLocation();
-  const fullWidth = isFullWidthRoute(pathname);
+  const narrow = isNarrowRoute(pathname);
 
   return (
     <HelpProvider>
@@ -29,9 +29,9 @@ export function Layout() {
         <main className="flex-1 overflow-x-clip">
           <div
             className={
-              fullWidth
-                ? 'w-full px-6 py-6'
-                : 'mx-auto w-full max-w-[1320px] px-8 py-6'
+              narrow
+                ? 'mx-auto w-full max-w-[1100px] px-8 py-6'
+                : 'w-full px-6 py-6'
             }
           >
             <Outlet />
