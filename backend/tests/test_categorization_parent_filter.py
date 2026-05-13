@@ -1,8 +1,11 @@
-"""TDD C4 — Les règles de catégorisation ne doivent pas matcher les enfants d'agrégat.
+"""Règles de catégorisation : périmètre vis-à-vis des agrégats SEPA.
 
-Contexte : une transaction agrégat (is_aggregation_parent=True, parent_transaction_id=None)
-représente un VIR SEPA groupé ; ses enfants (parent_transaction_id=<id>) portent le détail
-unitaire. Seul le parent doit être catégorisé par les règles automatiques.
+Convention : la transaction synthétique `is_aggregation_parent=True`
+résume la somme de ses enfants et n'a pas de sémantique métier propre —
+elle ne doit JAMAIS être catégorisée par une règle. À l'inverse, les
+enfants (lignes unitaires, commissions, etc.) sont des transactions
+réelles qui doivent pouvoir être catégorisées sinon elles restent
+indéfiniment dans la rubrique "non catégorisées" du prévisionnel.
 """
 from datetime import date
 from decimal import Decimal
@@ -70,8 +73,10 @@ def _make_tx(
 # Tests
 # ---------------------------------------------------------------------------
 
-def test_matches_transaction_ignores_children(db_session, bank_account) -> None:
-    """matches_transaction doit retourner False pour tout enfant d'agrégat."""
+def test_matches_transaction_ignores_aggregation_parent_but_keeps_children(
+    db_session, bank_account
+) -> None:
+    """matches_transaction : parent synthétique ignoré, enfants matchables."""
     imp = _make_import(db_session, bank_account.id, "tva1")
 
     parent = _make_tx(
@@ -110,22 +115,23 @@ def test_matches_transaction_ignores_children(db_session, bank_account) -> None:
     db_session.add(rule)
     db_session.commit()
 
-    # Le parent doit matcher
-    assert matches_transaction(rule, parent) is True, (
-        "Le parent (is_aggregation_parent=True, parent_transaction_id=None) "
-        "doit matcher la règle."
+    # Le parent synthétique ne doit JAMAIS matcher (pas de sémantique propre).
+    assert matches_transaction(rule, parent) is False, (
+        "Le parent synthétique (is_aggregation_parent=True) ne doit pas matcher."
     )
 
-    # Aucun enfant ne doit matcher
+    # Les enfants doivent matcher : ce sont des tx réelles, comptées par le
+    # forecast et listées dans la page Transactions.
     for child in children:
-        assert matches_transaction(rule, child) is False, (
-            f"L'enfant #{child.id} (parent_transaction_id={child.parent_transaction_id}) "
-            "ne doit PAS matcher la règle."
+        assert matches_transaction(rule, child) is True, (
+            f"L'enfant #{child.id} doit pouvoir être catégorisé par la règle."
         )
 
 
-def test_apply_rule_skips_children(db_session, bank_account) -> None:
-    """apply_rule doit mettre à jour 1 ligne uniquement (le parent), pas 4."""
+def test_apply_rule_catches_children_skips_aggregation_parent(
+    db_session, bank_account
+) -> None:
+    """apply_rule met à jour les enfants (3) mais saute le parent synthétique."""
     imp = _make_import(db_session, bank_account.id, "tva2")
 
     parent = _make_tx(
@@ -166,21 +172,24 @@ def test_apply_rule_skips_children(db_session, bank_account) -> None:
 
     report = apply_rule(db_session, rule)
 
-    # Exactement 1 ligne mise à jour (le parent uniquement)
-    assert report.updated_count == 1, (
-        f"apply_rule a mis à jour {report.updated_count} ligne(s) au lieu de 1. "
-        "Les enfants d'agrégat ne doivent pas être catégorisés."
+    # Exactement 3 enfants catégorisés ; le parent synthétique est sauté.
+    assert report.updated_count == 3, (
+        f"apply_rule a mis à jour {report.updated_count} ligne(s) au lieu de 3. "
+        "Les enfants SEPA doivent être catégorisables ; seul le parent "
+        "synthétique est exclu."
     )
 
     db_session.refresh(parent)
     for child in children:
         db_session.refresh(child)
 
-    assert parent.category_id == cat.id, "Le parent doit avoir été catégorisé."
-    assert parent.categorized_by == TransactionCategorizationSource.RULE
+    assert parent.category_id is None, (
+        "Le parent synthétique ne doit pas être catégorisé."
+    )
+    assert parent.categorized_by == TransactionCategorizationSource.NONE
 
     for child in children:
-        assert child.category_id is None, (
-            f"L'enfant #{child.id} ne doit pas être catégorisé."
+        assert child.category_id == cat.id, (
+            f"L'enfant #{child.id} doit avoir été catégorisé."
         )
-        assert child.categorized_by == TransactionCategorizationSource.NONE
+        assert child.categorized_by == TransactionCategorizationSource.RULE

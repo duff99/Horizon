@@ -16,6 +16,7 @@ import {
   type ClientErrorFilters,
 } from "@/api/clientErrors";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -159,15 +160,16 @@ export function AdminClientErrorsPage() {
         {/* Depuis */}
         <div className="space-y-1">
           <label className="text-[11.5px] font-medium text-ink-2">Depuis</label>
-          <input
-            type="date"
-            value={since}
-            onChange={(e) => {
-              setSince(e.target.value);
-              handleFilterChange();
-            }}
-            className="rounded-md border border-line bg-panel px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus:border-ink-2"
-          />
+          <div className="w-[150px]">
+            <DatePicker
+              value={since}
+              onChange={(v) => {
+                setSince(v);
+                handleFilterChange();
+              }}
+              placeholder="Depuis"
+            />
+          </div>
         </div>
 
         {/* Jusqu'au */}
@@ -175,15 +177,16 @@ export function AdminClientErrorsPage() {
           <label className="text-[11.5px] font-medium text-ink-2">
             Jusqu'au
           </label>
-          <input
-            type="date"
-            value={until}
-            onChange={(e) => {
-              setUntil(e.target.value);
-              handleFilterChange();
-            }}
-            className="rounded-md border border-line bg-panel px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus:border-ink-2"
-          />
+          <div className="w-[150px]">
+            <DatePicker
+              value={until}
+              onChange={(v) => {
+                setUntil(v);
+                handleFilterChange();
+              }}
+              placeholder="Jusqu'au"
+            />
+          </div>
         </div>
       </div>
 

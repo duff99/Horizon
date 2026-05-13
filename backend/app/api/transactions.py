@@ -73,11 +73,19 @@ def list_transactions(
             Transaction.categorized_by == TransactionCategorizationSource.NONE
         )
     # E7 — masquer les enfants SEPA par défaut (parent_transaction_id IS NULL)
-    # Exception : si l'appelant filtre explicitement par counterparty_id, on
-    # inclut les enfants SEPA. Les batch parents SEPA n'ont pas de tier, donc
-    # demander "tx de ce tiers" sans les enfants renverrait souvent 0 ligne
-    # (cas des salaires/fournisseurs payés par lot SEPA).
-    if not filters.include_sepa_children and not filters.counterparty_id:
+    # Exceptions :
+    # - filtre counterparty_id : les batch parents SEPA n'ont pas de tier,
+    #   demander "tx de ce tiers" sans les enfants renverrait 0 ligne.
+    # - filtre uncategorized : les enfants SEPA sont les seules tx réellement
+    #   non-catégorisables au sens du moteur prévisionnel (les parents sont
+    #   des agrégats sans signification métier). Sans cette exception, la
+    #   page Transactions cache les tx que le prévisionnel compte pourtant
+    #   comme "non catégorisées" — l'utilisateur ne peut plus les classer.
+    if (
+        not filters.include_sepa_children
+        and not filters.counterparty_id
+        and not filters.uncategorized
+    ):
         conditions.append(Transaction.parent_transaction_id.is_(None))
     # E8 — filtres montant (valeur absolue, cohérent avec RuleForm)
     if filters.amount_min is not None:
@@ -192,10 +200,11 @@ def export_transactions(
         conditions.append(
             Transaction.categorized_by == TransactionCategorizationSource.NONE
         )
-    # Symétrique avec GET /api/transactions : un filtre counterparty_id
-    # implique d'inclure les enfants SEPA (sinon export vide pour un tier
-    # payé exclusivement par virements SEPA groupés).
-    if not include_sepa_children and not counterparty_id:
+    # Symétrique avec GET /api/transactions : un filtre counterparty_id ou
+    # uncategorized=true implique d'inclure les enfants SEPA (sinon export
+    # vide pour un tier payé en SEPA groupé, ou pour les tx que le moteur
+    # prévisionnel compte comme non catégorisées).
+    if not include_sepa_children and not counterparty_id and not uncategorized:
         conditions.append(Transaction.parent_transaction_id.is_(None))
     if amount_min is not None:
         conditions.append(func.abs(Transaction.amount) >= amount_min)
@@ -310,8 +319,11 @@ def bulk_categorize_filtered(
         Transaction.is_aggregation_parent.is_(False),
     ]
 
-    # E7 — masquer les enfants SEPA par défaut
-    if not payload.include_sepa_children:
+    # E7 — masquer les enfants SEPA par défaut.
+    # Si uncategorized=true est demandé, on les inclut (sinon le bulk
+    # recategorize ne peut jamais traiter les tx que le moteur prévisionnel
+    # compte comme non catégorisées — cohérence avec GET /api/transactions).
+    if not payload.include_sepa_children and not payload.uncategorized:
         conditions.append(Transaction.parent_transaction_id.is_(None))
 
     if payload.entity_id is not None:

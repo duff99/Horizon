@@ -61,8 +61,21 @@ export function CategoryCombobox({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [openUp, setOpenUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // À l'ouverture, calcule l'espace disponible sous le trigger : si la
+  // dropdown (≈ 320 px) déborderait sous le viewport, on l'ouvre vers le
+  // haut. Indispensable dans un Drawer en bas d'écran (vaul) où l'espace
+  // sous le champ catégorie est faible.
+  useEffect(() => {
+    if (!open || !rootRef.current) return;
+    const rect = rootRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    setOpenUp(spaceBelow < 320 && spaceAbove > spaceBelow);
+  }, [open]);
 
   const selected = value != null ? buildPath(categories, value) : null;
 
@@ -142,7 +155,12 @@ export function CategoryCombobox({
 
       {open && (
         <div
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-md border border-line bg-panel shadow-lg"
+          className={cn(
+            "absolute left-0 right-0 z-50 overflow-hidden rounded-md border border-line bg-panel shadow-lg",
+            openUp
+              ? "bottom-[calc(100%+4px)]"
+              : "top-[calc(100%+4px)]",
+          )}
           role="listbox"
         >
           <div className="flex items-center border-b border-line-soft px-2.5">

@@ -65,19 +65,24 @@ def build_rule_filter(rule: CategorizationRule) -> ColumnElement[bool]:
     if rule.bank_account_id is not None:
         clauses.append(Transaction.bank_account_id == rule.bank_account_id)
 
-    # Garde universelle : ne JAMAIS matcher les enfants d'agrégat. Les règles
-    # opèrent sur les transactions de premier niveau uniquement (le parent
-    # porte le total ; les enfants sont des fragments masqués UI).
-    clauses.append(Transaction.parent_transaction_id.is_(None))
+    # Garde universelle : ne jamais matcher les PARENTS synthétiques
+    # d'agrégat (lignes virtuelles qui résument la somme des enfants — pas
+    # de réalité métier). Les enfants SEPA, eux, sont catégorisables : ils
+    # sont comptés par le moteur prévisionnel et listés dans la page
+    # Transactions. Sans cette catégorisation, les commissions et les
+    # paiements unitaires d'un virement groupé restent indéfiniment
+    # non catégorisés.
+    clauses.append(Transaction.is_aggregation_parent.is_(False))
 
     return and_(*clauses)
 
 
 def matches_transaction(rule: CategorizationRule, tx: Transaction) -> bool:
     """Évalue une règle contre une Transaction chargée (en Python, sans SQL)."""
-    # Garde universelle : les enfants d'agrégat (parent_transaction_id non NULL)
-    # sont des fragments masqués UI — les règles ne doivent jamais les capter.
-    if tx.parent_transaction_id is not None:
+    # Garde universelle : les parents synthétiques d'agrégat ne sont jamais
+    # catégorisés par règle (ils résument leurs enfants — pas de sémantique
+    # propre). Les enfants SEPA sont en revanche catégorisables.
+    if tx.is_aggregation_parent:
         return False
 
     if rule.label_operator is not None and rule.label_value:
