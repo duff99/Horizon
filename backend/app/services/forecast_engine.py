@@ -20,7 +20,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.bank_account import BankAccount
@@ -52,6 +52,11 @@ class CellValue:
     line_method: Optional[str] = None
     line_params: Optional[dict] = None
     insufficient_history: bool = False  # D5 : AVG_* sans données disponibles
+    # True si la cellule mélange des montants au signe "inattendu" pour son
+    # kind de catégorie (ex : catégorie kind='in' avec une tx négative, ou
+    # kind='out' avec une tx positive). Permet à l'UI d'afficher un badge
+    # d'alerte sans modifier l'agrégation.
+    sign_anomaly: bool = False
 
 
 @dataclass
@@ -88,12 +93,26 @@ class Preloaded:
     """
     transactions_by_cat_month: dict[tuple[int, str], int]
     commitments_by_cat_month: dict[tuple[int, str], int]
-    lines_by_cat: dict[int, "ForecastLine"]
+    # Liste de toutes les ForecastLine par catégorie (plusieurs lignes
+    # peuvent coexister, chacune avec sa fenêtre [start_month, end_month]).
+    # `_pick_line_for_month` choisit la plus spécifique couvrant un mois.
+    lines_by_cat: dict[int, list["ForecastLine"]]
     categories_by_name: dict[str, int]
     # Net mensuel des transactions sans catégorie. Indispensable pour que
     # la closing_balance_projection reflète la trésorerie réelle, sinon
     # elle diverge de la réalité en proportion des tx non-catégorisées.
     uncategorized_net_by_month: dict[str, int] = field(default_factory=dict)
+    # Décomposition signe positif / signe négatif des transactions, par
+    # (cat_id, month_key). Indispensable pour (1) splitter les catégories
+    # kind='both' en deux lignes pivot et (2) détecter les anomalies de
+    # signe (kind='in' avec montant<0, kind='out' avec montant>0).
+    transactions_pos_by_cat_month: dict[tuple[int, str], int] = field(default_factory=dict)
+    transactions_neg_by_cat_month: dict[tuple[int, str], int] = field(default_factory=dict)
+    # Engagements PENDING split par direction (IN positif / OUT négatif).
+    commitments_in_by_cat_month: dict[tuple[int, str], int] = field(default_factory=dict)
+    commitments_out_by_cat_month: dict[tuple[int, str], int] = field(default_factory=dict)
+    # Index Category.kind ('in' | 'out' | 'both') par id.
+    kind_by_cat: dict[int, str] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -152,12 +171,21 @@ def _preload(
     latest = _next_month(to_first)  # exclusive upper bound
 
     # 1) Transactions : SUM(amount) group by (category_id, month)
+    #    Décompose pos / neg pour supporter le split kind='both' et la
+    #    détection des anomalies de signe (kind='in' avec tx<0, etc.).
     tx_month_col = func.date_trunc("month", Transaction.operation_date)
     tx_stmt = (
         select(
             Transaction.category_id,
             tx_month_col.label("month"),
-            func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+            func.coalesce(
+                func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)),
+                0,
+            ).label("pos"),
+            func.coalesce(
+                func.sum(case((Transaction.amount < 0, Transaction.amount), else_=0)),
+                0,
+            ).label("neg"),
         )
         .join(BankAccount, BankAccount.id == Transaction.bank_account_id)
         .where(
@@ -175,11 +203,17 @@ def _preload(
         tx_stmt = tx_stmt.where(BankAccount.id.in_(account_ids))
 
     transactions_by_cat_month: dict[tuple[int, str], int] = {}
-    for cat_id, month, total in session.execute(tx_stmt).all():
+    transactions_pos_by_cat_month: dict[tuple[int, str], int] = {}
+    transactions_neg_by_cat_month: dict[tuple[int, str], int] = {}
+    for cat_id, month, pos, neg in session.execute(tx_stmt).all():
         if cat_id is None or month is None:
             continue
         key = (int(cat_id), _month_key(month))
-        transactions_by_cat_month[key] = _eur_to_cents(Decimal(total))
+        pos_cents = _eur_to_cents(Decimal(pos))
+        neg_cents = _eur_to_cents(Decimal(neg))
+        transactions_pos_by_cat_month[key] = pos_cents
+        transactions_neg_by_cat_month[key] = neg_cents
+        transactions_by_cat_month[key] = pos_cents + neg_cents
 
     # 1bis) Transactions sans catégorie : SUM(amount) group by month
     # Indispensable pour la projection de solde (sinon écart vs réalité
@@ -232,6 +266,8 @@ def _preload(
         .group_by(Commitment.category_id, cm_month_col, Commitment.direction)
     )
     commitments_by_cat_month: dict[tuple[int, str], int] = {}
+    commitments_in_by_cat_month: dict[tuple[int, str], int] = {}
+    commitments_out_by_cat_month: dict[tuple[int, str], int] = {}
     for cat_id, month, direction, total in session.execute(cm_stmt).all():
         if cat_id is None or month is None:
             continue
@@ -239,22 +275,34 @@ def _preload(
         signed = amount if direction == CommitmentDirection.IN else -amount
         key = (int(cat_id), _month_key(month))
         commitments_by_cat_month[key] = commitments_by_cat_month.get(key, 0) + signed
+        if direction == CommitmentDirection.IN:
+            commitments_in_by_cat_month[key] = (
+                commitments_in_by_cat_month.get(key, 0) + amount
+            )
+        else:
+            commitments_out_by_cat_month[key] = (
+                commitments_out_by_cat_month.get(key, 0) - amount
+            )
 
-    # 3) Lignes prévisionnelles du scénario
-    lines_by_cat: dict[int, ForecastLine] = {}
+    # 3) Lignes prévisionnelles du scénario (peuvent être multiples par cat)
+    lines_by_cat: dict[int, list[ForecastLine]] = {}
     for line in session.scalars(
         select(ForecastLine).where(ForecastLine.scenario_id == scenario_id)
     ):
-        lines_by_cat[line.category_id] = line
+        lines_by_cat.setdefault(line.category_id, []).append(line)
 
-    # 5) Index des catégories par nom (lower().strip()) — pour les formules
+    # 5) Index des catégories par nom (lower().strip()) — pour les formules ;
+    #    et kind par id, pour le split kind='both' et la détection d'anomalies.
     categories_by_name: dict[str, int] = {}
-    for cat_id, cat_name in session.execute(
-        select(Category.id, Category.name)
+    kind_by_cat: dict[int, str] = {}
+    for cat_id, cat_name, cat_kind in session.execute(
+        select(Category.id, Category.name, Category.kind)
     ).all():
-        if cat_name is None:
+        if cat_id is None:
             continue
-        categories_by_name[cat_name.strip().lower()] = int(cat_id)
+        if cat_name is not None:
+            categories_by_name[cat_name.strip().lower()] = int(cat_id)
+        kind_by_cat[int(cat_id)] = cat_kind or "both"
 
     return Preloaded(
         transactions_by_cat_month=transactions_by_cat_month,
@@ -262,6 +310,11 @@ def _preload(
         lines_by_cat=lines_by_cat,
         categories_by_name=categories_by_name,
         uncategorized_net_by_month=uncategorized_net_by_month,
+        transactions_pos_by_cat_month=transactions_pos_by_cat_month,
+        transactions_neg_by_cat_month=transactions_neg_by_cat_month,
+        commitments_in_by_cat_month=commitments_in_by_cat_month,
+        commitments_out_by_cat_month=commitments_out_by_cat_month,
+        kind_by_cat=kind_by_cat,
     )
 
 
@@ -519,6 +572,55 @@ def _evaluate_formula(
 # ---------------------------------------------------------------------------
 
 
+_OPEN_END_PENALTY = 10_000  # rang en mois ; toute fenêtre bornée gagne contre une fenêtre ouverte
+
+def _line_specificity_score(line: ForecastLine) -> int:
+    """Plus bas = plus spécifique.
+
+    Hiérarchie :
+      - fenêtre exactement bornée → (end - start) en mois (0 pour SINGLE_MONTH).
+      - start borné, end NULL → score élevé (récurrente ouverte vers le futur).
+      - start NULL et end NULL → score le plus élevé (toujours).
+    """
+    s = line.start_month
+    e = line.end_month
+    if s is not None and e is not None:
+        return (e.year - s.year) * 12 + (e.month - s.month)
+    if s is not None and e is None:
+        return _OPEN_END_PENALTY
+    if s is None and e is not None:
+        return _OPEN_END_PENALTY
+    return _OPEN_END_PENALTY * 2
+
+
+def _line_covers_month(line: ForecastLine, month: date) -> bool:
+    if line.start_month is not None and month < _first_of_month(line.start_month):
+        return False
+    if line.end_month is not None and month > _first_of_month(line.end_month):
+        return False
+    return True
+
+
+def _pick_line_for_month(
+    lines: list[ForecastLine], month: date
+) -> Optional[ForecastLine]:
+    """Sélectionne la ligne la plus spécifique couvrant `month`.
+
+    En cas d'égalité de spécificité, on prend celle au `start_month` le plus
+    récent (ordre stable : créée le plus récemment "gagne" à fenêtre égale).
+    """
+    candidates = [ln for ln in lines if _line_covers_month(ln, month)]
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda ln: (
+            _line_specificity_score(ln),
+            -(ln.start_month.toordinal() if ln.start_month else 0),
+        )
+    )
+    return candidates[0]
+
+
 def _combine_total(
     realized: int, committed: int, forecast: int, month: date, current_month: date,
 ) -> int:
@@ -529,11 +631,23 @@ def _combine_total(
         # de l'utilisateur. Si aucune ligne (forecast == 0), remonter les
         # engagements PENDING pour ne pas les masquer visuellement.
         return forecast if forecast != 0 else committed
-    # Mois courant : réalisé + engagé + reste prévisionnel non couvert
-    remaining = forecast - realized - committed
-    if remaining < 0:
-        remaining = 0
-    return realized + committed + remaining
+    # Mois courant
+    actual = realized + committed
+    if forecast == 0:
+        # Pas de ligne prévisionnelle : seuls le réalisé et l'engagé comptent.
+        return actual
+    # Avec une ligne, le `forecast` agit comme "total attendu pour le mois" dans
+    # son sens (positif → plancher d'encaissement, négatif → plancher de
+    # décaissement en valeur absolue). On garde le maximum en magnitude entre
+    # le réel (déjà constaté) et la prévision, dans le même signe.
+    #
+    # Ancien bug : `remaining = max(0, forecast - actual)` ne marchait que
+    # pour les forecasts positifs. Un forecast négatif (décaissement) voyait
+    # son `remaining` clampé à 0 → la cellule du mois courant tombait à
+    # `actual` (souvent 0) au lieu d'afficher la prévision.
+    if forecast > 0:
+        return max(actual, forecast)
+    return min(actual, forecast)
 
 
 def _compute_cell_internal(
@@ -546,53 +660,108 @@ def _compute_cell_internal(
     account_ids: Optional[list[int]] = None,
     seen: Optional[set[tuple[int, str]]] = None,
     preloaded: Optional["Preloaded"] = None,
+    sign_filter: Optional[str] = None,
 ) -> CellValue:
+    """Calcule une cellule pivot.
+
+    ``sign_filter`` :
+      - ``None`` → comportement historique (signé, brut).
+      - ``"pos"`` → ne garde que les composantes positives (montants > 0,
+        commitments IN, max(forecast, 0)). Utilisé pour la ligne "entrées"
+        d'une catégorie kind='both'.
+      - ``"neg"`` → ne garde que les composantes négatives (montants < 0,
+        commitments OUT, min(forecast, 0)). Utilisé pour la ligne "sorties"
+        d'une catégorie kind='both'.
+    """
     seen = seen or set()
     month = _first_of_month(month)
     current_month = _first_of_month(date.today())
+    month_key = _month_key(month)
 
-    realized = _sum_transactions(
-        session,
-        entity_id,
-        category_id,
-        month,
-        account_ids=account_ids,
-        preloaded=preloaded,
-    )
-    committed = _sum_commitments(
-        session, entity_id, category_id, month, preloaded=preloaded
-    )
+    # Décomposition pos/neg : nécessaire pour le split kind='both' et pour
+    # détecter une anomalie de signe sur kind='in'/'out'.
+    if preloaded is not None:
+        key = (category_id, month_key)
+        realized_pos = preloaded.transactions_pos_by_cat_month.get(key, 0)
+        realized_neg = preloaded.transactions_neg_by_cat_month.get(key, 0)
+        committed_in = preloaded.commitments_in_by_cat_month.get(key, 0)
+        committed_out = preloaded.commitments_out_by_cat_month.get(key, 0)
+    else:
+        # Chemin sans preload (peu utilisé en prod, mais conservé pour les
+        # tests unitaires de compute_cell).
+        realized_signed = _sum_transactions(
+            session, entity_id, category_id, month, account_ids=account_ids
+        )
+        committed_signed = _sum_commitments(
+            session, entity_id, category_id, month
+        )
+        # Sans preload on n'a pas la décomposition fine : on l'approxime
+        # par le signe du total agrégé, ce qui est suffisant pour les tests
+        # qui n'exercent jamais le sign_filter.
+        realized_pos = max(realized_signed, 0)
+        realized_neg = min(realized_signed, 0)
+        committed_in = max(committed_signed, 0)
+        committed_out = min(committed_signed, 0)
+
+    realized_signed = realized_pos + realized_neg
+    committed_signed = committed_in + committed_out
 
     line: Optional[ForecastLine] = None
-    forecast = 0
+    forecast_signed = 0
     if month >= current_month:
+        # Plusieurs lignes peuvent exister pour cette catégorie : on prend la
+        # plus spécifique couvrant `month`. Ex : ponctuelle Mai bat récurrente
+        # ouverte Juin→∞ pour le mois de Mai.
         if preloaded is not None:
-            line = preloaded.lines_by_cat.get(category_id)
+            candidates = preloaded.lines_by_cat.get(category_id, [])
         else:
-            line = session.scalar(
-                select(ForecastLine).where(
-                    ForecastLine.scenario_id == scenario_id,
-                    ForecastLine.category_id == category_id,
+            candidates = list(
+                session.scalars(
+                    select(ForecastLine).where(
+                        ForecastLine.scenario_id == scenario_id,
+                        ForecastLine.category_id == category_id,
+                    )
                 )
             )
+        line = _pick_line_for_month(candidates, month)
         line_value = 0
         if line is not None:
-            # Respect start_month / end_month si définis
-            if (line.start_month is None or month >= _first_of_month(line.start_month)) and (
-                line.end_month is None or month <= _first_of_month(line.end_month)
-            ):
-                line_value = _evaluate_line(
-                    session,
-                    line,
-                    scenario_id=scenario_id,
-                    entity_id=entity_id,
-                    month=month,
-                    seen=seen,
-                    preloaded=preloaded,
-                )
-        forecast = line_value
+            line_value = _evaluate_line(
+                session,
+                line,
+                scenario_id=scenario_id,
+                entity_id=entity_id,
+                month=month,
+                seen=seen,
+                preloaded=preloaded,
+            )
+        forecast_signed = line_value
+
+    # Sélection de la tranche selon sign_filter
+    if sign_filter == "pos":
+        realized = realized_pos
+        committed = committed_in
+        forecast = max(forecast_signed, 0)
+    elif sign_filter == "neg":
+        realized = realized_neg
+        committed = committed_out
+        forecast = min(forecast_signed, 0)
+    else:
+        realized = realized_signed
+        committed = committed_signed
+        forecast = forecast_signed
 
     total = _combine_total(realized, committed, forecast, month, current_month)
+
+    # Détection d'anomalie de signe (uniquement en mode non-filtré : les
+    # rows splittés ne sont jamais "anormaux" par construction).
+    sign_anomaly = False
+    if sign_filter is None and preloaded is not None:
+        kind = preloaded.kind_by_cat.get(category_id)
+        if kind == "in" and realized_neg < 0:
+            sign_anomaly = True
+        elif kind == "out" and realized_pos > 0:
+            sign_anomaly = True
 
     return CellValue(
         realized_cents=realized,
@@ -601,6 +770,7 @@ def _compute_cell_internal(
         total_cents=total,
         line_method=line.method.value if line is not None else None,
         line_params=_serialize_line_params(line) if line is not None else None,
+        sign_anomaly=sign_anomaly,
     )
 
 
@@ -613,12 +783,17 @@ def compute_cell(
     month: date,
     account_ids: Optional[list[int]] = None,
     preloaded: Optional["Preloaded"] = None,
+    sign_filter: Optional[str] = None,
 ) -> CellValue:
     """API publique : calcule la valeur d'une cellule pivot.
 
     ``preloaded`` optionnel : si fourni, les queries individuelles (tx,
     commitments, forecast entries, line) sont remplacées par des lookups
     O(1) sur les dicts préchargés.
+
+    ``sign_filter`` (None | 'pos' | 'neg') : restreint la cellule à la
+    composante positive (entrées) ou négative (sorties). Utilisé pour
+    splitter les catégories kind='both'.
     """
     return _compute_cell_internal(
         session,
@@ -628,6 +803,7 @@ def compute_cell(
         month=month,
         account_ids=account_ids,
         preloaded=preloaded,
+        sign_filter=sign_filter,
     )
 
 
@@ -754,10 +930,14 @@ def compute_pivot(
                 break
         return depth
 
-    direction_by_cat = _directions_by_category(session, entity_id)
-
     rows: list[PivotRow] = []
-    for cat in categories:
+
+    def _build_row(
+        cat: Category,
+        direction: str,
+        sign_filter: Optional[str],
+        label_suffix: str = "",
+    ) -> Optional[PivotRow]:
         cells: list[CellValue] = []
         for m in months:
             cv = compute_cell(
@@ -768,25 +948,38 @@ def compute_pivot(
                 month=m,
                 account_ids=account_ids,
                 preloaded=preloaded,
+                sign_filter=sign_filter,
             )
             cells.append(cv)
-        # Ne conserver que les catégories qui ont au moins une valeur non nulle
         has_any = any(
             c.realized_cents or c.committed_cents or c.forecast_cents for c in cells
         )
         if not has_any:
-            continue
-        direction = direction_by_cat.get(cat.id, "in")
-        rows.append(
-            PivotRow(
-                category_id=cat.id,
-                parent_id=cat.parent_category_id,
-                label=cat.name,
-                level=level_of(cat.id),
-                direction=direction,
-                cells=cells,
-            )
+            return None
+        return PivotRow(
+            category_id=cat.id,
+            parent_id=cat.parent_category_id,
+            label=f"{cat.name}{label_suffix}",
+            level=level_of(cat.id),
+            direction=direction,
+            cells=cells,
         )
+
+    for cat in categories:
+        kind = preloaded.kind_by_cat.get(cat.id, "both")
+        if kind == "both":
+            # Split en deux lignes : entrées (positives) et sorties (négatives).
+            row_in = _build_row(cat, "in", "pos", " (entrées)")
+            row_out = _build_row(cat, "out", "neg", " (sorties)")
+            if row_in is not None:
+                rows.append(row_in)
+            if row_out is not None:
+                rows.append(row_out)
+        else:
+            direction = "out" if kind == "out" else "in"
+            row = _build_row(cat, direction, None)
+            if row is not None:
+                rows.append(row)
 
     # Opening balance et projection
     opening = _opening_balance_cents(

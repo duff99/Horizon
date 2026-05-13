@@ -17,6 +17,7 @@ from app.api import (
     drift_acks,
     entities,
     forecast,
+    forecast_comparison,
     forecast_lines,
     forecast_pivot,
     forecast_scenarios,
@@ -57,6 +58,7 @@ api_router.include_router(forecast.router)
 api_router.include_router(forecast_scenarios.router)
 api_router.include_router(forecast_lines.router)
 api_router.include_router(forecast_pivot.router)
+api_router.include_router(forecast_comparison.router)
 api_router.include_router(commitments.router)
 api_router.include_router(analysis.router)
 api_router.include_router(admin_backups.router)

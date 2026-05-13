@@ -144,6 +144,7 @@ def get_pivot(
                     line_method=c.line_method,
                     line_params=c.line_params,
                     insufficient_history=c.insufficient_history,
+                    sign_anomaly=c.sign_anomaly,
                 )
                 for idx, c in enumerate(row.cells)
             ],

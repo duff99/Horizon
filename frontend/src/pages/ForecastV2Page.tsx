@@ -13,6 +13,7 @@ import { usePivot } from "@/api/forecastPivot";
 import { useForecastUi } from "@/stores/forecastUi";
 import { ScenarioSelector } from "@/components/forecast/ScenarioSelector";
 import { ConsolidatedAccountsPopover } from "@/components/forecast/ConsolidatedAccountsPopover";
+import { ComparisonPanel } from "@/components/forecast/ComparisonPanel";
 import { PivotBars } from "@/components/forecast/PivotBars";
 import { PivotTable } from "@/components/forecast/PivotTable";
 import { CellEditorDrawer } from "@/components/forecast/CellEditorDrawer";
@@ -27,6 +28,10 @@ import { currentMonthStr, shiftMonth } from "@/lib/forecastFormat";
 interface DrawerState {
   month: string;
   categoryId: number;
+  /** Direction de la ligne cliquée — détermine le signe attendu pour la
+   * saisie ("in" → positif, "out" → négatif). Le formulaire signe
+   * automatiquement la valeur saisie. */
+  direction: "in" | "out";
 }
 
 export function ForecastV2Page() {
@@ -78,6 +83,10 @@ export function ForecastV2Page() {
   });
 
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
+
+  // Toggle vue : Plan (pivot prévisionnel) vs Suivi des écarts (snapshot
+  // comparé au réalisé). Même scénario, même plage, même entité.
+  const [view, setView] = useState<"plan" | "tracking">("plan");
 
   // G7 — Overlay scénario de comparaison
   const [showOverlay, setShowOverlay] = useState(false);
@@ -200,7 +209,46 @@ export function ForecastV2Page() {
         <WorkingCapitalBanner entityId={effectiveEntityId} />
       )}
 
-      {!noEntity && !noScenario && pivotQuery.data && (
+      {/* Toggle Plan ↔ Suivi des écarts */}
+      {!noEntity && !noScenario && (
+        <div className="inline-flex rounded-md border border-line-soft bg-panel p-0.5 shadow-card">
+          <button
+            type="button"
+            onClick={() => setView("plan")}
+            className={`rounded-sm px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+              view === "plan"
+                ? "bg-accent text-white"
+                : "text-ink-2 hover:text-ink"
+            }`}
+            title="Vue prévisionnelle : pivot catégorie × mois, saisie des règles et simulation."
+          >
+            Plan
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("tracking")}
+            className={`rounded-sm px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+              view === "tracking"
+                ? "bg-accent text-white"
+                : "text-ink-2 hover:text-ink"
+            }`}
+            title="Comparaison prévu (figé au passage du mois) vs réalisé (transactions importées) sur les mois clôturés."
+          >
+            Suivi des écarts
+          </button>
+        </div>
+      )}
+
+      {!noEntity && !noScenario && view === "tracking" && (
+        <ComparisonPanel
+          scenarioId={scenarioId}
+          entityId={effectiveEntityId ?? null}
+          from={period.from}
+          to={period.to}
+        />
+      )}
+
+      {!noEntity && !noScenario && view === "plan" && pivotQuery.data && (
         <>
           <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
             <div className="mb-2 flex items-baseline justify-between">
@@ -230,8 +278,8 @@ export function ForecastV2Page() {
           <div>
             <PivotTable
               result={pivotQuery.data}
-              onCellClick={(month, categoryId) =>
-                setDrawer({ month, categoryId })
+              onCellClick={(month, categoryId, direction) =>
+                setDrawer({ month, categoryId, direction })
               }
               currentMonth={currentMonth}
             />
@@ -263,6 +311,7 @@ export function ForecastV2Page() {
           open
           month={drawer.month}
           categoryId={drawer.categoryId}
+          direction={drawer.direction}
           entityId={effectiveEntityId}
           scenarioId={scenarioId}
           accountIds={accountIds}

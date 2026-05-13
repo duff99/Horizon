@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   result: PivotResult;
-  onCellClick: (month: string, categoryId: number) => void;
+  onCellClick: (
+    month: string,
+    categoryId: number,
+    direction: "in" | "out",
+  ) => void;
   currentMonth: string;
 }
 
@@ -152,23 +156,31 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [months, outRows, overrides]);
 
-  const netByMonth = useMemo(
-    () => months.map((_m, i) => inTotals[i] - outTotals[i]),
-    [months, inTotals, outTotals],
+  // Invariants comptables :
+  //   Variation nette[i]  = Encaissements[i] + Décaissements[i] (signés)
+  //                         + Net non-catégorisé[i]
+  //   Tréso fin[i]        = Tréso début[i] + Variation nette[i]
+  //   Tréso début[i+1]    = Tréso fin[i]
+  //
+  // Sans `uncategorized_net_cents`, la trésorerie de fin de mois divergeait
+  // de la réalité bancaire (les tx sans catégorie sont dans le solde
+  // mais pas dans les `rows`).
+  const uncatByMonth = useMemo(
+    () => months.map((_m, i) => result.uncategorized_net_cents?.[i] ?? 0),
+    [months, result.uncategorized_net_cents],
   );
 
-  // Opening balance per month = closing balance of previous month, or the
-  // global opening_balance_cents for the first displayed month.
-  const openingByMonth = useMemo(() => {
-    const arr: number[] = [];
-    for (let i = 0; i < months.length; i++) {
-      if (i === 0) arr.push(result.opening_balance_cents);
-      else arr.push(result.closing_balance_projection_cents[i - 1] ?? 0);
-    }
-    return arr;
-  }, [months, result.opening_balance_cents, result.closing_balance_projection_cents]);
+  const netByMonth = useMemo(
+    () =>
+      months.map(
+        (_m, i) => inTotals[i] + outTotals[i] + uncatByMonth[i],
+      ),
+    [months, inTotals, outTotals, uncatByMonth],
+  );
 
-  // Closing balance recalculé avec les overrides
+  // Tréso fin de mois calculée de proche en proche depuis le solde
+  // d'ouverture global. C'est la SEULE source de vérité du tableau, qu'il
+  // y ait des overrides ou non — garantit la continuité opening[i+1] = closing[i].
   const closingByMonth = useMemo(() => {
     const arr: number[] = [];
     for (let i = 0; i < months.length; i++) {
@@ -177,6 +189,17 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     }
     return arr;
   }, [months, result.opening_balance_cents, netByMonth]);
+
+  // Tréso début de mois : strictement la clôture du mois précédent (ou
+  // l'ouverture globale pour le premier). Continuité garantie par
+  // construction.
+  const openingByMonth = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 0; i < months.length; i++) {
+      arr.push(i === 0 ? result.opening_balance_cents : closingByMonth[i - 1]);
+    }
+    return arr;
+  }, [months, result.opening_balance_cents, closingByMonth]);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-line-soft bg-panel shadow-card">
@@ -269,7 +292,7 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             label="Décaissements"
             open={outGroupOpen}
             onToggle={() => setOutGroupOpen((v) => !v)}
-            values={outTotals.map((v) => -v)}
+            values={outTotals}
             months={months}
             currentMonth={currentMonth}
           />
@@ -289,6 +312,18 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             />
           ))}
 
+          {/* Net non-catégorisé — affiché uniquement si non-nul, indispensable
+              pour expliquer un éventuel écart visible dans le tableau. */}
+          {uncatByMonth.some((v) => v !== 0) && (
+            <SummaryRow
+              label="Tx non catégorisées (net)"
+              values={uncatByMonth}
+              months={months}
+              currentMonth={currentMonth}
+              tone="muted"
+            />
+          )}
+
           {/* Net variation */}
           <SummaryRow
             label="Variation nette de cash"
@@ -298,10 +333,11 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             tone="emphasized"
           />
 
-          {/* Closing balance — recalculé si overrides actifs */}
+          {/* Trésorerie fin de mois — toujours calculée de proche en proche
+              pour garantir la continuité opening[i+1] = closing[i]. */}
           <SummaryRow
             label={hasOverrides ? "Trésorerie en fin de mois (simulation)" : "Trésorerie en fin de mois"}
-            values={hasOverrides ? closingByMonth : result.closing_balance_projection_cents}
+            values={closingByMonth}
             months={months}
             currentMonth={currentMonth}
             tone="emphasized"
@@ -355,7 +391,7 @@ function SummaryRow({
           <td
             key={m}
             className={cn(
-              "relative px-3 py-1.5 text-right font-mono tabular-nums",
+              "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
               amountClass(cents, isFuture),
             )}
           >
@@ -414,7 +450,7 @@ function GroupHeaderRow({
           <td
             key={m}
             className={cn(
-              "relative px-3 py-1.5 text-right font-mono tabular-nums",
+              "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
               amountClass(cents, isFuture),
             )}
           >
@@ -438,7 +474,11 @@ interface CategoryRowProps {
   hasChildren: boolean;
   expanded: boolean;
   onToggle: () => void;
-  onCellClick: (month: string, categoryId: number) => void;
+  onCellClick: (
+    month: string,
+    categoryId: number,
+    direction: "in" | "out",
+  ) => void;
   currentMonth: string;
   isOut?: boolean;
   // G8
@@ -490,7 +530,10 @@ function CategoryRow({
         const effectiveCents = isOverridden
           ? overrides.get(overrideKey)!
           : cell.total_cents;
-        const displayed = isOut ? -effectiveCents : effectiveCents;
+        // Convention comptable signée : encaissements positifs (vert),
+        // décaissements négatifs (rouge). On affiche la valeur brute du
+        // backend, qui est déjà signée (négative pour les sorties).
+        const displayed = effectiveCents;
 
         return (
           <WhatIfCell
@@ -502,12 +545,16 @@ function CategoryRow({
             isCurrent={isCurrent}
             clickable={clickable}
             isOut={isOut}
-            onCellClick={() => onCellClick(cell.month, row.category_id)}
+            signAnomaly={cell.sign_anomaly === true}
+            onCellClick={() =>
+              onCellClick(cell.month, row.category_id, isOut ? "out" : "in")
+            }
             onOverride={(euros) => {
+              // Convention signée : l'utilisateur saisit la valeur telle
+              // qu'elle s'affiche (positive pour un encaissement, négative
+              // pour un décaissement). On la stocke comme telle.
               const cents = Math.round(euros * 100);
-              // Pour les décaissements : l'utilisateur saisit positif,
-              // on le stocke négatif (convention interne)
-              onOverride(row.category_id, cell.month, isOut ? -cents : cents);
+              onOverride(row.category_id, cell.month, cents);
             }}
           />
         );
@@ -528,6 +575,7 @@ interface WhatIfCellProps {
   isCurrent: boolean;
   clickable: boolean;
   isOut?: boolean;
+  signAnomaly?: boolean;
   onCellClick: () => void;
   onOverride: (euros: number) => void;
 }
@@ -539,6 +587,7 @@ function WhatIfCell({
   isFuture,
   isCurrent,
   clickable,
+  signAnomaly,
   onCellClick,
   onOverride,
 }: WhatIfCellProps) {
@@ -550,7 +599,10 @@ function WhatIfCell({
     // Double-clic sur mois futur uniquement
     if (!clickable) return;
     e.stopPropagation();
-    setInputVal(String(Math.abs(displayed / 100)));
+    // Convention signée : on pré-remplit avec la valeur telle qu'affichée
+    // (négative pour un décaissement). L'utilisateur peut taper un signe
+    // négatif pour saisir un décaissement.
+    setInputVal(String(displayed / 100));
     setEditing(true);
     // Focus après render
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -575,7 +627,7 @@ function WhatIfCell({
   return (
     <td
       className={cn(
-        "relative px-3 py-1.5 text-right font-mono tabular-nums",
+        "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
         isOverridden
           ? "bg-amber-50 text-amber-900"
           : amountClass(displayed, isFuture),
@@ -590,6 +642,15 @@ function WhatIfCell({
           aria-hidden
           className="absolute inset-y-0 left-0 w-0.5 bg-accent"
         />
+      )}
+      {signAnomaly && !editing && (
+        <span
+          aria-label="Signe inattendu : cette cellule mélange entrées et sorties"
+          title="Signe inattendu : une transaction de signe opposé au kind de la catégorie est présente sur ce mois. Vérifie la classification de la tx ou le kind de la catégorie."
+          className="absolute left-1 top-1 select-none text-[10px] leading-none text-amber-600"
+        >
+          ⚠
+        </span>
       )}
       {editing ? (
         <input

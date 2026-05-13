@@ -176,6 +176,10 @@ class PivotCellRead(BaseModel):
     line_method: str | None = None
     line_params: dict | None = None
     insufficient_history: bool = False
+    # True si la cellule mélange des montants au signe inattendu pour le
+    # kind de sa catégorie (kind='in' avec une tx<0, ou kind='out' avec
+    # une tx>0). Permet d'afficher un badge d'alerte côté UI.
+    sign_anomaly: bool = False
 
 
 class PivotRowRead(BaseModel):

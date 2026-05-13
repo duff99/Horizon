@@ -66,6 +66,12 @@ export interface PivotCell {
   total_cents: number;
   line_method: ForecastMethod | null;
   line_params: Record<string, unknown> | null;
+  /**
+   * True quand la cellule contient des montants au signe inattendu pour
+   * le kind de sa catégorie (kind='in' avec tx<0, ou kind='out' avec
+   * tx>0). L'UI affiche un badge d'alerte sur ces cellules.
+   */
+  sign_anomaly?: boolean;
 }
 
 export interface PivotRow {
@@ -90,6 +96,14 @@ export interface PivotResult {
   rows: PivotRow[];
   realized_series: PivotSeries[];
   forecast_series: PivotSeries[];
+  /**
+   * Net mensuel des transactions sans catégorie. Inclus dans la
+   * projection de solde côté backend mais absent des `rows` (pas une
+   * catégorie). Indispensable pour que le tableau reste cohérent :
+   * sans cette série, la variation nette du frontend ignore ces tx et
+   * la trésorerie de fin de mois diverge de la réalité bancaire.
+   */
+  uncategorized_net_cents: number[];
 }
 
 export interface ValidateFormulaResponse {

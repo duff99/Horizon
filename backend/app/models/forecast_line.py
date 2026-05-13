@@ -10,11 +10,12 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     Text,
-    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
@@ -36,9 +37,18 @@ class ForecastLineMethod(str, enum.Enum):
 
 class ForecastLine(Base):
     __tablename__ = "forecast_lines"
+    # Plusieurs lignes par (scenario, category) autorisées tant que leur
+    # fenêtre [start_month, end_month] n'est pas exactement identique. Les
+    # chevauchements sont permis : le moteur choisit la règle la plus
+    # spécifique (fenêtre la plus étroite) pour chaque mois.
     __table_args__ = (
-        UniqueConstraint(
-            "scenario_id", "category_id", name="uq_forecast_line_scenario_category"
+        Index(
+            "uq_forecast_line_scenario_category_window",
+            "scenario_id",
+            "category_id",
+            text("COALESCE(start_month, DATE '1900-01-01')"),
+            text("COALESCE(end_month, DATE '9999-12-31')"),
+            unique=True,
         ),
     )
 

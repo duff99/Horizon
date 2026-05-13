@@ -562,3 +562,130 @@ class TestComputePivot:
         # realized_series et forecast_series chacun avec 3 mois
         assert len(result.realized_series) == 3
         assert len(result.forecast_series) == 3
+
+
+# ---------------------------------------------------------------------------
+# Split kind='both' + détection d'anomalie de signe
+# ---------------------------------------------------------------------------
+
+
+class TestKindBothSplitAndSignAnomaly:
+    """Vérifie la reco A+B : catégories kind='both' splittées en deux lignes
+    pivot par signe, et détection d'anomalie de signe sur kind='in'/'out'."""
+
+    def _build_ctx(self, db_session: Session) -> dict:
+        e = Entity(name="ESplit", legal_name="ESplit")
+        db_session.add(e)
+        db_session.flush()
+        ba = BankAccount(
+            entity_id=e.id,
+            bank_code="delubac",
+            bank_name="Delubac",
+            iban="FR7600000000000000000000777",
+            name="CompteSplit",
+        )
+        db_session.add(ba)
+        sc = ForecastScenario(entity_id=e.id, name="Principal", is_default=True)
+        db_session.add(sc)
+        # 3 catégories : une in, une out, une both
+        cat_in = Category(name="VentesSplit", slug="ventes-split", kind="in")
+        cat_out = Category(name="LoyersSplit", slug="loyers-split", kind="out")
+        cat_both = Category(name="FluxFinanciersSplit", slug="flux-split", kind="both")
+        db_session.add_all([cat_in, cat_out, cat_both])
+        db_session.flush()
+        ir = ImportRecord(
+            bank_account_id=ba.id,
+            bank_code="delubac",
+            filename="fx.pdf",
+            status=ImportStatus.COMPLETED,
+            imported_count=0,
+        )
+        db_session.add(ir)
+        db_session.flush()
+        current_first = _first_of_month(date.today())
+        prev = _add_months(current_first, -1)
+        op = date(prev.year, prev.month, 15)
+
+        def add_tx(cat_id, amount, idx, key):
+            db_session.add(
+                Transaction(
+                    bank_account_id=ba.id,
+                    import_id=ir.id,
+                    operation_date=op,
+                    value_date=op,
+                    amount=Decimal(amount),
+                    label=key,
+                    raw_label=key,
+                    dedup_key=key,
+                    statement_row_index=idx,
+                    category_id=cat_id,
+                    normalized_label=key,
+                )
+            )
+
+        # cat_in : 1 vente normale + 1 remboursement client (anomalie : neg sur kind='in')
+        add_tx(cat_in.id, "5000.00", 1, "vente-ok")
+        add_tx(cat_in.id, "-200.00", 2, "remb-client-anomalie")
+        # cat_out : 1 loyer + 1 avoir (anomalie : pos sur kind='out')
+        add_tx(cat_out.id, "-1500.00", 3, "loyer-ok")
+        add_tx(cat_out.id, "50.00", 4, "avoir-anomalie")
+        # cat_both : un encaissement et un décaissement
+        add_tx(cat_both.id, "3000.00", 5, "flux-in")
+        add_tx(cat_both.id, "-2000.00", 6, "flux-out")
+        db_session.commit()
+        return {
+            "entity": e,
+            "scenario": sc,
+            "current": current_first,
+            "prev": prev,
+            "cat_in": cat_in,
+            "cat_out": cat_out,
+            "cat_both": cat_both,
+        }
+
+    def test_both_category_splits_into_two_rows(
+        self, db_session: Session
+    ) -> None:
+        ctx = self._build_ctx(db_session)
+        result = compute_pivot(
+            db_session,
+            scenario_id=ctx["scenario"].id,
+            entity_id=ctx["entity"].id,
+            from_month=ctx["prev"],
+            to_month=ctx["current"],
+        )
+        rows_by_label = {r.label: r for r in result.rows}
+        # Les deux variantes de la catégorie 'both' doivent exister
+        assert "FluxFinanciersSplit (entrées)" in rows_by_label
+        assert "FluxFinanciersSplit (sorties)" in rows_by_label
+        # Directions correctes
+        assert rows_by_label["FluxFinanciersSplit (entrées)"].direction == "in"
+        assert rows_by_label["FluxFinanciersSplit (sorties)"].direction == "out"
+        # Cellule du mois passé : entrées = +3000, sorties = -2000
+        in_cell = rows_by_label["FluxFinanciersSplit (entrées)"].cells[0]
+        out_cell = rows_by_label["FluxFinanciersSplit (sorties)"].cells[0]
+        assert in_cell.realized_cents == 300_000
+        assert out_cell.realized_cents == -200_000
+        # Pas d'anomalie sur les lignes splittées par construction
+        assert in_cell.sign_anomaly is False
+        assert out_cell.sign_anomaly is False
+
+    def test_sign_anomaly_flagged_on_in_and_out_rows(
+        self, db_session: Session
+    ) -> None:
+        ctx = self._build_ctx(db_session)
+        result = compute_pivot(
+            db_session,
+            scenario_id=ctx["scenario"].id,
+            entity_id=ctx["entity"].id,
+            from_month=ctx["prev"],
+            to_month=ctx["current"],
+        )
+        rows_by_label = {r.label: r for r in result.rows}
+        # kind='in' avec tx<0 → anomalie sur la cellule du mois où la tx existe
+        assert rows_by_label["VentesSplit"].cells[0].sign_anomaly is True
+        # kind='out' avec tx>0 → anomalie aussi
+        assert rows_by_label["LoyersSplit"].cells[0].sign_anomaly is True
+        # Sur le mois courant (pas de tx) → pas d'anomalie
+        assert rows_by_label["VentesSplit"].cells[1].sign_anomaly is False
+        assert rows_by_label["LoyersSplit"].cells[1].sign_anomaly is False

@@ -23,6 +23,7 @@ function buildFixture(): PivotResult {
       { month: "2026-05", in_cents: 400_000, out_cents: 200_000 },
       { month: "2026-06", in_cents: 400_000, out_cents: 200_000 },
     ],
+    uncategorized_net_cents: [0, 0, 0, 0],
     rows: [
       {
         category_id: 100,
@@ -121,10 +122,10 @@ describe("PivotTable", () => {
     expect(onCellClick).not.toHaveBeenCalled();
 
     fireEvent.click(cells[1]); // current → fires
-    expect(onCellClick).toHaveBeenCalledWith("2026-04", 100);
+    expect(onCellClick).toHaveBeenCalledWith("2026-04", 100, "in");
 
     fireEvent.click(cells[3]); // future → fires
-    expect(onCellClick).toHaveBeenCalledWith("2026-06", 100);
+    expect(onCellClick).toHaveBeenCalledWith("2026-06", 100, "in");
     expect(onCellClick).toHaveBeenCalledTimes(2);
   });
 
@@ -153,6 +154,7 @@ describe("PivotTable", () => {
       closing_balance_projection_cents: [200_000, 400_000],
       realized_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
       forecast_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
+      uncategorized_net_cents: months.map(() => 0),
       rows: [
         {
           category_id: 10,
@@ -208,5 +210,72 @@ describe("PivotTable", () => {
     // Sans fix : 0 occurrence dans le groupe header Encaissements.
     // Avec fix : au moins 2 occurrences (header Encaissements + ligne child).
     expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("respects accounting invariants across months (continuité tréso)", () => {
+    // Vérifie : opening[i+1] = closing[i] ET closing[i] = opening[i] + net[i],
+    // y compris quand uncategorized_net_cents est non nul.
+    const months = ["2026-03", "2026-04", "2026-05"];
+    const fixture: PivotResult = {
+      months,
+      opening_balance_cents: 1_000_000, // 10 000 €
+      closing_balance_projection_cents: [0, 0, 0], // ignoré : on calcule
+      realized_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
+      forecast_series: months.map((m) => ({ month: m, in_cents: 0, out_cents: 0 })),
+      uncategorized_net_cents: [-50_000, 0, +20_000], // -500 €, 0, +200 €
+      rows: [
+        {
+          category_id: 100,
+          parent_id: null,
+          label: "Ventes",
+          level: 0,
+          direction: "in",
+          cells: [
+            { month: months[0], realized_cents: 500_000, committed_cents: 0, forecast_cents: 0, total_cents: 500_000, line_method: null, line_params: null },
+            { month: months[1], realized_cents: 300_000, committed_cents: 0, forecast_cents: 0, total_cents: 300_000, line_method: null, line_params: null },
+            { month: months[2], realized_cents: 0, committed_cents: 0, forecast_cents: 200_000, total_cents: 200_000, line_method: null, line_params: null },
+          ],
+        },
+        {
+          category_id: 200,
+          parent_id: null,
+          label: "Achats",
+          level: 0,
+          direction: "out",
+          cells: [
+            { month: months[0], realized_cents: -200_000, committed_cents: 0, forecast_cents: 0, total_cents: -200_000, line_method: null, line_params: null },
+            { month: months[1], realized_cents: -100_000, committed_cents: 0, forecast_cents: 0, total_cents: -100_000, line_method: null, line_params: null },
+            { month: months[2], realized_cents: 0, committed_cents: 0, forecast_cents: -150_000, total_cents: -150_000, line_method: null, line_params: null },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <PivotTable
+        result={fixture}
+        onCellClick={() => undefined}
+        currentMonth="2026-04"
+      />,
+    );
+
+    const text = container.textContent ?? "";
+    // Calculs attendus :
+    //   net[0] = 500_000 - 200_000 + (-50_000) = 250_000 → 2 500 €
+    //   net[1] = 300_000 - 100_000 + 0        = 200_000 → 2 000 €
+    //   net[2] = 200_000 - 150_000 + 20_000   = 70_000  → 700 €
+    //   close[0] = 1_000_000 + 250_000 = 1_250_000 → 12 500 €
+    //   close[1] = 1_250_000 + 200_000 = 1_450_000 → 14 500 €
+    //   close[2] = 1_450_000 + 70_000  = 1_520_000 → 15 200 €
+    const norm = (s: string) => s.replace(/[  ]/g, " ");
+    const t = norm(text);
+    expect(t).toContain("2 500 €");
+    expect(t).toContain("2 000 €");
+    expect(t).toContain("700 €");
+    expect(t).toContain("12 500 €");
+    expect(t).toContain("14 500 €");
+    expect(t).toContain("15 200 €");
+    // Ligne uncategorized affichée (car non nulle)
+    expect(t).toContain("Tx non catégorisées (net)");
   });
 });

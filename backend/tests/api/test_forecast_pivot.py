@@ -49,8 +49,8 @@ def pivot_ctx(db_session: Session, auth_user: User) -> dict:
     db_session.add(sc)
     db_session.flush()
 
-    sal = Category(name="SalairesPivot", slug="salaires-pivot")
-    ven = Category(name="VentesPivot", slug="ventes-pivot")
+    sal = Category(name="SalairesPivot", slug="salaires-pivot", kind="out")
+    ven = Category(name="VentesPivot", slug="ventes-pivot", kind="in")
     db_session.add_all([sal, ven])
     db_session.flush()
 

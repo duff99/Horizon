@@ -85,10 +85,19 @@ def upsert_line(
                 detail="Cycle détecté : la formule référence sa propre catégorie",
             )
 
+    # Identification d'une ligne par sa fenêtre complète : plusieurs lignes
+    # par (scenario, category) sont autorisées tant que start_month/end_month
+    # diffèrent. Un upsert "même fenêtre" met à jour, sinon crée.
     existing = session.scalar(
         select(ForecastLine).where(
             ForecastLine.scenario_id == payload.scenario_id,
             ForecastLine.category_id == payload.category_id,
+            ForecastLine.start_month.is_(payload.start_month)
+            if payload.start_month is None
+            else ForecastLine.start_month == payload.start_month,
+            ForecastLine.end_month.is_(payload.end_month)
+            if payload.end_month is None
+            else ForecastLine.end_month == payload.end_month,
         )
     )
 

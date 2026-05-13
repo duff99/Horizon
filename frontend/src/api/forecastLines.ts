@@ -122,19 +122,20 @@ export function useUpsertLine() {
         body: JSON.stringify(payload),
       }),
     onSuccess: (line) => {
-      // Optimistic update du pivot directement depuis la réponse PUT :
-      // on patche les cellules concernées (toutes les futures de la
-      // catégorie) sans aller chercher de nouvelles données. La cellule
-      // affiche le nouveau montant immédiatement à la fermeture du
-      // drawer. Couvre RECURRING_FIXED et SINGLE_MONTH_FIXED ; les autres
-      // méthodes laissent les cellules inchangées (le calcul backend
-      // suivra à la prochaine refetch organique).
+      // Pattern optimistic + background revalidation :
+      // 1) Patch optimiste pour RECURRING_FIXED / SINGLE_MONTH_FIXED →
+      //    feedback instantané à la fermeture du drawer.
+      // 2) Invalidation systématique du pivot → refetch en arrière-plan
+      //    qui réconcilie les méthodes calculées backend (AVG_*, FORMULA,
+      //    BASED_ON_CATEGORY, PREVIOUS_MONTH, SAME_MONTH_LAST_YEAR) sans
+      //    rechargement manuel de la page.
       const today = currentMonthYm();
       qc.setQueriesData<PivotResult>(
         { queryKey: ["forecast-pivot", line.scenario_id] },
         (old) => (old ? patchPivotWithLine(old, line, today) : old),
       );
       qc.invalidateQueries({ queryKey: ["forecast-lines", line.scenario_id] });
+      qc.invalidateQueries({ queryKey: ["forecast-pivot", line.scenario_id] });
     },
   });
 }
@@ -162,6 +163,7 @@ export function useDeleteLine() {
         (old) => (old ? patchPivotForDelete(old, input.categoryId, today) : old),
       );
       qc.invalidateQueries({ queryKey: ["forecast-lines", input.scenarioId] });
+      qc.invalidateQueries({ queryKey: ["forecast-pivot", input.scenarioId] });
     },
   });
 }
