@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Search } from "lucide-react";
 import type { PivotResult, PivotRow } from "@/types/forecast";
 import { formatCents, formatMonthLabel } from "@/lib/forecastFormat";
 import { cn } from "@/lib/utils";
@@ -121,6 +121,13 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
   const [inGroupOpen, setInGroupOpen] = useState(true);
   const [outGroupOpen, setOutGroupOpen] = useState(true);
 
+  // Filtre texte sur le libellé de catégorie. Vide = pas de filtre.
+  // Le filtre s'applique aux lignes détaillées uniquement ; les en-têtes
+  // de groupe et les lignes de synthèse restent toujours visibles pour
+  // que les totaux restent lisibles.
+  const [search, setSearch] = useState("");
+  const searchLc = search.trim().toLowerCase();
+
   function toggle(categoryId: number) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -130,18 +137,18 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
     });
   }
 
-  const visibleIn = useMemo(
-    () =>
-      inGroupOpen ? flatten(inHier.roots, inHier.childrenOf, expanded) : [],
-    [inHier, expanded, inGroupOpen],
-  );
-  const visibleOut = useMemo(
-    () =>
-      outGroupOpen
-        ? flatten(outHier.roots, outHier.childrenOf, expanded)
-        : [],
-    [outHier, expanded, outGroupOpen],
-  );
+  const visibleIn = useMemo(() => {
+    if (!inGroupOpen) return [];
+    const all = flatten(inHier.roots, inHier.childrenOf, expanded);
+    if (!searchLc) return all;
+    return all.filter((r) => r.row.label.toLowerCase().includes(searchLc));
+  }, [inHier, expanded, inGroupOpen, searchLc]);
+  const visibleOut = useMemo(() => {
+    if (!outGroupOpen) return [];
+    const all = flatten(outHier.roots, outHier.childrenOf, expanded);
+    if (!searchLc) return all;
+    return all.filter((r) => r.row.label.toLowerCase().includes(searchLc));
+  }, [outHier, expanded, outGroupOpen, searchLc]);
 
   // Monthly totals per direction — use effective values (overrides apply)
   const inTotals = useMemo(() => {
@@ -223,20 +230,33 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
         <thead>
           <tr className="border-b border-line-soft bg-panel-2">
             <th
-              className="sticky left-0 z-20 min-w-[260px] bg-panel-2 px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="sticky left-0 z-20 min-w-[260px] bg-panel-2 px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
               style={{ position: "sticky", left: 0 }}
             >
-              <div className="flex items-center justify-between">
-                <span>Catégorie</span>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Rechercher une catégorie…"
+                    className="w-full rounded-md border border-line-soft bg-panel pl-7 pr-2 py-1 text-[12px] font-normal normal-case tracking-normal text-ink placeholder:text-muted-foreground focus:border-accent focus:outline-none"
+                    aria-label="Filtrer les catégories du pivot"
+                  />
+                </div>
                 {/* G8 — Bouton Réinitialiser */}
                 {hasOverrides && (
                   <button
                     type="button"
                     onClick={clearOverrides}
                     title="Remet toutes les cellules à leurs valeurs réelles du scénario actif."
-                    className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-200"
+                    className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-200"
                   >
-                    Réinitialiser les simulations
+                    Réinitialiser
                   </button>
                 )}
               </div>
@@ -432,13 +452,17 @@ function SummaryRow({
       </th>
       {months.map((m, idx) => {
         const cents = values[idx] ?? 0;
+        const prev = idx > 0 ? values[idx - 1] : undefined;
         const isFuture = m > currentMonth;
         const isCurrent = m === currentMonth;
+        // Chip d'évolution affiché uniquement sur les lignes balance et
+        // variation (pas sur uncat — purement informatif).
+        const showDelta = tone !== "uncat";
         return (
           <td
             key={m}
             className={cn(
-              "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
+              "relative whitespace-nowrap px-3 py-2 text-right font-mono text-[12.5px] tabular-nums",
               summaryAmountClass(cents, isFuture, tone),
               isCurrent && "bg-blue-50/60",
             )}
@@ -449,7 +473,10 @@ function SummaryRow({
                 className="absolute inset-y-0 left-0 w-0.5 bg-accent"
               />
             )}
-            {formatCents(cents)}
+            <span className="inline-flex items-baseline justify-end">
+              <span>{formatCents(cents)}</span>
+              {showDelta && <DeltaChip current={cents} previous={prev} />}
+            </span>
           </td>
         );
       })}
@@ -499,13 +526,14 @@ function GroupHeaderRow({
       </th>
       {months.map((m, idx) => {
         const cents = values[idx] ?? 0;
+        const prev = idx > 0 ? values[idx - 1] : undefined;
         const isFuture = m > currentMonth;
         const isCurrent = m === currentMonth;
         return (
           <td
             key={m}
             className={cn(
-              "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
+              "relative whitespace-nowrap px-3 py-1.5 text-right font-mono text-[12.5px] tabular-nums",
               isFuture && "italic",
               cents !== 0 ? totalClass : "text-muted-foreground",
               isCurrent && "bg-blue-50/60",
@@ -517,7 +545,10 @@ function GroupHeaderRow({
                 className="absolute inset-y-0 left-0 w-0.5 bg-accent"
               />
             )}
-            {formatCents(cents)}
+            <span className="inline-flex items-baseline justify-end">
+              <span>{formatCents(cents)}</span>
+              <DeltaChip current={cents} previous={prev} />
+            </span>
           </td>
         );
       })}
@@ -725,6 +756,40 @@ function WhatIfCell({
         formatCents(displayed)
       )}
     </td>
+  );
+}
+
+/**
+ * Chip d'évolution en pourcentage vs mois précédent.
+ * Affiché uniquement sur les lignes de synthèse pour ne pas surcharger
+ * visuellement les détails. Caché si la valeur précédente est 0 ou si
+ * la variation est < 1 % (bruit visuel).
+ */
+function DeltaChip({
+  current,
+  previous,
+}: {
+  current: number;
+  previous: number | undefined;
+}) {
+  if (previous == null || previous === 0) return null;
+  const delta = (current - previous) / Math.abs(previous);
+  if (Math.abs(delta) < 0.01) return null;
+  const pct = Math.round(delta * 100);
+  const positive = delta >= 0;
+  return (
+    <span
+      className={cn(
+        "ml-1.5 inline-flex items-center rounded px-1 py-0.5 text-[9.5px] font-medium tabular-nums",
+        positive
+          ? "bg-emerald-50 text-emerald-600"
+          : "bg-rose-50 text-rose-500",
+      )}
+      aria-label={`Évolution ${pct >= 0 ? "+" : ""}${pct} % vs mois précédent`}
+    >
+      {pct >= 0 ? "+" : ""}
+      {pct}%
+    </span>
   );
 }
 
