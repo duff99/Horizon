@@ -18,6 +18,7 @@ from app.models.entity import Entity
 from app.models.import_record import ImportRecord, ImportStatus
 from app.models.transaction import Transaction, TransactionCategorizationSource
 from app.models.user import User
+from app.services._anchor import data_anchor
 from app.schemas.dashboard import (
     Alert,
     AlertSeverity,
@@ -771,12 +772,22 @@ def get_month_comparison(
     bank_account_ids = _resolve_accessible_bank_accounts(
         db, user=user, entity_id=entity_id,
     )
+    # Ancre par défaut : data_anchor (jamais un mois sans transactions
+    # importées), au lieu de today() qui rendait le widget vide quand
+    # l'utilisateur n'avait pas encore importé le mois calendaire en
+    # cours (cf. Plan I — ancrage anti-mois-vide).
+    anchor = data_anchor(db, entity_id=entity_id)
     if month is not None:
         y, m = month.split("-")
-        current_first = date(int(y), int(m), 1)
+        requested = date(int(y), int(m), 1)
+        # Si le mois demandé est postérieur au dernier mois ayant des
+        # données, on bascule sur l'ancre data plutôt que d'afficher
+        # un widget vide. C'est aligné avec la sémantique de tous les
+        # autres widgets dashboard (data_anchor).
+        anchor_first = anchor.replace(day=1)
+        current_first = requested if requested <= anchor_first else anchor_first
     else:
-        today = date.today()
-        current_first = today.replace(day=1)
+        current_first = anchor.replace(day=1)
     previous_first = _previous_first(current_first)
 
     current_label = f"{_FR_MONTHS_ABBR[current_first.month - 1]} {current_first.year}"

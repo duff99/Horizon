@@ -31,7 +31,7 @@ export function Layout() {
             className={
               narrow
                 ? 'mx-auto w-full max-w-[1100px] px-8 py-6'
-                : 'w-full px-6 py-6'
+                : 'w-full pl-6 pr-24 py-6'
             }
           >
             <Outlet />
