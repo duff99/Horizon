@@ -9,7 +9,12 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: EmailStr
+    # `str` (et non `EmailStr`) en sortie : les emails sont déjà validés à
+    # l'insertion (UserCreate). Si la DB contient une valeur "exotique" (TLD
+    # `.local` réservé, ancien import, etc.), on doit pouvoir l'afficher au
+    # lieu de 500. Incident 2026-05-12 : user `reader.test@horizon.local` →
+    # ResponseValidationError sur `GET /api/users`.
+    email: str
     role: UserRole
     full_name: str | None
     is_active: bool

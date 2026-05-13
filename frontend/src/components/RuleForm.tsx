@@ -71,8 +71,16 @@ export function RuleForm(props: Props) {
     if (!hasFilter) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      const resp = await previewRule(buildPayload());
-      setPreview(resp);
+      // L'aperçu doit catcher : sans try/catch, un rejet (422 payload partiel
+      // pendant la frappe, 5xx réseau) devient un unhandledrejection logué
+      // côté client_errors. On affiche silencieusement "pas d'aperçu" — le
+      // submit réel restera bloqué tant que les filtres sont incomplets.
+      try {
+        const resp = await previewRule(buildPayload());
+        setPreview(resp);
+      } catch {
+        setPreview(null);
+      }
     }, 450);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);

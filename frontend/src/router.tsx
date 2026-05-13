@@ -1,64 +1,68 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminRoute } from '@/components/AdminRoute';
 import { Layout } from '@/components/Layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { lazyWithReload } from '@/lib/lazyWithReload';
 import { LoginPage } from '@/pages/LoginPage';
 
 // Route-based code-splitting. LoginPage reste eager (critical path + petit).
-const AdminAuditLogPage = lazy(() =>
+// `lazyWithReload` auto-recharge la page si un chunk fingerprinté a disparu
+// après un déploiement (sinon on affichait "Failed to fetch dynamically
+// imported module" → cf. erreurs client 2026-05-12).
+const AdminAuditLogPage = lazyWithReload(() =>
   import('@/pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })),
 );
-const AdminClientErrorsPage = lazy(() =>
+const AdminClientErrorsPage = lazyWithReload(() =>
   import('@/pages/AdminClientErrorsPage').then((m) => ({ default: m.AdminClientErrorsPage })),
 );
-const AdminBackupsPage = lazy(() =>
+const AdminBackupsPage = lazyWithReload(() =>
   import('@/pages/AdminBackupsPage').then((m) => ({ default: m.AdminBackupsPage })),
 );
-const AdminBankAccountsPage = lazy(() =>
+const AdminBankAccountsPage = lazyWithReload(() =>
   import('@/pages/AdminBankAccountsPage').then((m) => ({ default: m.AdminBankAccountsPage })),
 );
-const AdminCategoriesPage = lazy(() =>
+const AdminCategoriesPage = lazyWithReload(() =>
   import('@/pages/AdminCategoriesPage').then((m) => ({ default: m.AdminCategoriesPage })),
 );
-const AdminEntitiesPage = lazy(() =>
+const AdminEntitiesPage = lazyWithReload(() =>
   import('@/pages/AdminEntitiesPage').then((m) => ({ default: m.AdminEntitiesPage })),
 );
-const AdminUsersPage = lazy(() =>
+const AdminUsersPage = lazyWithReload(() =>
   import('@/pages/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 );
-const AnalysePage = lazy(() =>
+const AnalysePage = lazyWithReload(() =>
   import('@/pages/AnalysePage').then((m) => ({ default: m.AnalysePage })),
 );
-const CommitmentsPage = lazy(() =>
+const CommitmentsPage = lazyWithReload(() =>
   import('@/pages/CommitmentsPage').then((m) => ({ default: m.CommitmentsPage })),
 );
-const CounterpartiesPage = lazy(() =>
+const CounterpartiesPage = lazyWithReload(() =>
   import('@/pages/CounterpartiesPage').then((m) => ({ default: m.CounterpartiesPage })),
 );
-const DashboardPage = lazy(() =>
+const DashboardPage = lazyWithReload(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
-const DocumentationPage = lazy(() =>
+const DocumentationPage = lazyWithReload(() =>
   import('@/pages/DocumentationPage').then((m) => ({ default: m.DocumentationPage })),
 );
-const ForecastV2Page = lazy(() =>
+const ForecastV2Page = lazyWithReload(() =>
   import('@/pages/ForecastV2Page').then((m) => ({ default: m.ForecastV2Page })),
 );
-const RulesPage = lazy(() =>
+const RulesPage = lazyWithReload(() =>
   import('@/pages/RulesPage').then((m) => ({ default: m.RulesPage })),
 );
-const ImportHistoryPage = lazy(() =>
+const ImportHistoryPage = lazyWithReload(() =>
   import('@/pages/ImportHistoryPage').then((m) => ({ default: m.ImportHistoryPage })),
 );
-const ImportNewPage = lazy(() =>
+const ImportNewPage = lazyWithReload(() =>
   import('@/pages/ImportNewPage').then((m) => ({ default: m.ImportNewPage })),
 );
-const ProfilPage = lazy(() =>
+const ProfilPage = lazyWithReload(() =>
   import('@/pages/ProfilPage').then((m) => ({ default: m.ProfilPage })),
 );
-const TransactionsPage = lazy(() =>
+const TransactionsPage = lazyWithReload(() =>
   import('@/pages/TransactionsPage').then((m) => ({ default: m.TransactionsPage })),
 );
 
