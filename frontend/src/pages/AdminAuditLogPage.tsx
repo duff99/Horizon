@@ -282,7 +282,7 @@ export function AdminAuditLogPage() {
     <div className="mx-auto w-full max-w-[1400px] space-y-5 px-4 py-6 md:px-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          <h1 data-page-title className="text-[22px] font-semibold tracking-tight text-ink">
             Journal d'audit
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">

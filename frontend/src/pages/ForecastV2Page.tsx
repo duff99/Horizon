@@ -128,7 +128,7 @@ export function ForecastV2Page() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
+          <h1 data-page-title className="text-[22px] font-semibold tracking-tight text-ink">
             Prévisionnel de trésorerie
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
