@@ -7,6 +7,7 @@
 import { useMemo } from "react";
 
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 
 export type PeriodPreset =
   | "30d"
@@ -274,28 +275,31 @@ export function PeriodSelector({
       {value.preset === "custom" && (
         <div className="ml-1 flex items-center gap-1 border-l border-line-soft pl-2">
           {isMonthInput ? (
-            // Granularité mois (Prévisionnel) : input natif pour l'instant.
-            // Le DatePicker custom ne gère que les dates jour pour le moment.
+            // Granularité mois (Prévisionnel) : MonthPicker custom, même
+            // design que le DatePicker des dates jour. Plus de `<input
+            // type="month">` natif (rendu navigateur, hors charte).
             <>
-              <input
-                type="month"
-                aria-label="Mois de début"
-                value={value.from}
-                onChange={(e) =>
-                  onChange({ ...value, from: e.target.value, preset: "custom" })
-                }
-                className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
-              />
+              <div className="w-[150px]">
+                <MonthPicker
+                  value={value.from}
+                  onChange={(v) =>
+                    onChange({ ...value, from: v, preset: "custom" })
+                  }
+                  aria-label="Mois de début"
+                  placeholder="Du"
+                />
+              </div>
               <span className="text-[12.5px] text-muted-foreground">→</span>
-              <input
-                type="month"
-                aria-label="Mois de fin"
-                value={value.to}
-                onChange={(e) =>
-                  onChange({ ...value, to: e.target.value, preset: "custom" })
-                }
-                className="h-7 border border-line-soft bg-white rounded-sm px-2 text-[12.5px] text-ink font-mono tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
-              />
+              <div className="w-[150px]">
+                <MonthPicker
+                  value={value.to}
+                  onChange={(v) =>
+                    onChange({ ...value, to: v, preset: "custom" })
+                  }
+                  aria-label="Mois de fin"
+                  placeholder="Au"
+                />
+              </div>
             </>
           ) : (
             <>

@@ -15,6 +15,7 @@ function renderDrawer(onClose = vi.fn()) {
           open
           month="2026-04"
           categoryId={101}
+          direction="in"
           entityId={1}
           scenarioId={42}
           accountIds={null}

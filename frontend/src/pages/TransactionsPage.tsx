@@ -9,13 +9,8 @@ import { EntitySelector } from "@/components/EntitySelector";
 import { TransactionFilters } from "../components/TransactionFilters";
 import { Pagination, type PageSize } from "@/components/Pagination";
 import { RuleForm } from "../components/RuleForm";
+import { Modal } from "@/components/ui/modal";
 import { BulkCategorizationDrawer } from "@/components/transactions/BulkCategorizationDrawer";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { useCategories } from "@/api/categories";
 import { useEntities } from "@/api/entities";
@@ -285,7 +280,12 @@ export function TransactionsPage() {
   const ruleFormInitialValue = ruleInitialValue
     ? {
         id: 0,
-        name: "",
+        // Nom auto-dérivé pour éviter un 422 silencieux côté backend
+        // (le name est obligatoire, min_length=1). L'utilisateur peut
+        // toujours l'éditer.
+        name: ruleInitialValue.suggested_label_value
+          ? `Auto · ${ruleInitialValue.suggested_label_value}`.slice(0, 120)
+          : "",
         entity_id: null,
         priority: 5000,
         is_system: false,
@@ -656,27 +656,29 @@ export function TransactionsPage() {
         directionHint={directionHint}
       />
 
-      <Drawer open={ruleDrawerOpen} onOpenChange={setRuleDrawerOpen}>
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>Nouvelle règle depuis la sélection</DrawerTitle>
-          </DrawerHeader>
-          <div className="max-w-2xl p-6">
-            <RuleForm
-              categories={categories}
-              entities={entities}
-              counterparties={counterparties}
-              bankAccounts={bankAccounts}
-              initialValue={ruleFormInitialValue}
-              onSubmit={handleRuleSubmit}
-              onCancel={() => {
-                setRuleDrawerOpen(false);
-                setRuleInitialValue(null);
-              }}
-            />
-          </div>
-        </DrawerContent>
-      </Drawer>
+      <Modal
+        open={ruleDrawerOpen}
+        onClose={() => {
+          setRuleDrawerOpen(false);
+          setRuleInitialValue(null);
+        }}
+        title="Nouvelle règle depuis la sélection"
+        description="Définis les critères, choisis la catégorie cible, puis crée la règle (et applique-la rétroactivement si tu veux)."
+        size="2xl"
+      >
+        <RuleForm
+          categories={categories}
+          entities={entities}
+          counterparties={counterparties}
+          bankAccounts={bankAccounts}
+          initialValue={ruleFormInitialValue}
+          onSubmit={handleRuleSubmit}
+          onCancel={() => {
+            setRuleDrawerOpen(false);
+            setRuleInitialValue(null);
+          }}
+        />
+      </Modal>
     </div>
   );
 }

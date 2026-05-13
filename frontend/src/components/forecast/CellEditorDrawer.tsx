@@ -21,6 +21,9 @@ interface Props {
   open: boolean;
   month: string;
   categoryId: number;
+  /** Direction de la ligne cliquée — détermine le signe attendu pour la
+   * saisie (le formulaire signe automatiquement en interne). */
+  direction: "in" | "out";
   entityId: number;
   scenarioId: number;
   accountIds: number[] | null;
@@ -37,6 +40,7 @@ export function CellEditorDrawer({
   open,
   month,
   categoryId,
+  direction,
   entityId,
   scenarioId,
   accountIds: _accountIds,
@@ -100,8 +104,35 @@ export function CellEditorDrawer({
   });
 
   const linesQuery = useLines(scenarioId);
-  const currentLine =
-    linesQuery.data?.find((l) => l.category_id === categoryId) ?? null;
+  const allLinesForCategory = useMemo(
+    () =>
+      (linesQuery.data ?? []).filter((l) => l.category_id === categoryId),
+    [linesQuery.data, categoryId],
+  );
+  // On charge la règle la plus spécifique qui couvre le mois cliqué.
+  // Plusieurs règles peuvent coexister pour une même catégorie ; celle
+  // dont la fenêtre [start_month, end_month] est la plus étroite gagne.
+  const currentLine = useMemo(() => {
+    const monthDate = `${month}-01`;
+    const covers = (l: typeof allLinesForCategory[number]) =>
+      (l.start_month == null || l.start_month <= monthDate) &&
+      (l.end_month == null || l.end_month >= monthDate);
+    const score = (l: typeof allLinesForCategory[number]) => {
+      const s = l.start_month;
+      const e = l.end_month;
+      if (s != null && e != null) {
+        const [sy, sm] = s.split("-").map(Number);
+        const [ey, em] = e.split("-").map(Number);
+        return (ey - sy) * 12 + (em - sm);
+      }
+      if (s != null || e != null) return 10_000;
+      return 20_000;
+    };
+    const candidates = allLinesForCategory.filter(covers);
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => score(a) - score(b));
+    return candidates[0];
+  }, [allLinesForCategory, month]);
 
   if (!open) return null;
 
@@ -214,6 +245,7 @@ export function CellEditorDrawer({
               <MethodForm
                 scenarioId={scenarioId}
                 categoryId={categoryId}
+                direction={direction}
                 cellMonth={month}
                 line={currentLine}
                 onSave={onClose}

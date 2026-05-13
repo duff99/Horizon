@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,6 +87,8 @@ export function RuleForm(props: Props) {
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [submitting, setSubmitting] = useState(false);
+
   async function handleSubmit(applyAfter: boolean) {
     if (!categoryId) {
       setSubmitError("Sélectionnez une catégorie à appliquer avant de créer la règle.");
@@ -95,8 +98,25 @@ export function RuleForm(props: Props) {
       setSubmitError("Définissez au moins un filtre (libellé, montant, sens, tiers ou compte).");
       return;
     }
+    if (!name.trim()) {
+      setSubmitError("Donnez un nom à la règle.");
+      return;
+    }
     setSubmitError(null);
-    await props.onSubmit(buildPayload(), applyAfter);
+    setSubmitting(true);
+    try {
+      await props.onSubmit(buildPayload(), applyAfter);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : "Erreur serveur";
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -342,13 +362,14 @@ export function RuleForm(props: Props) {
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line-soft pt-3">
-        <Button variant="ghost" type="button" onClick={props.onCancel}>
+        <Button variant="ghost" type="button" onClick={props.onCancel} disabled={submitting}>
           Annuler
         </Button>
         <Button
           variant="outline"
           type="button"
           onClick={handlePreview}
+          disabled={submitting}
           title="Rafraichir l'apercu manuellement (l'apercu se met aussi a jour automatiquement 450 ms apres chaque modification)"
         >
           Aperçu
@@ -357,11 +378,12 @@ export function RuleForm(props: Props) {
           type="button"
           variant="outline"
           onClick={() => handleSubmit(false)}
+          disabled={submitting}
         >
-          Créer
+          {submitting ? "Création…" : "Créer"}
         </Button>
-        <Button type="button" onClick={() => handleSubmit(true)}>
-          Créer et appliquer
+        <Button type="button" onClick={() => handleSubmit(true)} disabled={submitting}>
+          {submitting ? "Création…" : "Créer et appliquer"}
         </Button>
       </div>
     </form>

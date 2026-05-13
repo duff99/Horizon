@@ -101,19 +101,22 @@ describe("PeriodSelector — interactions", () => {
 
     render(<PeriodSelector value={initial} onChange={onChange} />);
 
-    const fromInput = screen.getByLabelText("Date de début") as HTMLInputElement;
-    expect(fromInput.type).toBe("date");
-
-    await user.clear(fromInput);
-    await user.type(fromInput, "2026-01-15");
-
-    // At least one onChange happened with preset custom
+    // DatePicker (jour) est rendu comme un <button>, pas un <input>.
+    // On vérifie juste que le trigger existe et que le changement de
+    // preset à "custom" est propagé.
+    const fromTrigger = screen.getByLabelText("Date de début");
+    expect(fromTrigger.tagName).toBe("BUTTON");
+    await user.click(fromTrigger);
+    // Le picker ouvre un popover ; un click sur le bouton "Aujourd'hui"
+    // déclenche un onChange.
+    const todayBtn = await screen.findByRole("button", { name: /Aujourd'hui/i });
+    await user.click(todayBtn);
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls.at(-1)![0] as PeriodValue;
     expect(last.preset).toBe("custom");
   });
 
-  it("uses month-type inputs when granularity='month'", () => {
+  it("uses MonthPicker triggers when granularity='month'", () => {
     const initial: PeriodValue = {
       from: "2026-01",
       to: "2026-04",
@@ -126,9 +129,10 @@ describe("PeriodSelector — interactions", () => {
         granularity="month"
       />,
     );
-    const fromInput = screen.getByLabelText("Date de début") as HTMLInputElement;
-    expect(fromInput.type).toBe("month");
-    expect(fromInput.value).toBe("2026-01");
+    // MonthPicker rend un <button> avec aria-label="Mois de début".
+    const fromTrigger = screen.getByLabelText("Mois de début");
+    expect(fromTrigger.tagName).toBe("BUTTON");
+    expect(fromTrigger.textContent).toMatch(/Janvier 2026/);
   });
 
   it("Harness renders (smoke)", () => {

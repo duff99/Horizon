@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -11,6 +11,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PromptDialog } from "@/components/ui/prompt-dialog";
 import {
   useCreateScenario,
   useDeleteScenario,
@@ -45,44 +47,47 @@ export function ScenarioSelector({ entityId }: Props) {
 
   const active = scenarios.find((s) => s.id === scenarioId);
 
-  function handleCreate() {
+  // Trois modales contrôlées : création, renommage, suppression. Remplacent
+  // les `window.prompt/confirm` natifs (look hors charte).
+  const [createOpen, setCreateOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  function submitCreate(name: string) {
     if (entityId == null) return;
-    // eslint-disable-next-line no-alert
-    const name = window.prompt("Nom du nouveau scénario");
-    if (!name || !name.trim()) return;
     createMut.mutate(
       {
         entity_id: entityId,
-        name: name.trim(),
+        name,
         is_default: scenarios.length === 0,
       },
       {
         onSuccess: (sc) => {
           setScenarioId(sc.id);
+          setCreateOpen(false);
         },
       },
     );
   }
 
-  function handleRename() {
-    if (!active) return;
-    // eslint-disable-next-line no-alert
-    const name = window.prompt("Nouveau nom du scénario", active.name);
-    if (!name || !name.trim() || name === active.name) return;
-    updateMut.mutate({ id: active.id, name: name.trim() });
+  function submitRename(name: string) {
+    if (!active || name === active.name) {
+      setRenameOpen(false);
+      return;
+    }
+    updateMut.mutate(
+      { id: active.id, name },
+      { onSuccess: () => setRenameOpen(false) },
+    );
   }
 
-  function handleDelete() {
+  function submitDelete() {
     if (!active) return;
-    // eslint-disable-next-line no-alert
-    const ok = window.confirm(
-      `Supprimer le scénario "${active.name}" ? Cette action est irréversible.`,
-    );
-    if (!ok) return;
     deleteMut.mutate(active.id, {
       onSuccess: () => {
         const other = scenarios.find((s) => s.id !== active.id);
         setScenarioId(other?.id ?? null);
+        setDeleteOpen(false);
       },
     });
   }
@@ -160,7 +165,7 @@ export function ScenarioSelector({ entityId }: Props) {
         >
           <button
             type="button"
-            onClick={handleCreate}
+            onClick={() => setCreateOpen(true)}
             disabled={entityId == null}
             className="block w-full rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-ink hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -168,7 +173,7 @@ export function ScenarioSelector({ entityId }: Props) {
           </button>
           <button
             type="button"
-            onClick={handleRename}
+            onClick={() => setRenameOpen(true)}
             disabled={!active}
             className="block w-full rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-ink hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -177,7 +182,7 @@ export function ScenarioSelector({ entityId }: Props) {
           <div className="my-1 border-t border-line-soft" />
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setDeleteOpen(true)}
             disabled={!active}
             className="block w-full rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -185,6 +190,45 @@ export function ScenarioSelector({ entityId }: Props) {
           </button>
         </PopoverContent>
       </Popover>
+
+      <PromptDialog
+        open={createOpen}
+        title="Nouveau scénario"
+        description="Donne un nom à ce scénario prévisionnel. Tu pourras le retrouver dans le sélecteur en haut de la page."
+        label="Nom du scénario"
+        placeholder="ex. Redressement 2026, Optimiste, Plan B…"
+        confirmLabel="Créer"
+        busy={createMut.isPending}
+        onConfirm={submitCreate}
+        onCancel={() => setCreateOpen(false)}
+      />
+
+      <PromptDialog
+        open={renameOpen}
+        title="Renommer le scénario"
+        label="Nouveau nom"
+        initialValue={active?.name ?? ""}
+        confirmLabel="Renommer"
+        busy={updateMut.isPending}
+        onConfirm={submitRename}
+        onCancel={() => setRenameOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={`Supprimer le scénario « ${active?.name ?? ""} » ?`}
+        description={
+          <>
+            Toutes les règles prévisionnelles attachées à ce scénario seront
+            supprimées. Cette action est irréversible.
+          </>
+        }
+        confirmLabel="Supprimer"
+        tone="danger"
+        busy={deleteMut.isPending}
+        onConfirm={submitDelete}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

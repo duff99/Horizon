@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { ApiError } from "@/api/client";
 import { useCategories } from "@/api/categories";
 import {
@@ -18,6 +19,13 @@ import { cn } from "@/lib/utils";
 interface Props {
   scenarioId: number;
   categoryId: number;
+  /**
+   * Direction du flux pour cette ligne (déduite de la section du pivot
+   * cliquée : Encaissements → "in", Décaissements → "out"). L'utilisateur
+   * saisit toujours un montant positif ; le signe est appliqué
+   * automatiquement à l'enregistrement.
+   */
+  direction: "in" | "out";
   /**
    * Mois (format "YYYY-MM") de la cellule cliquée dans le pivot. Sert de
    * valeur initiale pour la méthode SINGLE_MONTH_FIXED — l'utilisateur
@@ -89,25 +97,30 @@ const METHODS: MethodOption[] = [
 export function MethodForm({
   scenarioId,
   categoryId,
+  direction,
   cellMonth,
   line,
   onSave,
   prefillAmountCents,
 }: Props) {
+  const isOut = direction === "out";
   const [method, setMethod] = useState<ForecastMethod>(
     prefillAmountCents != null
       ? "RECURRING_FIXED"
       : (line?.method ?? "RECURRING_FIXED"),
   );
+  // L'input affiche toujours la valeur ABSOLUE ; le signe est rétabli à
+  // l'enregistrement selon `direction`. Évite que l'utilisateur ait à
+  // se rappeler de mettre un "-" pour un décaissement.
   const [amountStr, setAmountStr] = useState<string>(() => {
     if (prefillAmountCents != null) {
-      return String(prefillAmountCents / 100);
+      return String(Math.abs(prefillAmountCents) / 100);
     }
     if (
       (line?.method === "RECURRING_FIXED" || line?.method === "SINGLE_MONTH_FIXED") &&
       line?.amount_cents != null
     ) {
-      return String(line.amount_cents / 100);
+      return String(Math.abs(line.amount_cents) / 100);
     }
     return "";
   });
@@ -131,6 +144,25 @@ export function MethodForm({
   const [formulaExpr, setFormulaExpr] = useState<string>(
     line?.formula_expr ?? "",
   );
+
+  // Portée temporelle de la règle. Détermine start_month / end_month à
+  // l'enregistrement et permet de coexister avec d'autres règles sur la
+  // même catégorie (ex : ponctuelle Mai + récurrente Juin+).
+  //   - "from_this_month" → start_month = mois cliqué, end_month = NULL.
+  //   - "this_month_only" → start_month = end_month = mois cliqué.
+  // SINGLE_MONTH_FIXED force toujours "this_month_only".
+  type Scope = "from_this_month" | "this_month_only";
+  const [scope, setScope] = useState<Scope>(() => {
+    if (line?.method === "SINGLE_MONTH_FIXED") return "this_month_only";
+    if (
+      line?.start_month != null &&
+      line?.end_month != null &&
+      line.start_month === line.end_month
+    ) {
+      return "this_month_only";
+    }
+    return "from_this_month";
+  });
   const [formulaStatus, setFormulaStatus] = useState<
     | { kind: "idle" }
     | { kind: "ok" }
@@ -174,11 +206,14 @@ export function MethodForm({
     return parseFloat(cleaned);
   }
 
-  // Aperçu en clair du montant saisi pour rassurer l'utilisateur (en
-  // particulier sur SINGLE_MONTH_FIXED où une saisie acceptée à 0 ne
-  // pose aucune erreur mais ne sert à rien).
-  const previewAmount =
-    amountStr.trim().length > 0 ? parseAmount(amountStr) : NaN;
+  // Aperçu en clair du montant saisi pour rassurer l'utilisateur. On
+  // applique le signe déduit de `direction` pour afficher la valeur telle
+  // qu'elle apparaîtra dans le pivot (négative pour un décaissement).
+  const parsedAbs =
+    amountStr.trim().length > 0 ? Math.abs(parseAmount(amountStr)) : NaN;
+  const previewAmount = Number.isFinite(parsedAbs)
+    ? (isOut ? -parsedAbs : parsedAbs)
+    : NaN;
   const previewLabel = Number.isFinite(previewAmount)
     ? new Intl.NumberFormat("fr-FR", {
         style: "currency",
@@ -237,35 +272,41 @@ export function MethodForm({
       category_id: categoryId,
       method,
     };
+    // Portée appliquée à toutes les méthodes sauf SINGLE_MONTH_FIXED qui
+    // gère son propre mois via le picker existant.
+    if (method !== "SINGLE_MONTH_FIXED" && cellMonth) {
+      const monthIso = `${cellMonth}-01`;
+      payload.start_month = monthIso;
+      payload.end_month = scope === "this_month_only" ? monthIso : null;
+    }
     try {
       if (method === "RECURRING_FIXED") {
         const parsed = parseAmount(amountStr);
         if (!Number.isFinite(parsed)) {
-          setSubmitError(
-            "Montant invalide. Saisissez un nombre, ex : 1500 ou -1500,50.",
-          );
+          setSubmitError("Montant invalide. Saisissez un nombre, ex : 1500.");
           return;
         }
-        payload.amount_cents = Math.round(parsed * 100);
+        // Signe inféré depuis la direction : positif pour Encaissements,
+        // négatif pour Décaissements. La valeur absolue saisie est
+        // signée automatiquement, l'utilisateur n'a pas à y penser.
+        const signed = isOut ? -Math.abs(parsed) : Math.abs(parsed);
+        payload.amount_cents = Math.round(signed * 100);
       } else if (method === "SINGLE_MONTH_FIXED") {
         const parsed = parseAmount(amountStr);
         if (!Number.isFinite(parsed)) {
-          setSubmitError(
-            "Montant invalide. Saisissez un nombre, ex : 10000 ou -10000,50.",
-          );
+          setSubmitError("Montant invalide. Saisissez un nombre, ex : 10000.");
           return;
         }
         if (parsed === 0) {
-          setSubmitError(
-            "Le montant ne peut pas être 0. Saisissez un montant positif (encaissement) ou négatif (décaissement).",
-          );
+          setSubmitError("Le montant ne peut pas être 0.");
           return;
         }
         if (!/^\d{4}-\d{2}$/.test(singleMonth)) {
           setSubmitError("Choisissez un mois cible (format YYYY-MM).");
           return;
         }
-        payload.amount_cents = Math.round(parsed * 100);
+        const signed = isOut ? -Math.abs(parsed) : Math.abs(parsed);
+        payload.amount_cents = Math.round(signed * 100);
         // Le backend stocke en `date` ; on prend le 1er du mois.
         payload.start_month = `${singleMonth}-01`;
         payload.end_month = `${singleMonth}-01`;
@@ -340,10 +381,72 @@ export function MethodForm({
         </div>
       </fieldset>
 
+      {method !== "SINGLE_MONTH_FIXED" && cellMonth && (
+        <fieldset className="space-y-1">
+          <legend className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Portée de cette règle
+          </legend>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors",
+                scope === "from_this_month"
+                  ? "border-accent/60 bg-accent/5"
+                  : "border-line-soft bg-panel hover:bg-panel-2/50",
+              )}
+            >
+              <input
+                type="radio"
+                name="scope"
+                checked={scope === "from_this_month"}
+                onChange={() => setScope("from_this_month")}
+                className="mt-0.5 h-3.5 w-3.5 accent-accent"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-medium text-ink">
+                  À partir de ce mois
+                </span>
+                <span className="block text-[11.5px] text-muted-foreground">
+                  S'applique à {cellMonth} et tous les suivants (jusqu'à
+                  ce qu'une autre règle prenne le relais).
+                </span>
+              </span>
+            </label>
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors",
+                scope === "this_month_only"
+                  ? "border-accent/60 bg-accent/5"
+                  : "border-line-soft bg-panel hover:bg-panel-2/50",
+              )}
+            >
+              <input
+                type="radio"
+                name="scope"
+                checked={scope === "this_month_only"}
+                onChange={() => setScope("this_month_only")}
+                className="mt-0.5 h-3.5 w-3.5 accent-accent"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-medium text-ink">
+                  Ce mois uniquement
+                </span>
+                <span className="block text-[11.5px] text-muted-foreground">
+                  Exception ponctuelle qui n'affecte que {cellMonth}.
+                </span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+      )}
+
       {method === "RECURRING_FIXED" && (
         <div className="space-y-1">
           <label className="block text-[11.5px] text-ink-2">
-            Montant (€) — saisissez un négatif pour un décaissement
+            Montant (€){" "}
+            <span className="text-muted-foreground">
+              — {isOut ? "décaissement" : "encaissement"}, valeur positive
+            </span>
           </label>
           <input
             type="text"
@@ -355,7 +458,8 @@ export function MethodForm({
           />
           {previewLabel && (
             <p className="text-[11px] text-muted-foreground">
-              Soit {previewLabel}.
+              Sera enregistré : {previewLabel}
+              {isOut ? " (signe négatif appliqué automatiquement)" : ""}.
             </p>
           )}
         </div>
@@ -365,7 +469,10 @@ export function MethodForm({
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="block text-[11.5px] text-ink-2">
-              Montant (€) — négatif pour un décaissement
+              Montant (€){" "}
+              <span className="text-muted-foreground">
+                — {isOut ? "décaissement" : "encaissement"}, valeur positive
+              </span>
             </label>
             <input
               type="text"
@@ -377,7 +484,8 @@ export function MethodForm({
             />
             {previewLabel && (
               <p className="text-[11px] text-muted-foreground">
-                Soit {previewLabel}.
+                Sera enregistré : {previewLabel}
+                {isOut ? " (signe négatif appliqué automatiquement)" : ""}.
               </p>
             )}
           </div>
@@ -385,11 +493,10 @@ export function MethodForm({
             <label className="block text-[11.5px] text-ink-2">
               Mois d'application (un seul)
             </label>
-            <input
-              type="month"
+            <MonthPicker
               value={singleMonth}
-              onChange={(e) => setSingleMonth(e.target.value)}
-              className="w-full rounded-md border border-line-soft bg-panel px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-ink"
+              onChange={setSingleMonth}
+              placeholder="Choisir le mois"
             />
             <p className="text-[11px] text-muted-foreground">
               Le montant ne s'appliquera que sur ce mois — les autres mois
