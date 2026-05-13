@@ -17,7 +17,7 @@ import { ComparisonPanel } from "@/components/forecast/ComparisonPanel";
 import { PivotBars } from "@/components/forecast/PivotBars";
 import { PivotTable } from "@/components/forecast/PivotTable";
 import { CellEditorDrawer } from "@/components/forecast/CellEditorDrawer";
-import { WorkingCapitalBanner } from "@/components/forecast/WorkingCapitalBanner";
+import { ForecastKpiSidebar } from "@/components/forecast/ForecastKpiSidebar";
 import { Rolling13WChart } from "@/components/forecast/Rolling13WChart";
 import {
   ScenarioOverlaySelect,
@@ -204,11 +204,6 @@ export function ForecastV2Page() {
         </div>
       )}
 
-      {/* G3 — Bandeau DSO/DPO/BFR */}
-      {!noEntity && !noScenario && effectiveEntityId != null && (
-        <WorkingCapitalBanner entityId={effectiveEntityId} />
-      )}
-
       {/* Toggle Plan ↔ Suivi des écarts */}
       {!noEntity && !noScenario && (
         <div className="inline-flex rounded-md border border-line-soft bg-panel p-0.5 shadow-card">
@@ -248,63 +243,76 @@ export function ForecastV2Page() {
         />
       )}
 
-      {!noEntity && !noScenario && view === "plan" && pivotQuery.data && (
-        <>
-          <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-[13px] font-semibold text-ink">
-                Encaissements vs. décaissements
-              </h2>
-              <span className="text-[11px] text-muted-foreground">
-                Hachures = prévisionnel · ligne = solde projeté
-                {overlay.overlayScenarioId != null && (
-                  <span className="ml-2 text-amber-600">
-                    · pointillés jaunes = scénario de comparaison
-                  </span>
-                )}
-              </span>
-            </div>
-            <PivotBars
-              result={pivotQuery.data}
-              currentMonth={currentMonth}
-              overlayResult={
-                overlay.overlayScenarioId != null
-                  ? overlay.overlayPivot
-                  : undefined
-              }
-            />
-          </div>
+      {!noEntity &&
+        !noScenario &&
+        view === "plan" &&
+        pivotQuery.data &&
+        effectiveEntityId != null && (
+          <div className="grid gap-4 lg:grid-cols-[220px,minmax(0,1fr)]">
+            {/* Colonne gauche : cartes KPI sticky */}
+            <aside className="lg:sticky lg:top-4 lg:self-start">
+              <ForecastKpiSidebar
+                entityId={effectiveEntityId}
+                pivot={pivotQuery.data}
+                currentMonth={currentMonth}
+              />
+            </aside>
 
-          <div>
-            <PivotTable
-              result={pivotQuery.data}
-              onCellClick={(month, categoryId, direction) =>
-                setDrawer({ month, categoryId, direction })
-              }
-              currentMonth={currentMonth}
-            />
-            {effectiveEntityId != null && scenarioId != null && (
-              <div className="mt-2 flex justify-end">
-                <ExportButton
-                  url={`/api/forecast/pivot/export?scenario_id=${scenarioId}&entity_id=${effectiveEntityId}&from=${period.from}&to=${period.to}${accountIds && accountIds.length > 0 ? `&accounts=${accountIds.join(",")}` : ""}`}
-                  filename={`previsionnel-pivot_${todayISO()}.csv`}
-                  label="Exporter le pivot CSV"
+            {/* Colonne droite : graphique + pivot + rolling */}
+            <div className="min-w-0 space-y-4">
+              <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <h2 className="text-[13px] font-semibold text-ink">
+                    Encaissements vs. décaissements
+                  </h2>
+                  <span className="text-[11px] text-muted-foreground">
+                    Hachures = prévisionnel · ligne = solde projeté
+                    {overlay.overlayScenarioId != null && (
+                      <span className="ml-2 text-amber-600">
+                        · pointillés jaunes = scénario de comparaison
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <PivotBars
+                  result={pivotQuery.data}
+                  currentMonth={currentMonth}
+                  overlayResult={
+                    overlay.overlayScenarioId != null
+                      ? overlay.overlayPivot
+                      : undefined
+                  }
                 />
               </div>
-            )}
-          </div>
 
-          {/* G2 — Rolling 13-week */}
-          {effectiveEntityId != null && (
-            <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
-              <Rolling13WChart
-                entityId={effectiveEntityId}
-                scenarioId={scenarioId}
-              />
+              <div>
+                <PivotTable
+                  result={pivotQuery.data}
+                  onCellClick={(month, categoryId, direction) =>
+                    setDrawer({ month, categoryId, direction })
+                  }
+                  currentMonth={currentMonth}
+                />
+                {scenarioId != null && (
+                  <div className="mt-2 flex justify-end">
+                    <ExportButton
+                      url={`/api/forecast/pivot/export?scenario_id=${scenarioId}&entity_id=${effectiveEntityId}&from=${period.from}&to=${period.to}${accountIds && accountIds.length > 0 ? `&accounts=${accountIds.join(",")}` : ""}`}
+                      filename={`previsionnel-pivot_${todayISO()}.csv`}
+                      label="Exporter le pivot CSV"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
+                <Rolling13WChart
+                  entityId={effectiveEntityId}
+                  scenarioId={scenarioId}
+                />
+              </div>
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
 
       {drawer && effectiveEntityId != null && scenarioId != null && (
         <CellEditorDrawer

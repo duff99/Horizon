@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import type { PivotResult, PivotRow } from "@/types/forecast";
 import { formatCents, formatMonthLabel } from "@/lib/forecastFormat";
 import { cn } from "@/lib/utils";
@@ -245,7 +246,8 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
                 key={m}
                 className={cn(
                   "px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
-                  m === currentMonth && "text-accent",
+                  m === currentMonth &&
+                    "bg-blue-50/70 text-accent",
                 )}
               >
                 {formatMonthLabel(m)}
@@ -260,7 +262,8 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             values={openingByMonth}
             months={months}
             currentMonth={currentMonth}
-            tone="muted"
+            tone="balance"
+            icon={<Wallet className="h-3 w-3 text-accent" />}
           />
 
           {/* Encaissements group */}
@@ -271,6 +274,7 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             values={inTotals}
             months={months}
             currentMonth={currentMonth}
+            kind="in"
           />
           {visibleIn.map(({ row, depth, hasChildren }) => (
             <CategoryRow
@@ -295,6 +299,7 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             values={outTotals}
             months={months}
             currentMonth={currentMonth}
+            kind="out"
           />
           {visibleOut.map(({ row, depth, hasChildren }) => (
             <CategoryRow
@@ -320,7 +325,7 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
               values={uncatByMonth}
               months={months}
               currentMonth={currentMonth}
-              tone="muted"
+              tone="uncat"
             />
           )}
 
@@ -330,7 +335,7 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             values={netByMonth}
             months={months}
             currentMonth={currentMonth}
-            tone="emphasized"
+            tone="variation"
           />
 
           {/* Trésorerie fin de mois — toujours calculée de proche en proche
@@ -340,7 +345,8 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
             values={closingByMonth}
             months={months}
             currentMonth={currentMonth}
-            tone="emphasized"
+            tone="balance"
+            icon={<Wallet className="h-3 w-3 text-accent" />}
           />
         </tbody>
       </table>
@@ -348,10 +354,38 @@ export function PivotTable({ result, onCellClick, currentMonth }: Props) {
   );
 }
 
-function amountClass(cents: number, isFuture: boolean): string {
+/**
+ * Couleur du montant pour une cellule détaillée (catégorie).
+ * Volontairement neutre : le signe `−` devant suffit à indiquer le sens,
+ * éviter le vert/rouge saturé qui fatigue sur 15 colonnes × N catégories.
+ */
+function detailAmountClass(cents: number, isFuture: boolean): string {
   const base = isFuture ? "italic " : "";
-  if (cents > 0) return base + "text-emerald-700";
-  if (cents < 0) return base + "text-rose-700";
+  if (cents === 0) return base + "text-muted-foreground";
+  return base + "text-ink-2";
+}
+
+/**
+ * Couleur du montant pour une ligne de synthèse, modulée par le tone :
+ * - balance  : solde de trésorerie → bleu accent (chiffre clé)
+ * - variation: variation nette → vert/rouge doux (sage / saumon)
+ * - uncat    : net non-catégorisé → neutre, juste informatif
+ */
+function summaryAmountClass(
+  cents: number,
+  isFuture: boolean,
+  tone: "balance" | "variation" | "uncat",
+): string {
+  const base = isFuture ? "italic " : "";
+  if (tone === "balance") {
+    return base + "text-accent font-semibold";
+  }
+  if (tone === "uncat") {
+    return base + "text-muted-foreground";
+  }
+  // variation
+  if (cents > 0) return base + "text-emerald-600";
+  if (cents < 0) return base + "text-rose-500";
   return base + "text-muted-foreground";
 }
 
@@ -360,7 +394,8 @@ interface SummaryRowProps {
   values: number[];
   months: string[];
   currentMonth: string;
-  tone: "muted" | "emphasized";
+  tone: "balance" | "variation" | "uncat";
+  icon?: React.ReactNode;
 }
 
 function SummaryRow({
@@ -369,19 +404,31 @@ function SummaryRow({
   months,
   currentMonth,
   tone,
+  icon,
 }: SummaryRowProps) {
   const toneRow =
-    tone === "emphasized"
-      ? "border-t border-line-soft bg-panel-2/70 font-medium"
-      : "border-t border-line-soft";
+    tone === "balance"
+      ? "border-t border-line-soft bg-blue-50/30 font-medium"
+      : tone === "variation"
+        ? "border-t border-line-soft bg-panel-2/60 font-medium"
+        : "border-t border-line-soft";
+  const stickyBg =
+    tone === "balance"
+      ? "rgb(239 246 255 / 0.3)" // blue-50/30
+      : tone === "variation"
+        ? "hsl(var(--panel-2) / 0.6)"
+        : undefined;
   return (
     <tr className={toneRow}>
       <th
         scope="row"
         className="sticky left-0 z-10 bg-panel px-4 py-1.5 text-left text-[12.5px] text-ink"
-        style={{ position: "sticky", left: 0, background: tone === "emphasized" ? "hsl(var(--panel-2) / 0.7)" : undefined }}
+        style={{ position: "sticky", left: 0, background: stickyBg }}
       >
-        {label}
+        <span className="inline-flex items-center gap-1.5">
+          {icon}
+          {label}
+        </span>
       </th>
       {months.map((m, idx) => {
         const cents = values[idx] ?? 0;
@@ -392,7 +439,8 @@ function SummaryRow({
             key={m}
             className={cn(
               "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
-              amountClass(cents, isFuture),
+              summaryAmountClass(cents, isFuture, tone),
+              isCurrent && "bg-blue-50/60",
             )}
           >
             {isCurrent && (
@@ -416,6 +464,7 @@ interface GroupHeaderProps {
   values: number[];
   months: string[];
   currentMonth: string;
+  kind: "in" | "out";
 }
 
 function GroupHeaderRow({
@@ -425,7 +474,12 @@ function GroupHeaderRow({
   values,
   months,
   currentMonth,
+  kind,
 }: GroupHeaderProps) {
+  const totalClass =
+    kind === "in" ? "text-emerald-600 font-semibold" : "text-rose-500 font-semibold";
+  const Icon = kind === "in" ? TrendingUp : TrendingDown;
+  const iconClass = kind === "in" ? "text-emerald-600" : "text-rose-500";
   return (
     <tr className="border-t border-line-soft bg-panel-2/50">
       <th
@@ -439,6 +493,7 @@ function GroupHeaderRow({
           className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-ink-2 hover:text-ink"
         >
           <Chevron open={open} />
+          <Icon className={cn("h-3.5 w-3.5", iconClass)} aria-hidden />
           {label}
         </button>
       </th>
@@ -451,7 +506,9 @@ function GroupHeaderRow({
             key={m}
             className={cn(
               "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
-              amountClass(cents, isFuture),
+              isFuture && "italic",
+              cents !== 0 ? totalClass : "text-muted-foreground",
+              isCurrent && "bg-blue-50/60",
             )}
           >
             {isCurrent && (
@@ -630,7 +687,8 @@ function WhatIfCell({
         "relative whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums",
         isOverridden
           ? "bg-amber-50 text-amber-900"
-          : amountClass(displayed, isFuture),
+          : detailAmountClass(displayed, isFuture),
+        isCurrent && !isOverridden && "bg-blue-50/60",
         clickable && !editing && "cursor-pointer transition-colors hover:bg-panel-2/50",
       )}
       onClick={!editing && clickable ? onCellClick : undefined}
