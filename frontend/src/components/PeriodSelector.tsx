@@ -274,12 +274,13 @@ export function PeriodSelector({
 
       {value.preset === "custom" && (
         <div className="ml-1 flex items-center gap-1 border-l border-line-soft pl-2">
+          {/* Les pickers sont imbriqués dans la pill du PeriodSelector
+              (qui porte déjà border + shadow). On supprime leur propre
+              `border` et `bg-panel` (sinon double bordure → effet "bloc
+              en trop" — cf. bug_bandeau 2026-05-13). */}
           {isMonthInput ? (
-            // Granularité mois (Prévisionnel) : MonthPicker custom, même
-            // design que le DatePicker des dates jour. Plus de `<input
-            // type="month">` natif (rendu navigateur, hors charte).
             <>
-              <div className="w-[150px]">
+              <div className="w-[140px]">
                 <MonthPicker
                   value={value.from}
                   onChange={(v) =>
@@ -287,10 +288,11 @@ export function PeriodSelector({
                   }
                   aria-label="Mois de début"
                   placeholder="Du"
+                  className="border-transparent bg-transparent shadow-none hover:border-transparent"
                 />
               </div>
               <span className="text-[12.5px] text-muted-foreground">→</span>
-              <div className="w-[150px]">
+              <div className="w-[140px]">
                 <MonthPicker
                   value={value.to}
                   onChange={(v) =>
@@ -298,12 +300,13 @@ export function PeriodSelector({
                   }
                   aria-label="Mois de fin"
                   placeholder="Au"
+                  className="border-transparent bg-transparent shadow-none hover:border-transparent"
                 />
               </div>
             </>
           ) : (
             <>
-              <div className="w-[140px]">
+              <div className="w-[130px]">
                 <DatePicker
                   value={value.from}
                   onChange={(v) =>
@@ -311,10 +314,11 @@ export function PeriodSelector({
                   }
                   aria-label="Date de début"
                   placeholder="Du"
+                  className="border-transparent bg-transparent shadow-none hover:border-transparent"
                 />
               </div>
               <span className="text-[12.5px] text-muted-foreground">→</span>
-              <div className="w-[140px]">
+              <div className="w-[130px]">
                 <DatePicker
                   value={value.to}
                   onChange={(v) =>
@@ -322,6 +326,7 @@ export function PeriodSelector({
                   }
                   aria-label="Date de fin"
                   placeholder="Au"
+                  className="border-transparent bg-transparent shadow-none hover:border-transparent"
                 />
               </div>
             </>
