@@ -25,13 +25,20 @@ function formatEUR(cents: number): string {
   return `${EUR.format(cents / 100)} €`;
 }
 
+export interface OverlaySeries {
+  scenarioId: number;
+  name: string;
+  color: string;
+  result: PivotResult;
+}
+
 interface Props {
   result: PivotResult;
   currentMonth: string;
-  overlayResult?: PivotResult;
+  overlays?: OverlaySeries[];
 }
 
-interface ChartPoint {
+type ChartPoint = {
   month: string;
   label: string;
   isFuture: boolean;
@@ -41,10 +48,9 @@ interface ChartPoint {
   forecast_out: number;
   closing_past: number | null;
   closing_future: number | null;
-  overlay_balance: number | null;
-}
+} & Record<string, number | string | boolean | null>;
 
-export function PivotBars({ result, currentMonth, overlayResult }: Props) {
+export function PivotBars({ result, currentMonth, overlays }: Props) {
   const data = useMemo<ChartPoint[]>(() => {
     const realizedByMonth = new Map(
       result.realized_series.map((s) => [s.month, s]),
@@ -52,38 +58,34 @@ export function PivotBars({ result, currentMonth, overlayResult }: Props) {
     const forecastByMonth = new Map(
       result.forecast_series.map((s) => [s.month, s]),
     );
-    const overlayClosingByIdx = overlayResult
-      ? new Map(
-          result.months.map((m, idx) => [
-            m,
-            (overlayResult.closing_balance_projection_cents[idx] ?? 0) / 100,
-          ]),
-        )
-      : null;
 
     return result.months.map((m, idx) => {
       const r = realizedByMonth.get(m);
       const f = forecastByMonth.get(m);
-      const closing =
-        result.closing_balance_projection_cents[idx] ?? 0;
+      const closing = result.closing_balance_projection_cents[idx] ?? 0;
       const isFuture = m > currentMonth;
-      return {
+      const point: ChartPoint = {
         month: m,
         label: formatMonthLabel(m),
         isFuture,
-        // Convert cents → euros (positive values always for display)
         realized_in: (r?.in_cents ?? 0) / 100,
         realized_out: (r?.out_cents ?? 0) / 100,
         forecast_in: (f?.in_cents ?? 0) / 100,
         forecast_out: (f?.out_cents ?? 0) / 100,
-        // Split closing line into past-and-current vs future so we can
-        // dash the projected part only.
         closing_past: m <= currentMonth ? closing / 100 : null,
         closing_future: m >= currentMonth ? closing / 100 : null,
-        overlay_balance: overlayClosingByIdx?.get(m) ?? null,
       };
+      // Une clé par overlay : "overlay_<scenarioId>"
+      for (const ov of overlays ?? []) {
+        const ovIdx = ov.result.months.indexOf(m);
+        point[`overlay_${ov.scenarioId}`] =
+          ovIdx === -1
+            ? null
+            : (ov.result.closing_balance_projection_cents[ovIdx] ?? 0) / 100;
+      }
+      return point;
     });
-  }, [result, currentMonth, overlayResult]);
+  }, [result, currentMonth, overlays]);
 
   return (
     <div style={{ width: "100%", height: 260 }}>
@@ -160,16 +162,21 @@ export function PivotBars({ result, currentMonth, overlayResult }: Props) {
             }}
             formatter={(value, name) => {
               const cents = Math.round(Number(value) * 100);
-              const labels: Record<string, string> = {
+              const baseLabels: Record<string, string> = {
                 realized_in: "Entrées réalisées",
                 realized_out: "Sorties réalisées",
                 forecast_in: "Entrées prévues",
                 forecast_out: "Sorties prévues",
                 closing_past: "Solde de clôture",
                 closing_future: "Solde projeté",
-                overlay_balance: "Solde scénario comparaison",
               };
-              return [formatEUR(cents), labels[String(name)] ?? String(name)];
+              const key = String(name);
+              if (key.startsWith("overlay_")) {
+                const id = Number(key.slice("overlay_".length));
+                const ov = overlays?.find((o) => o.scenarioId === id);
+                return [formatEUR(cents), ov?.name ?? `Scénario ${id}`];
+              }
+              return [formatEUR(cents), baseLabels[key] ?? key];
             }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--line))" />
@@ -220,20 +227,21 @@ export function PivotBars({ result, currentMonth, overlayResult }: Props) {
             connectNulls={false}
             isAnimationActive={false}
           />
-          {overlayResult && (
+          {(overlays ?? []).map((ov) => (
             <Line
+              key={ov.scenarioId}
               type="monotone"
-              dataKey="overlay_balance"
-              stroke="#f59e0b"
+              dataKey={`overlay_${ov.scenarioId}`}
+              stroke={ov.color}
               strokeWidth={1.5}
               strokeDasharray="6 3"
-              strokeOpacity={0.7}
+              strokeOpacity={0.75}
               dot={false}
               connectNulls={false}
               isAnimationActive={false}
-              name="Scénario comparaison"
+              name={ov.name}
             />
-          )}
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

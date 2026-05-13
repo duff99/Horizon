@@ -20,8 +20,8 @@ import { CellEditorDrawer } from "@/components/forecast/CellEditorDrawer";
 import { ForecastKpiSidebar } from "@/components/forecast/ForecastKpiSidebar";
 import { Rolling13WChart } from "@/components/forecast/Rolling13WChart";
 import {
-  ScenarioOverlaySelect,
-  useScenarioOverlay,
+  ScenarioOverlayMenu,
+  useScenarioOverlays,
 } from "@/components/forecast/ScenarioOverlay";
 import { currentMonthStr, shiftMonth } from "@/lib/forecastFormat";
 
@@ -88,15 +88,32 @@ export function ForecastV2Page() {
   // comparé au réalisé). Même scénario, même plage, même entité.
   const [view, setView] = useState<"plan" | "tracking">("plan");
 
-  // G7 — Overlay scénario de comparaison
-  const [showOverlay, setShowOverlay] = useState(false);
-  const overlay = useScenarioOverlay({
+  // G7 — Overlays multi-scénarios. État dans la page, fetch côté hook.
+  const [overlayIds, setOverlayIds] = useState<number[]>([]);
+  const toggleOverlay = (id: number) =>
+    setOverlayIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  const overlays = useScenarioOverlays({
     entityId: effectiveEntityId,
     currentScenarioId: scenarioId,
     from: period.from,
     to: period.to,
     accountIds,
+    visibleIds: overlayIds,
   });
+  const overlaySeries = useMemo(
+    () =>
+      overlays.items
+        .filter((it) => it.result != null)
+        .map((it) => ({
+          scenarioId: it.scenarioId,
+          name: it.name,
+          color: it.color,
+          result: it.result!,
+        })),
+    [overlays.items],
+  );
 
   const noEntity = effectiveEntityId == null;
   const noScenario =
@@ -128,40 +145,17 @@ export function ForecastV2Page() {
             onChange={setPeriod}
             granularity="month"
           />
-          {/* G7 — bouton Comparer */}
+          {/* G7 — menu Comparer (multi-overlay) */}
           {!noEntity && !noScenario && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowOverlay((v) => {
-                  if (v) overlay.setOverlayScenarioId(null);
-                  return !v;
-                });
-              }}
-              title="Superpose les flux d'un second scénario sur le graphique pour visualiser l'écart entre deux hypothèses."
-              className={`rounded-md border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                showOverlay
-                  ? "border-accent bg-accent/10 text-accent"
-                  : "border-line-soft bg-panel text-ink-2 hover:text-ink"
-              }`}
-            >
-              Comparer
-            </button>
+            <ScenarioOverlayMenu
+              entityId={effectiveEntityId}
+              currentScenarioId={scenarioId}
+              visibleIds={overlayIds}
+              onToggle={toggleOverlay}
+            />
           )}
         </div>
       </div>
-
-      {/* G7 — sélecteur de scénario overlay (visible si showOverlay) */}
-      {showOverlay && !noEntity && !noScenario && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <ScenarioOverlaySelect
-            entityId={effectiveEntityId}
-            currentScenarioId={scenarioId}
-            overlayScenarioId={overlay.overlayScenarioId}
-            onSelect={overlay.setOverlayScenarioId}
-          />
-        </div>
-      )}
 
       {noEntityAtAll && (
         <div
@@ -261,27 +255,31 @@ export function ForecastV2Page() {
             {/* Colonne droite : graphique + pivot + rolling */}
             <div className="min-w-0 space-y-4">
               <div className="rounded-xl border border-line-soft bg-panel p-4 shadow-card">
-                <div className="mb-2 flex items-baseline justify-between">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-y-1">
                   <h2 className="text-[13px] font-semibold text-ink">
                     Encaissements vs. décaissements
                   </h2>
-                  <span className="text-[11px] text-muted-foreground">
-                    Hachures = prévisionnel · ligne = solde projeté
-                    {overlay.overlayScenarioId != null && (
-                      <span className="ml-2 text-amber-600">
-                        · pointillés jaunes = scénario de comparaison
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>Hachures = prévisionnel · ligne = solde projeté</span>
+                    {overlaySeries.map((ov) => (
+                      <span
+                        key={ov.scenarioId}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <span
+                          aria-hidden
+                          className="inline-block h-2 w-2 rounded-full"
+                          style={{ background: ov.color }}
+                        />
+                        {ov.name}
                       </span>
-                    )}
+                    ))}
                   </span>
                 </div>
                 <PivotBars
                   result={pivotQuery.data}
                   currentMonth={currentMonth}
-                  overlayResult={
-                    overlay.overlayScenarioId != null
-                      ? overlay.overlayPivot
-                      : undefined
-                  }
+                  overlays={overlaySeries}
                 />
               </div>
 
